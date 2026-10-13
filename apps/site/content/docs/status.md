@@ -59,7 +59,7 @@ Touch input was also tried on a real phone.
 
 **Packaging**
 
-- Only `@rebodocs/react` is on npm, as a bundle with the engine and the editor inside. The others are used as source inside the repository.
+- Only `@rebodocs/react` is [on npm](https://www.npmjs.com/package/@rebodocs/react), as a bundle with the engine and the editor inside. The others are used as source inside the repository.
 - The English interface texts need a native review.
 
 ## Roadmap

@@ -1,5 +1,7 @@
 # @rebodocs/editor
 
+> Not on npm by itself yet. It is used from this repository, and it is inside [`@rebodocs/react`](https://www.npmjs.com/package/@rebodocs/react), which is.
+
 The editor in the browser: the pages, the caret and the selection, and the
 pieces of interface around them. Plain TypeScript and the DOM, with no
 framework.

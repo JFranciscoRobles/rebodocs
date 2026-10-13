@@ -1,6 +1,6 @@
 # Getting started
 
-The editor for React is on npm. The other packages are used from the repository for now.
+The editor for React is [on npm](https://www.npmjs.com/package/@rebodocs/react). The other packages are used from the repository for now.
 
 ## Put it in a React application
 

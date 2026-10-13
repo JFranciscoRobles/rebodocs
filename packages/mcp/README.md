@@ -1,5 +1,7 @@
 # @rebodocs/mcp
 
+> Not on npm yet. It is run from this repository.
+
 A [Model Context Protocol](https://modelcontextprotocol.io) server for DOCX
 documents: what an AI assistant (Claude Desktop, Claude Code, Cursor…) uses
 to read and change them.

@@ -40,6 +40,8 @@ Take it for a page without React, or to build on its pieces. See [Without a fram
 
 ## @rebodocs/react
 
+On npm: [`@rebodocs/react`](https://www.npmjs.com/package/@rebodocs/react).
+
 `DocsEditor`, the whole editor as a component; `DocsProvider`, `DocsSurface` and hooks, to draw your own interface; and `mountDocs`, the whole editor with no React in it. It is the one package built as a bundle, with the others inside.
 
 Take it for a React or Next.js application. See [React component](/docs/react/) and [Headless](/docs/headless/).

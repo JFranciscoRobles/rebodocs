@@ -1,6 +1,8 @@
 /** Where the code is. One place to change it. */
 export const REPO = 'https://github.com/JFranciscoRobles/rebodocs';
 export const SITE = 'https://rebodocs.com';
+/** The package an application installs. */
+export const NPM = 'https://www.npmjs.com/package/@rebodocs/react';
 
 export interface NavItem {
   title: string;

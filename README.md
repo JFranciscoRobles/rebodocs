@@ -1,6 +1,6 @@
 # Rebodocs
 
-[rebodocs.com](https://rebodocs.com)
+[rebodocs.com](https://rebodocs.com) · [npm](https://www.npmjs.com/package/@rebodocs/react) · [documentation](https://rebodocs.com/docs/)
 
 A word processor for the browser, compatible with Word files (DOCX), with its
 own engine. The document model,
@@ -60,7 +60,7 @@ npm run typecheck
 | --- | --- | --- |
 | [`@rebodocs/core`](packages/core) | The engine: document model, DOCX import and export, layout, PDF, templates. No DOM. | Browser, Node |
 | [`@rebodocs/editor`](packages/editor) | The editor: pages, caret and selection, toolbar, menu, side panel, status bar. No framework. | Browser |
-| [`@rebodocs/react`](packages/react) | The editor as a React component, and as headless hooks for an interface of your own. | Browser (SSR-safe) |
+| [`@rebodocs/react`](packages/react) ([npm](https://www.npmjs.com/package/@rebodocs/react)) | The editor as a React component, and as headless hooks for an interface of your own. | Browser (SSR-safe) |
 | [`@rebodocs/collab`](packages/collab) | Collaboration: the change format, the room server and its browser client. | Node, browser |
 | [`@rebodocs/mcp`](packages/mcp) | A Model Context Protocol server: tools for an assistant to read and edit documents. | Node |
 | [`apps/playground`](apps/playground) | The test application every package is tried in. | Browser |
@@ -78,7 +78,7 @@ can be improved.
 
 ## Using it
 
-**In a React or Next.js application:** `npm install @rebodocs/react`
+**In a React or Next.js application:** `npm install @rebodocs/react` ([npm](https://www.npmjs.com/package/@rebodocs/react))
 
 ```tsx
 'use client';

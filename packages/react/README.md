@@ -15,7 +15,9 @@ npm install @rebodocs/react
 
 It is built as a bundle: `@rebodocs/core`, `@rebodocs/editor` and the
 collaboration client are inside it, so it installs as one dependency. React
-18 or later is the only peer. Documentation: [rebodocs.com](https://rebodocs.com/docs/).
+18 or later is the only peer.
+
+[npm](https://www.npmjs.com/package/@rebodocs/react) · [documentation](https://rebodocs.com/docs/) · [source](https://github.com/JFranciscoRobles/rebodocs/tree/main/packages/react)
 
 ## Two ways to use it
 

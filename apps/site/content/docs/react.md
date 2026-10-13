@@ -2,6 +2,12 @@
 
 `DocsEditor` is the whole editor in one component: toolbar, ruler, side panel, pages and status bar. It mounts in your page, not in an iframe.
 
+```bash
+npm install @rebodocs/react
+```
+
+The package is [`@rebodocs/react` on npm](https://www.npmjs.com/package/@rebodocs/react).
+
 ```tsx
 'use client';
 import { DocsEditor } from '@rebodocs/react';

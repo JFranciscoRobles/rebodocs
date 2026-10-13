@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { REPO, SITE } from '@/lib/site';
+import { NPM, REPO, SITE } from '@/lib/site';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -30,6 +30,9 @@ function Header() {
           <Link href="/docs/status/" className="hidden hover:text-ink sm:inline">
             Status
           </Link>
+          <a href={NPM} className="hidden hover:text-ink sm:inline">
+            npm
+          </a>
           <a href={REPO} className="hover:text-ink">
             GitHub
           </a>
@@ -54,6 +57,9 @@ function Footer() {
           <Link href="/docs/status/" className="hover:text-ink">
             Status and roadmap
           </Link>
+          <a href={NPM} className="hover:text-ink">
+            npm
+          </a>
           <a href={REPO} className="hover:text-ink">
             GitHub
           </a>

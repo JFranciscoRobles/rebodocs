@@ -1,5 +1,7 @@
 # @rebodocs/core
 
+> Not on npm by itself yet. It is used from this repository, and it is inside [`@rebodocs/react`](https://www.npmjs.com/package/@rebodocs/react), which is.
+
 The engine. Everything about a document that does not need a screen: what it
 is, how it is read from and written to a DOCX, how it is changed, and where
 every line of it falls on a page.

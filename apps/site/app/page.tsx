@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { CodeTabs } from '@/components/CodeTabs';
 import { LiveDemo } from '@/components/LiveDemo';
 import { highlight } from '@/lib/docs';
-import { REPO } from '@/lib/site';
+import { NPM, REPO } from '@/lib/site';
 
 const FEATURES = [
   ['Compatible with Word files', 'It reads and writes DOCX, and lays pages out by the same rules, so a document looks the same here and there. Measured line by line on real files.'],
@@ -115,6 +115,11 @@ export default async function Home() {
             GitHub
           </a>
         </p>
+        <p className="mt-6">
+          <a href={NPM} className="inline-block rounded-lg border border-line bg-soft px-4 py-2 font-mono text-sm text-ink hover:border-brand">
+            <span className="select-none text-muted">$ </span>npm install @rebodocs/react
+          </a>
+        </p>
       </section>
 
       <section id="try" className="mx-auto max-w-6xl px-4 pt-12 sm:px-6">
@@ -173,7 +178,11 @@ export default async function Home() {
         <div className="rounded-2xl bg-soft p-6 sm:p-10">
           <Title>Where it stands</Title>
           <p className="mt-3.5 max-w-[66ch] text-[17px] leading-relaxed text-muted">
-            Rebodocs works and has 257 automated tests, and it has not been used in production yet. The editor for React is on npm; the other packages are used from the
+            Rebodocs works and has 257 automated tests, and it has not been used in production yet. The editor for React is{' '}
+            <a href={NPM} className="font-semibold text-brand hover:underline">
+              on npm
+            </a>
+            ; the other packages are used from the
             repository for now.
             Anyone may use it for anything. It is a word processor of its own that is compatible with Word files, not a copy of Word, and it does not try to be one.
           </p>

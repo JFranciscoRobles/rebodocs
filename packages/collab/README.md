@@ -1,5 +1,7 @@
 # @rebodocs/collab
 
+> Not on npm by itself yet. It is used from this repository, and it is inside [`@rebodocs/react`](https://www.npmjs.com/package/@rebodocs/react), which is.
+
 Several people on the same document at once, each seeing where the others
 are: the format changes travel in, the server that orders them, and the
 client the editor uses.
