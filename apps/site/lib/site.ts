@@ -24,6 +24,7 @@ export const NAV: { title: string; items: NavItem[] }[] = [
     items: [
       { title: 'React component', slug: 'react' },
       { title: 'Headless: your own UI', slug: 'headless' },
+      { title: 'A complete interface', slug: 'example' },
       { title: 'Without a framework', slug: 'vanilla' },
       { title: 'Styling and Tailwind', slug: 'styling' },
       { title: 'Phones and touch', slug: 'mobile' },
@@ -50,6 +51,7 @@ export const NAV: { title: string; items: NavItem[] }[] = [
     title: 'Reference',
     items: [
       { title: 'Packages', slug: 'packages' },
+      { title: 'Components and hooks', slug: 'components' },
       { title: 'Editor API', slug: 'editor-api' },
       { title: 'How it works', slug: 'architecture' },
       { title: 'Status and roadmap', slug: 'status' },

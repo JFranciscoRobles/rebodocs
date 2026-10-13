@@ -22,6 +22,7 @@ an MCP server for AI assistants.
 ```bash
 npm install
 npm run dev        # playground at http://localhost:5173
+npm run demo       # the React package, two ways, at http://localhost:5175
 npm test           # 257 tests
 npm run typecheck
 ```
@@ -64,6 +65,7 @@ npm run typecheck
 | [`@rebodocs/collab`](packages/collab) | Collaboration: the change format, the room server and its browser client. | Node, browser |
 | [`@rebodocs/mcp`](packages/mcp) | A Model Context Protocol server: tools for an assistant to read and edit documents. | Node |
 | [`apps/playground`](apps/playground) | The test application every package is tried in. | Browser |
+| [`apps/demo`](apps/demo) | The React package as an application uses it: the whole editor, and an interface of one's own built on the hooks. | Browser |
 | [`apps/site`](apps/site) | [rebodocs.com](https://rebodocs.com): the landing page and the developer documentation. | Static |
 
 Each package has a README saying what it is for, how it is used, and where it

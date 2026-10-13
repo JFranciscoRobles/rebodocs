@@ -2,6 +2,8 @@
 
 When the interface that comes with the editor is not yours, keep the pages and draw everything else yourself. The provider holds the document, the surface is where its pages go, and hooks give you what to show and what to do.
 
+[Components and hooks](/docs/components/) has each of them with what it takes and an example, and [A complete interface](/docs/example/) is an application built this way that you can run.
+
 ```tsx
 'use client';
 import { DocsProvider, DocsSurface, useDocs } from '@rebodocs/react';

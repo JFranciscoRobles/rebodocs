@@ -6,7 +6,7 @@
 npm install @rebodocs/react
 ```
 
-The package is [`@rebodocs/react` on npm](https://www.npmjs.com/package/@rebodocs/react).
+The package is [`@rebodocs/react` on npm](https://www.npmjs.com/package/@rebodocs/react). Everything it exports is listed, with an example each, in [Components and hooks](/docs/components/).
 
 ```tsx
 'use client';

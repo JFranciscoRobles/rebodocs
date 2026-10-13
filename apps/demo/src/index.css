@@ -1,0 +1,12 @@
+:root {
+  font: 14px/1.4 system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: #1f2328;
+  background: #fff;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}

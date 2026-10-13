@@ -17,7 +17,7 @@ It is built as a bundle: `@rebodocs/core`, `@rebodocs/editor` and the
 collaboration client are inside it, so it installs as one dependency. React
 18 or later is the only peer.
 
-[npm](https://www.npmjs.com/package/@rebodocs/react) · [documentation](https://rebodocs.com/docs/) · [source](https://github.com/JFranciscoRobles/rebodocs/tree/main/packages/react)
+[npm](https://www.npmjs.com/package/@rebodocs/react) · [documentation](https://rebodocs.com/docs/) · [every component and hook](https://rebodocs.com/docs/components/) · [a complete example](https://github.com/JFranciscoRobles/rebodocs/tree/main/apps/demo) · [source](https://github.com/JFranciscoRobles/rebodocs/tree/main/packages/react)
 
 ## Two ways to use it
 

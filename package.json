@@ -14,9 +14,11 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @rebodocs/playground",
+    "demo": "npm run dev -w @rebodocs/demo",
+    "build:demo": "npm run build -w @rebodocs/demo",
     "build": "npm run build -w @rebodocs/playground",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p apps/demo",
     "word-compare": "node tools/word-compare.mjs",
     "generate": "vite-node tools/generate.ts --",
     "mcp": "node packages/mcp/bin/rebodocs-mcp.mjs",

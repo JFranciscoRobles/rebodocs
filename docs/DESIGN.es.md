@@ -85,6 +85,7 @@ packages/
       DocsEditor.ts     El componente con esa interfaz
 apps/
   playground/           Página de pruebas: el editor con su menú, barra de herramientas, regla y barra de estado
+  demo/                 El paquete de React como lo usa una aplicación: DocsEditor, y una interfaz propia hecha con los hooks
 tools/
   word-compare.mjs      Compara el layout del editor con el de Microsoft Word
   float-cases.ts        Documentos con imágenes flotantes para medirlas contra Word
