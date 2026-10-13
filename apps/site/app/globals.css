@@ -1,0 +1,133 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-brand: #0b57d0;
+  --color-brand-dark: #0a4dba;
+  --color-accent: #e8710a;
+  --color-ink: #14171f;
+  --color-muted: #5b6272;
+  --color-line: #e3e6ec;
+  --color-soft: #f5f7fb;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px;
+}
+body {
+  color: var(--color-ink);
+  background: #fff;
+}
+
+/* Code coloured when the site is built: the block brings its own colours. */
+.code pre {
+  margin: 0;
+}
+.code pre,
+.doc pre {
+  padding: 18px 20px;
+  overflow-x: auto;
+  border-radius: 12px;
+  font: 13px/1.65 var(--font-mono);
+}
+
+/* --- A page of the documentation, as Markdown makes it ----------------------- */
+
+.doc {
+  font-size: 16px;
+  line-height: 1.7;
+}
+.doc > * + * {
+  margin-top: 1.1em;
+}
+.doc h2 {
+  margin-top: 2.2em;
+  padding-top: 1.2em;
+  border-top: 1px solid var(--color-line);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.doc h3 {
+  margin-top: 1.8em;
+  font-size: 18px;
+  font-weight: 650;
+}
+.doc h2 a,
+.doc h3 a {
+  color: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+.doc a {
+  color: var(--color-brand);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: rgb(11 87 208 / 0.3);
+  text-underline-offset: 3px;
+}
+.doc a:hover {
+  text-decoration-color: currentColor;
+}
+.doc ul,
+.doc ol {
+  padding-left: 1.4em;
+}
+.doc ul {
+  list-style: disc;
+}
+.doc ol {
+  list-style: decimal;
+}
+.doc li + li {
+  margin-top: 0.35em;
+}
+.doc li > ul,
+.doc li > ol {
+  margin-top: 0.35em;
+}
+.doc :not(pre) > code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--color-soft);
+  border: 1px solid var(--color-line);
+  font: 0.86em var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.doc .table {
+  overflow-x: auto;
+}
+.doc table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+.doc th,
+.doc td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--color-line);
+  text-align: left;
+  vertical-align: top;
+}
+.doc th {
+  font-weight: 650;
+  white-space: nowrap;
+  background: var(--color-soft);
+}
+.doc blockquote {
+  padding: 12px 16px;
+  border-left: 3px solid var(--color-accent);
+  border-radius: 0 8px 8px 0;
+  background: #fff7ef;
+  color: #5a3a12;
+}
+.doc blockquote > * + * {
+  margin-top: 0.6em;
+}
+.doc strong {
+  font-weight: 650;
+}

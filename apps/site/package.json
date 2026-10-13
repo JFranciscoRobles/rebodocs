@@ -1,0 +1,29 @@
+{
+  "name": "@rebodocs/site",
+  "version": "0.0.1",
+  "description": "rebodocs.com: the landing page and the developer documentation.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo": "vite-node scripts/demo.ts",
+    "dev": "npm run demo && next dev -p 5174",
+    "build": "npm run demo && next build",
+    "start": "npx serve out -l 5174"
+  },
+  "dependencies": {
+    "@rebodocs/react": "*",
+    "markdown-it": "^14.1.0",
+    "markdown-it-anchor": "^9.2.0",
+    "next": "^16.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "shiki": "^3.0.0"
+  },
+  "devDependencies": {
+    "@rebodocs/core": "*",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/markdown-it": "^14.1.2",
+    "tailwindcss": "^4.3.3"
+  }
+}

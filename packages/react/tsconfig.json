@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@rebodocs/core": ["../core/src/index"],
+      "@rebodocs/editor": ["../editor/src/index"],
+      "@rebodocs/collab": ["../collab/src/changes"],
+      "@rebodocs/collab/browser": ["../collab/src/session"],
+      "@rebodocs/mcp": ["../mcp/src/tools"],
+      "@rebodocs/mcp/browser": ["../mcp/src/browser.ts"]
+    }
+  },
+  "include": ["src", "../core/src", "../editor/src", "../collab/src/changes.ts", "../collab/src/session.ts", "../mcp/src/tools.ts", "../mcp/src/browser.ts"]
+}

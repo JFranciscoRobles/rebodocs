@@ -1,0 +1,38 @@
+{
+  "name": "rebodocs",
+  "description": "A word processor for the browser, compatible with Word (DOCX) files, with its own engine: layout, editing, collaboration, PDF and templates.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.12" },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @rebodocs/playground",
+    "build": "npm run build -w @rebodocs/playground",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "word-compare": "node tools/word-compare.mjs",
+    "generate": "vite-node tools/generate.ts --",
+    "mcp": "node packages/mcp/bin/rebodocs-mcp.mjs",
+    "float-cases": "vite-node tools/float-cases.ts --",
+    "locale": "vite-node tools/locale.ts --",
+    "collab": "node packages/collab/bin/rebodocs-collab.mjs",
+    "site": "npm run build -w @rebodocs/react && npm run dev -w @rebodocs/site",
+    "build:site": "npm run build -w @rebodocs/react && npm run build -w @rebodocs/site",
+    "build:react": "npm run build -w @rebodocs/react && npm pack -w @rebodocs/react --pack-destination packages/react"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0",
+    "vite-node": "^3.2.4",
+    "vitest": "^5.0.4"
+  }
+}

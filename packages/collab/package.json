@@ -1,0 +1,15 @@
+{
+  "name": "@rebodocs/collab",
+  "version": "0.0.1",
+  "description": "Real-time collaboration on documents: the change format, the room server and its browser client.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/changes.ts",
+    "./browser": "./src/session.ts"
+  },
+  "dependencies": {
+    "@rebodocs/core": "*"
+  }
+}

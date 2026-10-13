@@ -1,0 +1,28 @@
+{
+  "name": "@rebodocs/react",
+  "version": "0.1.0",
+  "description": "The DOCX editor as a React component, or as headless hooks, with everything it needs inside.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/react/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/react/src/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./mount": {
+      "types": "./dist/react/src/mount.d.ts",
+      "import": "./dist/mount.js"
+    }
+  },
+  "scripts": {
+    "build": "vite build && node scripts/types.mjs"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  }
+}

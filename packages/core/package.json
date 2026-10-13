@@ -1,0 +1,12 @@
+{
+  "name": "@rebodocs/core",
+  "version": "0.0.1",
+  "description": "The engine: document model, DOCX import and export, page layout, PDF and templates. No DOM.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  }
+}
