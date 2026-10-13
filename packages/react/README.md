@@ -89,11 +89,11 @@ editor without React, for any other framework.
 ## Building and installing
 
 ```bash
-npm run build:react      # packages/react/rebodocs-react-0.1.0.tgz
+npm run build:react      # packages/react/rebodocs-react-0.5.0.tgz
 ```
 
 ```bash
-npm install ../docs/packages/react/rebodocs-react-0.1.0.tgz
+npm install ../docs/packages/react/rebodocs-react-0.5.0.tgz
 ```
 
 The bundle starts with `'use client'`, so it can be imported from a Next.js

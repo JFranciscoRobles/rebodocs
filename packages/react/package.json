@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/react",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "description": "The DOCX editor as a React component, or as headless hooks, with everything it needs inside.",
   "license": "MIT",
   "type": "module",

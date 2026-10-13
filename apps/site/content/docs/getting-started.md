@@ -21,13 +21,13 @@ Build the React package. It bundles the engine, the editor and the collaboration
 
 ```bash
 npm run build:react
-# → packages/react/rebodocs-react-0.1.0.tgz
+# → packages/react/rebodocs-react-0.5.0.tgz
 ```
 
 Install that file in your application:
 
 ```bash
-npm install /path/to/rebodocs/packages/react/rebodocs-react-0.1.0.tgz
+npm install /path/to/rebodocs/packages/react/rebodocs-react-0.5.0.tgz
 ```
 
 And use the component. The element it is in must have a height:

@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/mcp",
-  "version": "0.0.1",
+  "version": "0.5.0",
   "description": "A Model Context Protocol server with tools for an AI assistant to read and edit DOCX documents.",
   "license": "MIT",
   "private": true,

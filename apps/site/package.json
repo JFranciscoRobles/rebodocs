@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/site",
-  "version": "0.0.1",
+  "version": "0.5.0",
   "description": "rebodocs.com: the landing page and the developer documentation.",
   "license": "MIT",
   "private": true,

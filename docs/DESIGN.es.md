@@ -957,10 +957,10 @@ barra, regla, panel y barra de estado, en el hueco que se le dé. Lleva dentro
 todo lo que necesita; solo React lo pone el proyecto que lo usa.
 
 ```
-npm run build:react        # deja packages/react/rebodocs-react-0.1.0.tgz
+npm run build:react        # deja packages/react/rebodocs-react-0.5.0.tgz
 ```
 
-En el otro proyecto, `npm install ruta/a/rebodocs-react-0.1.0.tgz`, y:
+En el otro proyecto, `npm install ruta/a/rebodocs-react-0.5.0.tgz`, y:
 
 ```tsx
 'use client';
