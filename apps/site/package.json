@@ -5,7 +5,9 @@
   "license": "MIT",
   "private": true,
   "type": "module",
-  "engines": { "node": "22.x" },
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "demo": "vite-node scripts/demo.ts",
     "dev": "npm run demo && next dev -p 5174",
@@ -14,17 +16,17 @@
   },
   "dependencies": {
     "@rebodocs/react": "*",
-    "markdown-it": "^14.1.0",
-    "markdown-it-anchor": "^9.2.0",
+    "markdown-it": "^15.0.2",
+    "markdown-it-anchor": "^10.0.0",
     "next": "^16.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "shiki": "^3.0.0"
+    "shiki": "^4.5.0"
   },
   "devDependencies": {
     "@rebodocs/core": "*",
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/markdown-it": "^14.1.2",
+    "@types/markdown-it": "^14.2.0",
     "tailwindcss": "^4.3.3"
   }
 }

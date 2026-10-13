@@ -10,7 +10,7 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: true,
     lib: {
-      entry: { index: resolve(__dirname, 'src/index.ts'), mount: resolve(__dirname, 'src/mount.ts') },
+      entry: { index: resolve(import.meta.dirname, 'src/index.ts'), mount: resolve(import.meta.dirname, 'src/mount.ts') },
       formats: ['es'],
     },
     rollupOptions: {

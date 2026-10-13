@@ -1,7 +1,6 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
       "@rebodocs/core": ["../core/src/index"],
       "@rebodocs/editor": ["../editor/src/index"],

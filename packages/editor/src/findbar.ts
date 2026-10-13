@@ -115,7 +115,7 @@ export function createFindBar(editor: Editor): FindBar {
     toggle(wordButton, wholeWord);
     searchAndShow();
   });
-  const expand = button('expand', t('find.replace'), ICONS.replace, () => showReplace(replaceRow.hidden));
+  const expand = button('expand', t('find.replace'), ICONS.replace, () => showReplace(!!replaceRow.hidden));
   const first = row();
   first.append(query, count, prev, next, caseButton, wordButton, expand, button('close', t('find.close'), ICONS.close, () => close()));
 
