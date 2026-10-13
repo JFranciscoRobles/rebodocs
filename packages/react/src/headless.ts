@@ -9,9 +9,9 @@
 
 import { type CSSProperties, type ReactNode, createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { Editor } from '@rebodocs/editor';
-import { type Docs, type DocsCommands, type DocsCoreOptions, type DocsState, createDocs } from './docs';
+import { type Docs, type DocsCommands, type DocsHeadlessOptions, type DocsState, createDocs } from './docs';
 
-export interface DocsProviderProps extends DocsCoreOptions {
+export interface DocsProviderProps extends DocsHeadlessOptions {
   children?: ReactNode;
 }
 
@@ -67,7 +67,8 @@ const EMPTY: DocsState = {
 /**
  * Holds a document for what is inside it: one `DocsSurface`, where its pages
  * go, and whatever uses `useDocs`. The document changes for another when what
- * it is changes: the file given, the room, or what lets the person in.
+ * it is changes: the file given, the room, or what lets the person in. Whether
+ * it has the bar beside the selection (`bubble`) is read when it is made.
  */
 export function DocsProvider({ children, ...options }: DocsProviderProps): ReactNode {
   const [element, setElement] = useState<HTMLElement | null>(null);
@@ -77,6 +78,8 @@ export function DocsProvider({ children, ...options }: DocsProviderProps): React
   latest.current = options;
   const { docx, collab, name, author, letterhead } = options;
   const saves = !!options.onSave;
+  const linkKey = !!options.onLinkKey;
+  const findKey = !!options.onFindKey;
 
   useEffect(() => {
     if (!element) return;
@@ -95,6 +98,14 @@ export function DocsProvider({ children, ...options }: DocsProviderProps): React
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [element, docx, collab?.url, collab?.room, collab?.ticket, saves]);
+
+  // Whether a key is answered may change; who answers it is whoever was given last.
+  useEffect(() => {
+    docs?.setKeys({
+      onLinkKey: linkKey ? () => latest.current.onLinkKey?.() : undefined,
+      onFindKey: findKey ? (replace) => latest.current.onFindKey?.(replace) : undefined,
+    });
+  }, [docs, linkKey, findKey]);
 
   useEffect(() => {
     if (name !== undefined) docs?.setName(name);

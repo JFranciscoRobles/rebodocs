@@ -88,6 +88,17 @@ document after each one.
 | `useDocsStyles()`, `useDocsPage()` | Paragraph styles; page setup, numbering and letterhead. |
 | `useDocsSelectionBox()` | Where the selection is on screen, to place a panel beside it. |
 | `useDocsResponsive()` | Fits pages to a narrow window; reports the on-screen keyboard. |
+| `useDocsBubble()` | The bar beside the selection, when the provider was given `bubble`. |
+
+The editor answers its own keys (⌘B, ⌘Z, ⌘S, ⌘-click on a link…). Three open
+something only an interface has, and are yours to answer, as props of
+`DocsProvider`: `onLinkKey()` for ⌘K, and `onFindKey(replace)` for ⌘F and ⌘H.
+Each is taken from the browser only while it is given.
+
+`<DocsProvider bubble>` adds the bar that comes up beside the selection: copy,
+cut and paste on a touch screen, a variable made of the words selected, a
+link, a note. It is the one headless piece with a look of its own (classes
+`dx-bb…`); with it, ⌘K asks for a link there unless there is an `onLinkKey`.
 
 `mountDocs(element, options)` (also at `@rebodocs/react/mount`) is the whole
 editor without React, for any other framework.
@@ -106,9 +117,10 @@ app directory. It was tried in Next.js 16 with React 19 and Tailwind 4.
 
 - **Publishing.** It is on npm as one bundle. The other packages should be
   built and published too, so that it can depend on them and not carry them.
-- **Headless coverage.** The ruler and the selection bubble have no headless
-  version; the touch selection menu (copy, cut, paste) is part of the
-  bubble. Hooks for tables and pictures would save reaching for `editor`.
+- **Headless coverage.** The ruler has no headless version, and the bar
+  beside the selection comes as it is drawn or not at all: there is no hook
+  that gives its actions to draw one's own. Hooks for tables and pictures
+  would save reaching for `editor`.
 - **Bundle size.** Everything is in one file of about 550 kB (160 kB
   gzipped). The collaboration client and the MCP bridge could be separate
   entry points loaded only when used.

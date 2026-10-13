@@ -1074,6 +1074,20 @@ qué mostrar y qué hacer, para dibujarlos como se quiera:
 | `useDocsPage()` | `page`, `set`, `numbering`, `setNumbering`, `firstPageDifferent`. |
 | `useDocsSelectionBox()` | Dónde está la selección en la pantalla, para poner al lado un panel propio. |
 | `useDocsResponsive(600)` | Ajusta las hojas al ancho cuando el documento tiene menos de ese ancho, y da `narrow` y `keyboard` (los píxeles que tapa el teclado en pantalla). |
+| `useDocsBubble()` | La barrita junto a la selección, si el proveedor se hizo con `bubble`: `open`, `close`, `toggle`, `ask`. |
+
+**Las teclas.** Casi todas son del editor y funcionan sin pedir nada (⌘B,
+⌘Z, ⌘S si hay `onSave`, ⌘-clic en un enlace…). Tres abren algo que solo
+tiene una interfaz, así que el editor conoce la tecla y deja la respuesta a
+quien dibuja: `onLinkKey()` para ⌘K y `onFindKey(replace)` para ⌘F y ⌘H,
+como props de `DocsProvider` u opciones de `createDocs` (`docs.setKeys` las
+cambia después). Cada una se le quita al navegador solo mientras tiene a
+quién llamar, y solo con el teclado en el documento.
+
+**La barrita junto a la selección** es la misma de la interfaz incluida, y
+aquí se pide: `<DocsProvider bubble>`. Es lo único de esta parte que trae
+aspecto propio (clases `dx-bb…`); con ella ⌘K pide el enlace ahí, salvo que
+se haya dado `onLinkKey`. Se lee al hacer el documento.
 
 La regla y el globo de acciones junto a la selección no tienen versión sin
 aspecto.

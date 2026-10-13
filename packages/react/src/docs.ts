@@ -10,7 +10,7 @@
 
 import { type CollabState, type Peer, type Session, createRoom, joinRoom, pingServer } from '@rebodocs/collab/browser';
 import { letterheadImage } from '@rebodocs/core';
-import { type EditArea, type FontSource, type ViewMode, type ZoomFit, Editor, addFonts, fontFamilies, recallAuthor, setAuthor, t } from '@rebodocs/editor';
+import { type Bubble, type EditArea, type FontSource, type ViewMode, type ZoomFit, Editor, IS_MAC, addFonts, fontFamilies, createBubble, recallAuthor, setAuthor, t } from '@rebodocs/editor';
 import { type AssistantLink, type AssistantOptions, connectAssistant } from '@rebodocs/mcp/browser';
 
 export interface DocsCoreOptions {
@@ -44,6 +44,30 @@ export interface DocsCoreOptions {
   onCollab?: (state: CollabState | 'off', peers: Peer[]) => void;
   /** Told what went wrong, in the language of the interface; the browser says it when left out. */
   onError?: (message: string) => void;
+}
+
+/**
+ * The keys the editor knows but whose answer is the interface's: it has no
+ * dialog for a link and no bar to search in. Each is taken from the browser
+ * only while it has someone to call.
+ */
+export interface DocsKeys {
+  /** ⌘K (Ctrl+K elsewhere), with the keyboard in the document: time to ask for the address of a link. Without it, the bar beside the selection asks, when there is one. */
+  onLinkKey?: () => void;
+  /** ⌘F and ⌘H (Ctrl elsewhere), with the keyboard in the document: time to show the search, with replacing (`replace`) or without. */
+  onFindKey?: (replace: boolean) => void;
+}
+
+/** What a document without an interface takes besides what every document does. */
+export interface DocsHeadlessOptions extends DocsCoreOptions, DocsKeys {
+  /**
+   * The bar that comes up beside the selection, with what can be done to it:
+   * copying and pasting on a screen that is touched, making a variable of the
+   * words selected, a link, a note. It is the one thing here with a look of
+   * its own (the classes `dx-bb…`). Off unless true; read when the document
+   * is made.
+   */
+  bubble?: boolean;
 }
 
 export type LetterheadSource = Blob | { bytes: Uint8Array; type: string } | string;
@@ -193,6 +217,10 @@ export interface Docs {
   setLetterhead(letterhead: LetterheadSource | null): Promise<void>;
   /** Lets an AI assistant reach the document, through an MCP server. */
   connectAssistant(options?: Pick<AssistantOptions, 'url' | 'token'>): AssistantLink;
+  /** The bar beside the selection, when the document was made with one: to show it, or to have it ask for a variable, a note or a link. */
+  readonly bubble: Bubble | undefined;
+  /** Changes who answers the keys of the interface; one left out is no longer answered. */
+  setKeys(keys: DocsKeys): void;
   setName(name: string): void;
   setAuthor(author: string): void;
   focus(): void;
@@ -202,7 +230,7 @@ export interface Docs {
 const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 /** Puts the pages of a document in `container`, and gives what an interface needs to work on it. */
-export function createDocs(container: HTMLElement, options: DocsCoreOptions = {}): Docs {
+export function createDocs(container: HTMLElement, options: DocsHeadlessOptions = {}): Docs {
   const editor = new Editor(container);
   if (options.fonts?.length) void addFonts(options.fonts);
   if (options.author) editor.author = options.author;
@@ -322,6 +350,19 @@ export function createDocs(container: HTMLElement, options: DocsCoreOptions = {}
       input.click();
     });
 
+  // --- The keys of the interface --------------------------------------------------
+
+  const bubble = options.bubble ? createBubble(editor) : undefined;
+  let keys: DocsKeys = {};
+  const setKeys = (next: DocsKeys) => {
+    keys = { onLinkKey: next.onLinkKey, onFindKey: next.onFindKey };
+    // Only with someone to call: the editor leaves the key to the browser otherwise.
+    if (keys.onLinkKey) editor.onLinkKey = () => keys.onLinkKey?.();
+    else editor.onLinkKey = bubble && (() => bubble.ask('link'));
+  };
+  // The whole interface puts its own in place of these: it is given neither.
+  if (bubble || options.onLinkKey || options.onFindKey) setKeys(options);
+
   // The usual keys, while the keyboard is in the document; elsewhere on the page they are the application's.
   const onKey = (e: KeyboardEvent) => {
     if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
@@ -332,6 +373,9 @@ export function createDocs(container: HTMLElement, options: DocsCoreOptions = {}
     } else if (key === 'p') {
       e.preventDefault();
       editor.print();
+    } else if ((key === 'f' || key === 'h') && keys.onFindKey && (IS_MAC ? e.metaKey : e.ctrlKey)) {
+      e.preventDefault();
+      keys.onFindKey(key === 'h');
     }
   };
   container.addEventListener('keydown', onKey);
@@ -468,6 +512,8 @@ export function createDocs(container: HTMLElement, options: DocsCoreOptions = {}
       assistant ??= connectAssistant(editor, { ...where, name: () => name, onChange: emit });
       return assistant;
     },
+    bubble,
+    setKeys,
     setName(next) {
       name = next;
       assistant?.renamed();
@@ -486,6 +532,8 @@ export function createDocs(container: HTMLElement, options: DocsCoreOptions = {}
       session?.leave();
       session = undefined;
       assistant?.disconnect();
+      bubble?.destroy();
+      editor.onLinkKey = undefined;
       editor.destroy();
     },
   };

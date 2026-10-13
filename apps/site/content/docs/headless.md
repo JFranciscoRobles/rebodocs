@@ -83,6 +83,7 @@ Each gives what there is to show and what there is to do, for a piece of interfa
 | `useDocsStyles()` | `styles`, `active`, `set`. |
 | `useDocsPage()` | `page`, `set`, `numbering`, `setNumbering`, `firstPageDifferent`, and the letterhead. |
 | `useDocsSelectionBox()` | Where the selection is on screen, to put a floating panel beside it. |
+| `useDocsBubble()` | The bar beside the selection, with `<DocsProvider bubble>`: `open`, `close`, `toggle`, `ask`. |
 | `useDocsResponsive()` | Fits pages to a narrow window; `narrow`, and `keyboard` in pixels. |
 | `useDocsValue(select, fallback)` | Anything else worked out from the editor, re-rendering only when it changes. |
 
@@ -102,12 +103,62 @@ function Find() {
 }
 ```
 
-## What has no headless version
+## Keys
 
-The ruler and the bar that comes up beside the selection are only in the included interface. You can still create them over your own layout:
+Most keys are the editor's own and work with nothing asked of you: ⌘B, ⌘I and ⌘U, ⌘Z and ⇧⌘Z, ⌘A, ⌘↵ for a page break, ⌘S (when there is an `onSave`) and ⌘P, ⌘-click on a link to open it, ⌘ and the wheel to zoom. Ctrl takes the place of ⌘ away from a Mac.
 
-```ts
-import { createRuler, createBubble } from '@rebodocs/editor';
+Three of them open something only an interface has, so the editor knows the key and leaves the answer to you. Each is taken from the browser only while you give it someone to call, and only while the keyboard is in the document.
+
+| Prop of `DocsProvider` | Key | When it is called |
+| --- | --- | --- |
+| `onLinkKey()` | ⌘K | Time to ask for the address of a link. |
+| `onFindKey(replace)` | ⌘F, ⌘H | Time to show the search; `replace` is true for ⌘H. |
+
+```tsx
+function Editor() {
+  const [finding, setFinding] = useState(false);
+  const [linking, setLinking] = useState(false);
+  return (
+    <DocsProvider docx={file} onFindKey={() => setFinding(true)} onLinkKey={() => setLinking(true)}>
+      {finding && <Find onClose={() => setFinding(false)} />}
+      {linking && <LinkDialog onClose={() => setLinking(false)} />}
+      <DocsSurface className="h-full" />
+    </DocsProvider>
+  );
+}
 ```
 
-They are plain DOM pieces that take the `editor` from `useDocs()`.
+Without React they are options of `createDocs`, and `docs.setKeys({ onLinkKey, onFindKey })` changes them later.
+
+## The bar beside the selection
+
+`<DocsProvider bubble>` gives the document the small bar that comes up beside what is selected, the same one the included interface has: copy, cut and paste on a screen that is touched, a variable made of the words selected, a link, a note, and what can be done to a picture or to the cells of a table. A tap on ⌘ shows it and hides it, and with it ⌘K asks for a link there unless you gave an `onLinkKey`.
+
+It is off unless asked for, and read when the document is made. It is the one piece here that comes with a look: restyle it through its classes (`dx-bb`, `dx-bb-open`, `dx-bb-sep`…).
+
+`useDocsBubble()` gives it to your own buttons:
+
+```tsx
+function InsertMenu() {
+  const bubble = useDocsBubble();
+  return (
+    <>
+      <button onClick={() => bubble?.ask('variable')}>Variable</button>
+      <button onClick={() => bubble?.ask('note')}>Note</button>
+      <button onClick={() => bubble?.ask('link')}>Link</button>
+    </>
+  );
+}
+```
+
+To draw one of your own, `useDocsSelectionBox()` says where the selection is.
+
+## What has no headless version
+
+The ruler is only in the included interface. You can still create it over your own layout:
+
+```ts
+import { createRuler } from '@rebodocs/editor';
+```
+
+It is a plain DOM piece that takes the `editor` from `useDocs()`.

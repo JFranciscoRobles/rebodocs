@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FindOptions, OutlineItem, PageNumbering, PageSetup } from '@rebodocs/core';
-import { type NoteView, type ZoomFit, keyboardInset, onKeyboard } from '@rebodocs/editor';
+import { type Bubble, type NoteView, type ZoomFit, keyboardInset, onKeyboard } from '@rebodocs/editor';
 import { useDocs, useDocsValue } from './headless';
 
 export interface DocsFind {
@@ -93,6 +93,15 @@ export function useDocsLink(): DocsLink {
     }),
     [editor, commands, active, state.collapsed],
   );
+}
+
+/**
+ * The bar beside the selection of a document made with one (`<DocsProvider bubble>`):
+ * to show it from a button, or to have it ask for a variable, a note or a link.
+ * Undefined without one, and until the document is there.
+ */
+export function useDocsBubble(): Bubble | undefined {
+  return useDocs().docs?.bubble;
 }
 
 export interface DocsNotes {

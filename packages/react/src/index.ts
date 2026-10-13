@@ -11,6 +11,7 @@ export {
   type DocsSelectionBox,
   type DocsStyles,
   type DocsVariables,
+  useDocsBubble,
   useDocsFind,
   useDocsLink,
   useDocsNotes,
@@ -21,8 +22,8 @@ export {
   useDocsStyles,
   useDocsVariables,
 } from './pieces';
-export { type Docs, type DocsCommands, type DocsCoreOptions, type DocsState, type LetterheadSource, createDocs } from './docs';
+export { type Docs, type DocsCommands, type DocsCoreOptions, type DocsHeadlessOptions, type DocsKeys, type DocsState, type LetterheadSource, createDocs } from './docs';
 export { addFont, addFonts, addLocale, fontFamilies, getLocale, locales, messages, onLocaleChange, setLocale, t } from '@rebodocs/editor';
-export type { Editor, FontSource, MessageKey, Messages, NoteView } from '@rebodocs/editor';
+export type { Bubble, Editor, FontSource, MessageKey, Messages, NoteView } from '@rebodocs/editor';
 export type { FindOptions, OutlineItem, PageNumbering, PageSetup } from '@rebodocs/core';
 export type { CollabState, Peer, Session } from '@rebodocs/collab/browser';

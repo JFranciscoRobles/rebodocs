@@ -1,4 +1,4 @@
-export { keyboardInset, onKeyboard } from './platform';
+export { IS_MAC, keyboardInset, onKeyboard } from './platform';
 export { type FontSource, addFont, addFonts, fontFamilies, fontFile, onFontsChange } from './fonts';
 export { type Responsive, type ResponsiveOptions, createResponsive } from './responsive';
 export { Editor, MAX_ZOOM, MIN_ZOOM, type EditArea, type MarkKey, type NoteView, type PeerCaret, type Selection, type ViewMode, type ZoomFit } from './editor';
