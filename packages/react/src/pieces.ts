@@ -4,9 +4,9 @@
 // that gives what there is to show and what there is to do, for whoever draws
 // them their own way. All of them go inside a `DocsProvider`.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { FindOptions, OutlineItem, PageNumbering, PageSetup } from '@rebodocs/core';
-import { type Bubble, type NoteView, type ZoomFit, keyboardInset, onKeyboard } from '@rebodocs/editor';
+import { type CSSProperties, type ReactNode, createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ActiveFormat, type FindOptions, type FormatId, type OutlineItem, type PageNumbering, type PageSetup, docText, formatText, formatValue } from '@rebodocs/core';
+import { type Bubble, type NoteView, type ZoomFit, createRuler, keyboardInset, onKeyboard } from '@rebodocs/editor';
 import { useDocs, useDocsValue } from './headless';
 
 export interface DocsFind {
@@ -163,15 +163,38 @@ export interface DocsVariables {
   select(name: string): void;
   /** Puts a value in place of each variable that has one, everywhere, as one step to undo. */
   fill(values: Record<string, string>): void;
+  /** What every use of each variable asks of its value: capitals, bold, how a date or a number is written. */
+  formats: Record<string, ActiveFormat[]>;
+  /** How many times each is used in the document, its header and its footer. */
+  uses: Record<string, number>;
+  /** Gives a format to every use of a variable, or takes it away. A way of writing a date or a number takes the place of the one there was, and so does a change of capitals. */
+  setFormat(name: string, id: FormatId, on: boolean, arg?: string): void;
+  /** What a value would come out as in the place of a variable, and whether it cannot be written as its formats ask: not a date, not a number. */
+  preview(name: string, value: string): { text: string; bad: boolean };
 }
 
 export function useDocsVariables(): DocsVariables {
   const { editor, commands } = useDocs();
   const names = useDocsValue((e) => e.variables, []);
   const active = useDocsValue((e) => e.activeVariable ?? null, null);
+  const formats = useDocsValue((e) => Object.fromEntries(e.variables.map((name) => [name, e.variableFormats(name)])), {} as Record<string, ActiveFormat[]>);
+  const uses = useDocsValue((e) => Object.fromEntries(e.variables.map((name) => [name, e.variableUses(name)])), {} as Record<string, number>);
   return useMemo(
-    () => ({ names, active: active ?? undefined, insert: (name) => commands.insertVariable(name), select: (name) => void editor?.selectVariable(name), fill: (values) => commands.fillVariables(values) }),
-    [editor, commands, names, active],
+    () => ({
+      names,
+      active: active ?? undefined,
+      insert: (name) => commands.insertVariable(name),
+      select: (name) => void editor?.selectVariable(name),
+      fill: (values) => commands.fillVariables(values),
+      formats,
+      uses,
+      setFormat: (name, id, on, arg) => editor?.setVariableFormat(name, id, on, arg),
+      preview: (name, value) => {
+        const { text, problems } = formatValue(value, (formats[name] ?? []).map((format) => formatText(format.id, format.arg)));
+        return { text, bad: value !== '' && problems.length > 0 };
+      },
+    }),
+    [editor, commands, names, active, formats, uses],
   );
 }
 
@@ -322,4 +345,49 @@ export function useDocsResponsive(below = 600): DocsResponsive {
     };
   }, [editor, below]);
   return useMemo(() => ({ narrow, keyboard }), [narrow, keyboard]);
+}
+
+export interface DocsCount {
+  words: number;
+  characters: number;
+  /** The same of what is selected; undefined when nothing is. */
+  selected: { words: number; characters: number } | undefined;
+}
+
+const countOf = (text: string) => ({ words: text.split(/\s+/).filter(Boolean).length, characters: text.replace(/[\n\r\f\uFFFC]/g, '').length });
+const NO_COUNT: DocsCount = { words: 0, characters: 0, selected: undefined };
+
+/** How long the document is, and what is selected of it. The whole is counted again only when the document changes, not at each move of the caret. */
+export function useDocsCount(): DocsCount {
+  const counted = useRef<{ doc: unknown; total: { words: number; characters: number } }>(undefined);
+  return useDocsValue((e) => {
+    if (counted.current?.doc !== e.doc) counted.current = { doc: e.doc, total: countOf(docText(e.doc)) };
+    return { ...counted.current.total, selected: e.collapsed ? undefined : countOf(e.selectedText) };
+  }, NO_COUNT);
+}
+
+export interface DocsRulerProps {
+  className?: string;
+  style?: CSSProperties;
+}
+
+/**
+ * The ruler of the document: the width of the page in centimetres, its
+ * margins and the indents of the paragraph the caret is in, to drag. It goes
+ * above the `DocsSurface`, as wide as it. It is drawn as the included
+ * interface draws it; `--dx-ruler`, `--dx-ruler-line`, `--dx-ruler-margin`,
+ * `--dx-ruler-text`, `--dx-ruler-ink` and `--dx-ruler-on` change its colours.
+ */
+export function DocsRuler({ className, style }: DocsRulerProps): ReactNode {
+  const { editor } = useDocs();
+  const [element, setElement] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!element || !editor) return;
+    const ruler = createRuler(element, editor);
+    return () => {
+      ruler.destroy();
+      element.replaceChildren();
+    };
+  }, [element, editor]);
+  return createElement('div', { ref: setElement, className, style });
 }

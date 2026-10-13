@@ -79,10 +79,11 @@ Each gives what there is to show and what there is to do, for a piece of interfa
 | `useDocsLink()` | `active` (address and text), `possible`, `set`, `remove`, `open`. |
 | `useDocsNotes()` | `notes`, `active`, `add`, `setText`, `setColor`, `remove`, `select`. |
 | `useDocsOutline()` | `items`, `active`, `goTo`, `move`. |
-| `useDocsVariables()` | `names`, `active`, `insert`, `select`, `fill`. |
+| `useDocsVariables()` | `names`, `active`, `insert`, `select`, `fill`; and what each asks of its value: `formats`, `uses`, `setFormat`, `preview`. |
 | `useDocsStyles()` | `styles`, `active`, `set`. |
 | `useDocsPage()` | `page`, `set`, `numbering`, `setNumbering`, `firstPageDifferent`, and the letterhead. |
 | `useDocsSelectionBox()` | Where the selection is on screen, to put a floating panel beside it. |
+| `useDocsCount()` | `words` and `characters` of the document, and of what is `selected`. |
 | `useDocsBubble()` | The bar beside the selection, with `<DocsProvider bubble>`: `open`, `close`, `toggle`, `ask`. |
 | `useDocsResponsive()` | Fits pages to a narrow window; `narrow`, and `keyboard` in pixels. |
 | `useDocsValue(select, fallback)` | Anything else worked out from the editor, re-rendering only when it changes. |
@@ -153,12 +154,38 @@ function InsertMenu() {
 
 To draw one of your own, `useDocsSelectionBox()` says where the selection is.
 
-## What has no headless version
+## Variables that are dates and amounts
 
-The ruler is only in the included interface. You can still create it over your own layout:
+A variable may ask how its value is written: as a date, as an amount, in capitals, in bold. `useDocsVariables()` gives what each one asks (`formats`), changes it for every place the variable is used (`setFormat`), and says what a value would come out as, or that it cannot be written that way (`preview`).
 
-```ts
-import { createRuler } from '@rebodocs/editor';
+```tsx
+function Variable({ name }: { name: string }) {
+  const variables = useDocsVariables();
+  const [value, setValue] = useState('');
+  const has = (id: FormatId) => variables.formats[name]?.some((format) => format.id === id);
+  const { text, bad } = variables.preview(name, value);
+  return (
+    <label>
+      {name}
+      <input value={value} onChange={(e) => setValue(e.target.value)} />
+      <button aria-pressed={has('currency')} onClick={() => variables.setFormat(name, 'currency', !has('currency'))}>$</button>
+      <small>{bad ? 'Not a number' : text}</small>
+    </label>
+  );
+}
 ```
 
-It is a plain DOM piece that takes the `editor` from `useDocs()`.
+The formats are `date`, `dateLong`, `dateFull`, `number`, `currency`, `upper`, `lower`, `capital`, `bold`, `italic` and `underline`. One way of writing a date or a number takes the place of another, and so does a change of capitals.
+
+## The ruler
+
+`<DocsRuler />` is the ruler of the included interface: the page in centimetres, its margins and the indents of the paragraph, to drag. Put it above the `DocsSurface`, as wide as it.
+
+```tsx
+<div className="flex h-full flex-col">
+  <DocsRuler />
+  <DocsSurface className="min-h-0 flex-1" />
+</div>
+```
+
+It is drawn on a canvas, so its look is its colours and not classes: `--dx-ruler` behind it, `--dx-ruler-line` under it, `--dx-ruler-margin` for the page outside the text, `--dx-ruler-text` for the room of the text, `--dx-ruler-ink` for the numbers and the markers, `--dx-ruler-on` for the marker being dragged.

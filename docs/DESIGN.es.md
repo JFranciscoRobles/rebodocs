@@ -1074,7 +1074,18 @@ qué mostrar y qué hacer, para dibujarlos como se quiera:
 | `useDocsPage()` | `page`, `set`, `numbering`, `setNumbering`, `firstPageDifferent`. |
 | `useDocsSelectionBox()` | Dónde está la selección en la pantalla, para poner al lado un panel propio. |
 | `useDocsResponsive(600)` | Ajusta las hojas al ancho cuando el documento tiene menos de ese ancho, y da `narrow` y `keyboard` (los píxeles que tapa el teclado en pantalla). |
+| `useDocsCount()` | `words` y `characters` del documento, y de lo seleccionado (`selected`). El total solo se vuelve a contar cuando cambia el documento. |
 | `useDocsBubble()` | La barrita junto a la selección, si el proveedor se hizo con `bubble`: `open`, `close`, `toggle`, `ask`. |
+
+`useDocsVariables()` da además lo que cada variable pide de su valor
+(`formats`: fecha, importe, mayúsculas, negrita), cuántas veces se usa
+(`uses`), cómo cambiarlo en todos sus usos (`setFormat`) y cómo quedaría un
+valor o si no se puede escribir así (`preview`).
+
+**La regla** es la de la interfaz incluida: `<DocsRuler />` encima de
+`DocsSurface`. Se dibuja en un canvas, así que su aspecto son colores y no
+clases: `--dx-ruler`, `--dx-ruler-line`, `--dx-ruler-margin`,
+`--dx-ruler-text`, `--dx-ruler-ink` y `--dx-ruler-on`.
 
 **Las teclas.** Casi todas son del editor y funcionan sin pedir nada (⌘B,
 ⌘Z, ⌘S si hay `onSave`, ⌘-clic en un enlace…). Tres abren algo que solo

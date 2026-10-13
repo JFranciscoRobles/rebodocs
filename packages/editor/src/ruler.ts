@@ -25,16 +25,16 @@ const BAND_BOTTOM = 19;
 const STYLE_ID = 'dx-ruler-style';
 
 const CSS = `
-.dx-ruler{position:relative;flex:none;height:${HEIGHT}px;overflow:hidden;background:#f3f5f9;border-bottom:1px solid #d9dce3;user-select:none}
+.dx-ruler{position:relative;flex:none;height:${HEIGHT}px;overflow:hidden;background:var(--dx-ruler,#f3f5f9);border-bottom:1px solid var(--dx-ruler-line,#d9dce3);user-select:none}
 .dx-ruler canvas{position:absolute;left:0;top:0;width:100%;height:100%}
 .dx-ruler-h{position:absolute;width:11px;margin-left:-5.5px;cursor:pointer;z-index:2}
-.dx-ruler-h svg{display:block;fill:#5f6470;stroke:#fff;stroke-width:.6}
-.dx-ruler-h:hover svg,.dx-ruler-h.dx-on svg{fill:#0b57d0}
+.dx-ruler-h svg{display:block;fill:var(--dx-ruler-ink,#5f6470);stroke:var(--dx-ruler-text,#fff);stroke-width:.6}
+.dx-ruler-h:hover svg,.dx-ruler-h.dx-on svg{fill:var(--dx-ruler-on,#0b57d0)}
 .dx-ruler-first{top:0;height:9px}
 .dx-ruler-hanging,.dx-ruler-right{top:11px;height:8px}
 .dx-ruler-left{top:19px;height:5px}
 .dx-ruler-m{position:absolute;top:0;width:9px;height:100%;cursor:ew-resize;z-index:1}
-.dx-ruler-guide{position:fixed;width:0;border-left:1px dashed #0b57d0;pointer-events:none;z-index:30}
+.dx-ruler-guide{position:fixed;width:0;border-left:1px dashed var(--dx-ruler-on,#0b57d0);pointer-events:none;z-index:30}
 `;
 
 const DOWN = '<svg viewBox="0 0 11 9" width="11" height="9"><path d="M1 1h9v3.5L5.5 8.5 1 4.5z"/></svg>';
@@ -120,17 +120,20 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
     if (!g) return;
     g.setTransform(ratio, 0, 0, ratio, 0, 0);
     g.clearRect(0, 0, width, HEIGHT);
+    // A canvas knows nothing of the styles of the page: the colours are read from the bar.
+    const styles = getComputedStyle(bar);
+    const colour = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
     // The page, with the room for text in white and what is outside it in grey.
-    g.fillStyle = '#cfd4dd';
+    g.fillStyle = colour('--dx-ruler-margin', '#cfd4dd');
     g.fillRect(x(0), BAND_TOP, state.width * scale, BAND_BOTTOM - BAND_TOP);
-    g.fillStyle = '#fff';
+    g.fillStyle = colour('--dx-ruler-text', '#fff');
     g.fillRect(x(state.left), BAND_TOP, (state.right - state.left) * scale, BAND_BOTTOM - BAND_TOP);
 
     // Centimetres from the left edge of the text, both ways: numbers on each, a line on the halves, a dot on the quarters.
     const cm = PT_PER_CM * scale;
     const middle = (BAND_TOP + BAND_BOTTOM) / 2;
     const every = cm < 22 ? 2 : 1;
-    g.fillStyle = '#5f6470';
+    g.fillStyle = colour('--dx-ruler-ink', '#5f6470');
     g.font = '9px system-ui,-apple-system,"Segoe UI",sans-serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
