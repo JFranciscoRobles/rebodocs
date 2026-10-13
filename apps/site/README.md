@@ -9,6 +9,14 @@ npm run build:site    # static files in apps/site/out
 
 It is a Next.js application exported as plain files (`output: 'export'`), so it can be put on any static host. It installs `@rebodocs/react` as any application would, which makes it the first user of the package: both commands build that package first.
 
+## Deploying
+
+On Vercel, set the project's **Root Directory** to `apps/site` and leave the rest as it is: `vercel.json` says how to install and build.
+
+The site is one workspace of the repository and is built with tools of the others. Installing in `apps/site` alone, which is what a host does by default, leaves those out; so both steps run from the root of the repository: `npm ci`, then `npm run build:site`, which builds `@rebodocs/react`, writes the sample document and builds the site.
+
+On any other static host, run `npm run build:site` and publish `apps/site/out`.
+
 ## Where things are
 
 | Path | What it is |

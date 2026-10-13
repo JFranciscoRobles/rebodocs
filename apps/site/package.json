@@ -5,6 +5,7 @@
   "license": "MIT",
   "private": true,
   "type": "module",
+  "engines": { "node": "22.x" },
   "scripts": {
     "demo": "vite-node scripts/demo.ts",
     "dev": "npm run demo && next dev -p 5174",
