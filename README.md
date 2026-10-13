@@ -78,7 +78,7 @@ can be improved.
 
 ## Using it
 
-**In a React or Next.js application:**
+**In a React or Next.js application:** `npm install @rebodocs/react`
 
 ```tsx
 'use client';
@@ -140,6 +140,8 @@ npm run collab -- --backend https://my-app.example/api/docs   # key in REBODOCS_
 
 ## Status
 
+`@rebodocs/react` is [on npm](https://www.npmjs.com/package/@rebodocs/react).
+
 This is working software that has not been used in production yet. What has
 been checked, and how:
 
@@ -177,7 +179,7 @@ not been translated yet.
 In rough order of how much each would matter:
 
 1. Use it in a real application, and fix what that shows.
-2. Publish the packages to npm (today only `@rebodocs/react` is built as a
+2. Publish the other packages to npm (today only `@rebodocs/react` is, as a
    bundle; the others are consumed as source).
 3. Collaboration: several server processes per room, permissions checked on
    every change and not only on joining, recovery after a crash.

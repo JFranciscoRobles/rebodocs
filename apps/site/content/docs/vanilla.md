@@ -26,7 +26,7 @@ const pdf = await editor.exportPdf('Contract');
 
 The element given to the editor needs a height.
 
-> Today this package is used as source, inside the repository. Outside it, the same pieces are in the React bundle, and the whole editor without React is `mountDocs` from `@rebodocs/react/mount`.
+> Today this package is used as source, inside the repository. From npm, the whole editor without React is `mountDocs` from `@rebodocs/react/mount`: see below.
 
 ## The pieces
 

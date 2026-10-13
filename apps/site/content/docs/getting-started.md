@@ -1,36 +1,16 @@
 # Getting started
 
-The packages are not on npm yet, so the first step is the repository. It takes a couple of minutes.
-
-## Run it
-
-```bash
-git clone https://github.com/JFranciscoRobles/rebodocs.git
-cd rebodocs
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173`. That is the playground: the editor with everything switched on. Open a Word file from the menu and edit it.
-
-You need Node 22.12 or later.
+The editor for React is on npm. The other packages are used from the repository for now.
 
 ## Put it in a React application
 
-Build the React package. It bundles the engine, the editor and the collaboration client into one installable file:
-
 ```bash
-npm run build:react
-# → packages/react/rebodocs-react-0.5.0.tgz
+npm install @rebodocs/react
 ```
 
-Install that file in your application:
+It is one package with the engine, the editor and the collaboration client inside. React 18 or later is its only peer.
 
-```bash
-npm install /path/to/rebodocs/packages/react/rebodocs-react-0.5.0.tgz
-```
-
-And use the component. The element it is in must have a height:
+Use the component. The element it is in must have a height:
 
 ```tsx
 'use client';
@@ -46,6 +26,23 @@ export default function Page() {
 ```
 
 That gives an empty document. To open a file, pass its bytes as `docx`. See [React component](/docs/react/).
+
+No React? The same package has the whole editor without it: `import { mountDocs } from '@rebodocs/react/mount'`. See [Without a framework](/docs/vanilla/).
+
+## Run the repository
+
+To try everything, change the code, or use the packages that are not published yet:
+
+```bash
+git clone https://github.com/JFranciscoRobles/rebodocs.git
+cd rebodocs
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. That is the playground: the editor with everything switched on. Open a Word file from the menu and edit it.
+
+You need Node 22.12 or later.
 
 ## Use the engine in Node
 

@@ -9,9 +9,13 @@ To put the editor in a screen of another application (it was made for a CRM
 written in Next.js) without an iframe, with the application deciding where
 documents are kept, who may open them and what the interface looks like.
 
-It is the only package that is built as a bundle: `@rebodocs/core`,
-`@rebodocs/editor` and the collaboration client are inside it, so it installs as
-one dependency. React 18 or later is the only peer.
+```bash
+npm install @rebodocs/react
+```
+
+It is built as a bundle: `@rebodocs/core`, `@rebodocs/editor` and the
+collaboration client are inside it, so it installs as one dependency. React
+18 or later is the only peer. Documentation: [rebodocs.com](https://rebodocs.com/docs/).
 
 ## Two ways to use it
 
@@ -86,14 +90,11 @@ document after each one.
 `mountDocs(element, options)` (also at `@rebodocs/react/mount`) is the whole
 editor without React, for any other framework.
 
-## Building and installing
+## Building and publishing
 
 ```bash
-npm run build:react      # packages/react/rebodocs-react-0.5.0.tgz
-```
-
-```bash
-npm install ../docs/packages/react/rebodocs-react-0.5.0.tgz
+npm run build:react                  # builds it and packs packages/react/rebodocs-react-<version>.tgz
+npm publish -w @rebodocs/react       # builds it again, and publishes it
 ```
 
 The bundle starts with `'use client'`, so it can be imported from a Next.js
@@ -101,9 +102,8 @@ app directory. It was tried in Next.js 16 with React 19 and Tailwind 4.
 
 ## Where it can improve
 
-- **Publishing.** It is installed from a tarball. It should go to npm as
-  `@rebodocs/react`, with the other packages built and published too, so the
-  bundle does not have to carry them.
+- **Publishing.** It is on npm as one bundle. The other packages should be
+  built and published too, so that it can depend on them and not carry them.
 - **Headless coverage.** The ruler and the selection bubble have no headless
   version; the touch selection menu (copy, cut, paste) is part of the
   bubble. Hooks for tables and pictures would save reaching for `editor`.

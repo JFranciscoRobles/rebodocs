@@ -3,6 +3,11 @@
   "version": "0.5.0",
   "description": "The DOCX editor as a React component, or as headless hooks, with everything it needs inside.",
   "license": "MIT",
+  "homepage": "https://rebodocs.com",
+  "repository": { "type": "git", "url": "git+https://github.com/JFranciscoRobles/rebodocs.git", "directory": "packages/react" },
+  "bugs": "https://github.com/JFranciscoRobles/rebodocs/issues",
+  "keywords": ["docx", "word", "editor", "word-processor", "react", "nextjs", "pdf", "collaboration", "templates"],
+  "publishConfig": { "access": "public" },
   "type": "module",
   "sideEffects": false,
   "files": ["dist"],
@@ -20,7 +25,8 @@
     }
   },
   "scripts": {
-    "build": "vite build && node scripts/types.mjs"
+    "build": "vite build && node scripts/types.mjs",
+    "prepack": "npm run build"
   },
   "peerDependencies": {
     "react": ">=18"

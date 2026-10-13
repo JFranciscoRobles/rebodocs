@@ -59,7 +59,7 @@ Touch input was also tried on a real phone.
 
 **Packaging**
 
-- Not on npm. Only `@rebodocs/react` is built as a bundle; the others are used as source inside the repository.
+- Only `@rebodocs/react` is on npm, as a bundle with the engine and the editor inside. The others are used as source inside the repository.
 - The English interface texts need a native review.
 
 ## Roadmap
@@ -67,7 +67,7 @@ Touch input was also tried on a real phone.
 In rough order of how much each would matter.
 
 1. **Use it in a real application**, and fix what that shows.
-2. **Publish to npm**: every package built, with types, under `@rebodocs`.
+2. **Publish the other packages to npm**, each built with its types, so that the engine can be installed by itself on a server.
 3. **Browser tests in the repository.** The interface checks exist as scripts outside it; they belong in a test suite.
 4. **Collaboration that scales**: several server processes per room, access checked while connected, a durable log.
 5. **Templates by locale**: dates and currency in the language and currency you choose.

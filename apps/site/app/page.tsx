@@ -173,7 +173,8 @@ export default async function Home() {
         <div className="rounded-2xl bg-soft p-6 sm:p-10">
           <Title>Where it stands</Title>
           <p className="mt-3.5 max-w-[66ch] text-[17px] leading-relaxed text-muted">
-            Rebodocs works and has 257 automated tests, and it has not been used in production yet. The packages are not on npm: for now they are built from the repository.
+            Rebodocs works and has 257 automated tests, and it has not been used in production yet. The editor for React is on npm; the other packages are used from the
+            repository for now.
             Anyone may use it for anything. It is a word processor of its own that is compatible with Word files, not a copy of Word, and it does not try to be one.
           </p>
           <p className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
