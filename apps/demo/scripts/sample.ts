@@ -4,8 +4,10 @@
 // a header and a page number. Made with the same operations the editor uses.
 //
 //   npm run sample -w @rebodocs/demo     → public/sample.docx
+//   vite-node scripts/sample.ts <file>   → wherever the site wants its copy
 
 import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type Doc, type Run, type RunProps, applyRunProps, createDoc, exportDocx, insertSignatures, insertTable, insertText, setCellProps, setPageNumbering, setParagraphStyle } from '@rebodocs/core';
 
@@ -58,6 +60,7 @@ function sampleDoc(): Doc {
   return setPageNumbering(doc, { place: 'footer', align: 'center', format: 'pageOfTotal' });
 }
 
-const out = fileURLToPath(new URL('../public/sample.docx', import.meta.url));
+const given = process.argv.slice(2).find((arg) => arg.endsWith('.docx'));
+const out = given ? resolve(given) : fileURLToPath(new URL('../public/sample.docx', import.meta.url));
 writeFileSync(out, exportDocx(sampleDoc()));
 console.log(`sample.docx: ${out}`);

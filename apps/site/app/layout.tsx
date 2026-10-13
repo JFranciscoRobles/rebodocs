@@ -24,6 +24,9 @@ function Header() {
           Rebodocs
         </Link>
         <nav className="ml-auto flex items-center gap-5 text-sm font-medium text-muted">
+          <Link href="/demo/" className="hover:text-ink">
+            Demo
+          </Link>
           <Link href="/docs/" className="hover:text-ink">
             Docs
           </Link>

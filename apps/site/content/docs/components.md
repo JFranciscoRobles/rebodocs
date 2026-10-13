@@ -13,7 +13,7 @@ npm install @rebodocs/react
 | The ruler in an interface of your own | [`DocsRuler`](#docsruler) |
 | The editor without React | [`mountDocs`](#mountdocs-and-createdocs), `createDocs` |
 
-[A complete interface](/docs/example/) shows all of them working together in an application you can run.
+[A complete interface](/docs/example/) shows all of them working together in an application you can run, and [the demo](/demo/) is that application in your browser.
 
 ## DocsEditor
 

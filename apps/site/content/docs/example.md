@@ -1,6 +1,6 @@
 # A complete interface
 
-The repository has an application that uses `@rebodocs/react` the way yours would: [`apps/demo`](https://github.com/JFranciscoRobles/rebodocs/tree/main/apps/demo). It shows the same document two ways, side by side in two tabs: the whole editor as it comes (`DocsEditor`), and an interface built from nothing on the hooks, dark and laid out like a design tool. The second does everything the first does, so it is the place to copy from.
+The repository has an application that uses `@rebodocs/react` the way yours would: [`apps/demo`](https://github.com/JFranciscoRobles/rebodocs/tree/main/apps/demo). It is running at [rebodocs.com/demo](/demo/), from the same files. It shows the same document two ways, side by side in two tabs: the whole editor as it comes (`DocsEditor`), and an interface built from nothing on the hooks, dark and laid out like a design tool. The second does everything the first does, so it is the place to copy from.
 
 ```bash
 git clone https://github.com/JFranciscoRobles/rebodocs
@@ -101,6 +101,7 @@ The column the pages are in is `display: flex; flex-direction: column; min-width
 
 ## Using it for a demonstration
 
+- [rebodocs.com/demo](/demo/) has it online, with nothing to install; `/demo/#full` opens on the included interface.
 - `npm run demo` and open `/#headless` to land on your own interface, or `/` for the included one.
 - `Abrir .docx` shows a real document of the person you are showing it to, in both.
 - `npm run build:demo` writes `apps/demo/dist`, a static site to put anywhere.

@@ -14,6 +14,9 @@ npm run demo          # from the root: http://localhost:5175
 npm run build:demo    # apps/demo/dist, a static site
 ```
 
+It is also on the site, at [rebodocs.com/demo](https://rebodocs.com/demo/):
+`apps/site` takes these same components from here.
+
 `/#headless` opens on the second tab. It starts with a sample contract that
 `scripts/sample.ts` writes with the engine: headings, variables with a type,
 a table, places to sign. `Abrir .docx` opens a file of the disk in both tabs.

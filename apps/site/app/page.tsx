@@ -129,6 +129,12 @@ export default async function Home() {
           Open your own .docx from the menu, fill the template from the side panel, export a PDF. Nothing leaves your browser.
         </p>
         <LiveDemo />
+        <p className="mt-5 text-[15px] text-muted">
+          This is the interface that comes with it.{' '}
+          <Link href="/demo/" className="font-semibold text-brand hover:underline">
+            See the same document in an interface built from scratch on the hooks →
+          </Link>
+        </p>
       </section>
 
       <section className="mx-auto max-w-6xl px-4 pt-20 sm:px-6">

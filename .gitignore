@@ -14,6 +14,7 @@ apps/site/.next
 apps/site/out
 apps/site/next-env.d.ts
 apps/site/public/demo.docx
+apps/site/public/sample.docx
 apps/demo/public/sample.docx
 *.tsbuildinfo
 

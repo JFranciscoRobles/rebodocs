@@ -9,7 +9,7 @@
     "node": "22.x"
   },
   "scripts": {
-    "demo": "vite-node scripts/demo.ts",
+    "demo": "vite-node scripts/demo.ts && vite-node ../demo/scripts/sample.ts public/sample.docx",
     "dev": "npm run demo && next dev -p 5174",
     "build": "npm run demo && next build",
     "start": "npx serve out -l 5174"
