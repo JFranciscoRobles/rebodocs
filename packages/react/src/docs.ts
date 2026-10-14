@@ -529,8 +529,10 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
       unsubscribe();
       listeners.clear();
       container.removeEventListener('keydown', onKey);
-      session?.leave();
+      // Let go of first: a room left from here is not one that is gone, and is not said to be.
+      const left = session;
       session = undefined;
+      left?.leave();
       assistant?.disconnect();
       bubble?.destroy();
       editor.onLinkKey = undefined;

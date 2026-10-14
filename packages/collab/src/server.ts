@@ -43,6 +43,8 @@ export interface CollabServer {
   ready: Promise<void>;
   /** Gives the storage what it does not have yet of the rooms people are in. */
   flush(): Promise<void>;
+  /** The rooms it holds now, and what the people in each are called: a room nobody is in is on its way out. */
+  rooms(): { id: string; people: string[] }[];
   close(): void;
 }
 
@@ -79,6 +81,8 @@ interface Room {
   /** The last sending taken from each, so one sent twice is taken once. */
   seqs: Map<string, number>;
   timer?: NodeJS.Timeout;
+  /** How many are on their way in, while the storage is asked about them: the room is not let go of under them. */
+  entering?: number;
   /** The document with the changes so far made, so the next ones are made to it and not all of them again. */
   live?: { doc: Doc; rev: number };
   /** How many changes the storage that only keeps the document has of it, and whether a folding still has to reach it. */
@@ -151,7 +155,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
 
   /** With nobody in it, a room's changes become its file: joining it again does not make them all over. */
   const fold = async (room: Room): Promise<void> => {
-    if (room.clients.size || closed) return;
+    if (room.clients.size || room.entering || closed) return;
     try {
       if (room.log.length) {
         const base = current(room);
@@ -170,7 +174,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
         room.unkept = false;
       }
       // Kept somewhere else, whole: nothing of it stays here.
-      if (storage.forgets && !room.clients.size && rooms.get(room.id) === room) rooms.delete(room.id);
+      if (storage.forgets && !room.clients.size && !room.entering && rooms.get(room.id) === room) rooms.delete(room.id);
     } catch (error) {
       complain(room, 'los cambios no se pudieron guardar y siguen aquí; se intenta de nuevo', error);
       if (!room.clients.size && !closed) room.timer = setTimeout(() => void fold(room), Math.max(idle, 5000));
@@ -277,10 +281,27 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
     if (req.method === 'GET' && action === 'events') {
       const clientId = (url.searchParams.get('client') ?? '').slice(0, 64);
       if (!clientId) return void json(res, 400, { error: 'client' });
-      const pass = storage.admit ? await storage.admit(room.id, url.searchParams.get('ticket') ?? '') : {};
+      let pass: { name?: string } | undefined = {};
+      if (storage.admit) {
+        room.entering = (room.entering ?? 0) + 1;
+        try {
+          pass = await storage.admit(room.id, url.searchParams.get('ticket') ?? '');
+        } finally {
+          room.entering--;
+        }
+      }
       if (!pass) {
         if (!room.clients.size) void fold(room);
         return void json(res, 403, { error: 'access' });
+      }
+      // Gone while the room was being read or the storage was being asked about them: their
+      // leaving was not heard, so they are not let in, or they would be in the room for good.
+      if (req.socket.destroyed) {
+        if (!room.clients.size && !closed) {
+          clearTimeout(room.timer);
+          room.timer = setTimeout(() => void fold(room), idle);
+        }
+        return;
       }
       clearTimeout(room.timer);
       const used = new Set([...room.clients.values()].map((c) => c.color));
@@ -356,6 +377,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
     },
     ready,
     flush,
+    rooms: () => [...rooms.values()].map((room) => ({ id: room.id, people: [...room.clients.values()].map((client) => client.name) })),
     close() {
       closed = true;
       clearInterval(saver);
