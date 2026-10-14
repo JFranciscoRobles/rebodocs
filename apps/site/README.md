@@ -21,12 +21,20 @@ On any other static host, run `npm run build:site` and publish `apps/site/out`.
 
 | Path | What it is |
 | --- | --- |
-| `app/page.tsx` | The landing page. |
+| `app/layout.tsx` | What every page has: the document, the styles, the metadata. No header and no footer. |
+| `app/(site)/layout.tsx` | The header and the footer, for the pages inside `app/(site)`: the landing page and the documentation. |
+| `app/(site)/page.tsx` | The landing page. |
+| `app/(site)/docs/` | The pages of the documentation, and their menu at the side. |
+| `app/demo/page.tsx`, `components/DemoApp.tsx` | [The demo](https://rebodocs.com/demo/), on the whole window: the two components of `apps/demo`, taken from where they are written. |
 | `components/LiveDemo.tsx` | The editor on the landing page. |
 | `scripts/demo.ts` | Writes the document it opens with, `public/demo.docx`, when the site is built. |
 | `content/docs/*.md` | The documentation: one Markdown file per page. |
 | `lib/site.ts` | The order of the pages in the menu, the address of the repository and of the site. |
 | `lib/docs.ts` | Turns the Markdown into HTML, with its code coloured, when the site is built. |
+
+## A page without the header
+
+The header and the footer belong to the `(site)` group, not to the root. A page put outside it, as `app/demo`, gets neither and has the whole window: that is where a demo goes. The parentheses keep the group out of the address, so `app/(site)/docs` is still `/docs/`.
 
 ## Adding a page
 

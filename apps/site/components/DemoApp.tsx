@@ -5,6 +5,7 @@
 // is what there is to copy. Neither is drawn on the server: they are loaded
 // in the browser, where the editor has something to measure with.
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 const loading = () => <p className="grid h-full place-items-center text-sm text-muted">Opening the editor…</p>;
@@ -42,8 +43,13 @@ export function DemoApp() {
   };
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] min-h-[560px] flex-col">
+    <div className="flex h-dvh min-h-[560px] flex-col">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-soft px-4 py-2 text-sm">
+        <Link href="/" title="Back to the site" className="flex items-center gap-2 font-bold tracking-tight">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="" width={22} height={22} />
+          <span className="hidden sm:inline">Rebodocs</span>
+        </Link>
         <div className="flex gap-1" role="tablist">
           {TABS.map(({ id, label }) => (
             <button

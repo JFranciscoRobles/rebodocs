@@ -184,7 +184,7 @@ export default async function Home() {
         <div className="rounded-2xl bg-soft p-6 sm:p-10">
           <Title>Where it stands</Title>
           <p className="mt-3.5 max-w-[66ch] text-[17px] leading-relaxed text-muted">
-            Rebodocs works and has 257 automated tests, and it has not been used in production yet. The editor for React is{' '}
+            Rebodocs works and has 275 automated tests, and it has not been used in production yet. The editor for React is{' '}
             <a href={NPM} className="font-semibold text-brand hover:underline">
               on npm
             </a>
