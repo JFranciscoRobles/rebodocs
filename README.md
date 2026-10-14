@@ -35,12 +35,18 @@ npm run typecheck
   that is opened and saved untouched keeps its XML; what is edited is written
   back into the original structure.
 - **Lays pages out compatibly with Word.** Line breaking, justification, widow and
-  orphan control, keep-with-next, tables that split across pages, headers and
-  footers, page numbers, floating pictures with text wrapping. Measured
+  orphan control, keep-with-next, sections and newspaper columns (with column
+  breaks, balancing and the line between them), tables that split across
+  pages with their heading rows repeated, table styles (heading row, banded
+  rows), borders per side, merged and nested cells, floating tables, headers
+  and footers, page numbers, floating pictures with text wrapping. Measured
   against Word's own PDF output on real documents (see
   [Status](#status)).
 - **Edits them.** Character and paragraph formatting, paragraph styles,
-  lists, tables (insert, merge, split, resize columns), pictures, links,
+  lists, columns (of a section or of a selection, with column breaks),
+  tables (insert, delete, merge, split, drag the columns, the rows or the
+  corner to resize, row heights, heading rows, vertical alignment, border
+  lines), pictures, links,
   notes (Word comments), table of contents, find and replace, undo and redo.
 - **Templates.** Any text between double braces, `{{client.name}}`, is a
   variable. They can be filled from the editor, from the command line or
@@ -188,10 +194,15 @@ Known limits:
 - Collaboration has not been run between machines on different networks, over
   HTTPS, or with two browsers typing over a real bucket. One server process
   holds a room.
-- No sections with different page setups, no columns, no footnotes, no text
-  boxes, no tracked changes. Such content is kept in the file and shown as
-  plain text where it can be.
-- Tables: row height is not editable, header rows do not repeat across pages.
+- Sections: their columns and margins are laid out, but every page has the
+  size of the last section's, every section shows the document's header and
+  footer (or none, for the first sections when they have none), and the page
+  setup panel changes the last section only.
+- No footnotes, no text boxes, no tracked changes, no tab stops other than
+  the dotted one of a table of contents. Such content is kept in the file and
+  shown as plain text where it can be.
+- Tables: text set vertically in a cell is shown horizontally; a table
+  inside a cell is never split across pages.
 - PDF embeds TrueType fonts only; others are drawn in a standard font.
 - Fonts registered by an application are not embedded in the DOCX.
 - The interface was written in Spanish first; the English texts need a review.
@@ -205,7 +216,7 @@ In rough order of how much each would matter:
    bundle; the others are consumed as source).
 3. Collaboration: several server processes per room, permissions checked on
    every change and not only on joining, recovery after a crash.
-4. Layout: sections, columns, footnotes, repeated table header rows.
+4. Layout: footnotes, tab stops, a page size and a header per section.
 5. Translate the design notes, and review the English interface.
 
 ## Contributing

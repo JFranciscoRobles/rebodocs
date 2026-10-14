@@ -3,7 +3,7 @@
 // else. Fonts, sizes, colours, alignment, pictures and the header and footer
 // are left behind.
 
-import { type Doc, type Paragraph, type Run, resolveRun } from './model';
+import { type Doc, type Paragraph, type Run, cellOfTable, resolveRun } from './model';
 import { listKindAt } from './ops';
 import { paragraphStyles } from './styles';
 
@@ -62,7 +62,11 @@ function tableBlock(doc: Doc, paragraphs: Paragraph[], tableIndex: number): stri
   const rows = table.rows.map((row) => {
     const cells: string[] = [];
     for (const cell of row.cells) {
-      const own = paragraphs.filter((p) => p.cell!.row === row.id && p.cell!.cell === cell.id);
+      // The text of a table in the cell goes in the cell, as Markdown has no tables in tables.
+      const own = paragraphs.filter((p) => {
+        const at = cellOfTable(doc.tables, p.cell, tableIndex);
+        return at?.row === row.id && at.cell === cell.id;
+      });
       // A cell is one line of the table: its paragraphs and line breaks become <br>.
       const text = own
         .map((p) => inline(p.runs))
@@ -90,9 +94,11 @@ export function exportMarkdown(doc: Doc): string {
   for (let i = 0; i < paragraphs.length; i++) {
     const para = paragraphs[i];
     if (para.cell) {
-      const table = para.cell.table;
+      // A table inside another is written with the outermost one.
+      let table = para.cell.table;
+      while (doc.tables?.[table]?.parent) table = doc.tables[table].parent!.table;
       let end = i;
-      while (end + 1 < paragraphs.length && paragraphs[end + 1].cell?.table === table) end++;
+      while (end + 1 < paragraphs.length && cellOfTable(doc.tables, paragraphs[end + 1].cell, table)) end++;
       const text = tableBlock(doc, paragraphs.slice(i, end + 1), table);
       if (text) blocks.push({ text, item: false });
       i = end;

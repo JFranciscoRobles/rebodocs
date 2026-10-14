@@ -20,6 +20,8 @@ import {
   type StoryPart,
   type Table,
   STORY_PARTS,
+  cellOfTable,
+  inCell,
   paragraphLength,
   paragraphText,
   sameCell,
@@ -431,26 +433,43 @@ function joinRuns(runs: Run[], fallback: RunProps): Run[] {
 function mend(paragraphs: Paragraph[], tables: Table[] | undefined, strict: Set<number>): Paragraph[] {
   let sound = paragraphs.length > 0;
   const seen = new Set<number>();
+  /** Checks the table whose paragraphs start at `i`, those of the tables in its cells with them; returns where they end. */
+  const check = (index: number, i: number): number => {
+    const table = tables?.[index];
+    if (!table || seen.has(index)) {
+      sound = false;
+      return i;
+    }
+    seen.add(index);
+    for (const row of table.rows) {
+      for (const cell of row.cells) {
+        const ref = { table: index, row: row.id, cell: cell.id };
+        const from = i;
+        while (sound && i < paragraphs.length && inCell(tables, paragraphs[i].cell, ref)) {
+          const own = paragraphs[i].cell!;
+          // A table in the cell: one piece of its own, among the cell's paragraphs.
+          if (own.table !== index) {
+            let inner = own;
+            while (tables?.[inner.table]?.parent && tables[inner.table].parent!.table !== index) inner = tables[inner.table].parent!;
+            i = check(inner.table, i);
+          } else i++;
+        }
+        if (i === from && strict.has(index)) sound = false;
+      }
+    }
+    if (paragraphs[i] && cellOfTable(tables, paragraphs[i].cell, index)) sound = false;
+    return i;
+  };
   for (let i = 0; i < paragraphs.length && sound; ) {
     const ref = paragraphs[i].cell;
     if (!ref) {
       i++;
       continue;
     }
-    const table = tables?.[ref.table];
-    if (!table || seen.has(ref.table)) {
-      sound = false;
-      break;
-    }
-    seen.add(ref.table);
-    for (const row of table.rows) {
-      for (const cell of row.cells) {
-        const from = i;
-        while (i < paragraphs.length && paragraphs[i].cell?.table === ref.table && paragraphs[i].cell!.row === row.id && paragraphs[i].cell!.cell === cell.id) i++;
-        if (i === from && strict.has(ref.table)) sound = false;
-      }
-    }
-    if (paragraphs[i]?.cell?.table === ref.table) sound = false;
+    // A table inside another starts where the outermost one does.
+    let top = ref;
+    while (tables?.[top.table]?.parent) top = tables[top.table].parent!;
+    i = check(top.table, i);
   }
   if (sound) return paragraphs;
 
@@ -466,33 +485,42 @@ function mend(paragraphs: Paragraph[], tables: Table[] | undefined, strict: Set<
   }
   const out: Paragraph[] = [];
   const done = new Set<number>();
+  /** A table, each cell with its paragraphs and, before the last of them, the tables inside it. */
+  const emit = (index: number, like: Paragraph) => {
+    const table = tables![index];
+    done.add(index);
+    for (const row of table.rows) {
+      for (const cell of row.cells) {
+        const list = cells.get(`${index}:${row.id}:${cell.id}`) ?? [];
+        const inner = (tables ?? []).map((t, k) => (t.parent && t.parent.table === index && t.parent.row === row.id && t.parent.cell === cell.id ? k : -1)).filter((k) => k >= 0 && !done.has(k));
+        out.push(...list.slice(0, Math.max(0, list.length - 1)));
+        for (const k of inner) emit(k, like);
+        if (list.length) {
+          out.push(list[list.length - 1]);
+        } else if (strict.has(index) || inner.length) {
+          let id = `t${index}.${row.id}.${cell.id}`;
+          while (ids.has(id)) id += '~';
+          ids.add(id);
+          out.push({ id, props: {}, runs: [{ text: '', props: like.runs[0]?.props ?? {} }], cell: { table: index, row: row.id, cell: cell.id } });
+        }
+      }
+    }
+  };
   for (const p of paragraphs) {
     if (!p.cell) {
       out.push(p);
       continue;
     }
-    const index = p.cell.table;
-    const table = tables?.[index];
-    if (!table) {
+    let index = p.cell.table;
+    if (!tables?.[index]) {
       const { cell: _, ...loose } = p;
       out.push(loose);
       continue;
     }
+    // A table inside another goes out with the outermost one.
+    while (tables[index].parent && tables[tables[index].parent!.table]) index = tables[index].parent!.table;
     if (done.has(index)) continue;
-    done.add(index);
-    for (const row of table.rows) {
-      for (const cell of row.cells) {
-        const list = cells.get(`${index}:${row.id}:${cell.id}`);
-        if (list) {
-          out.push(...list);
-        } else if (strict.has(index)) {
-          let id = `t${index}.${row.id}.${cell.id}`;
-          while (ids.has(id)) id += '~';
-          ids.add(id);
-          out.push({ id, props: {}, runs: [{ text: '', props: p.runs[0]?.props ?? {} }], cell: { table: index, row: row.id, cell: cell.id } });
-        }
-      }
-    }
+    emit(index, p);
   }
   if (!out.length) out.push({ id: 'p~', props: {}, runs: [{ text: '', props: {} }] });
   return out;

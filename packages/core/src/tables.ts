@@ -3,6 +3,7 @@
 // paragraphs of cells that are not touched stay the same objects.
 
 import {
+  type Border,
   type CellRef,
   type Doc,
   type Paragraph,
@@ -12,7 +13,10 @@ import {
   type Table,
   type TableCell,
   type TableRow,
+  DEFAULT_BORDER,
+  cellOfTable,
   createParagraph,
+  inCell,
   defined,
   paragraphLength,
 } from './model';
@@ -87,10 +91,12 @@ function reshape(
   let last = -1;
   const kept = new Map<string, Paragraph[]>();
   doc.paragraphs.forEach((p, i) => {
-    if (p.cell?.table !== tableIndex) return;
+    // The paragraphs of a table in a cell go with that cell.
+    const ref = cellOfTable(doc.tables, p.cell, tableIndex);
+    if (!ref) return;
     if (first < 0) first = i;
     last = i;
-    const key = keyOf(p.cell.row, p.cell.cell);
+    const key = keyOf(ref.row, ref.cell);
     const list = kept.get(key);
     if (list) list.push(p);
     else kept.set(key, [p]);
@@ -264,6 +270,26 @@ export function deleteRow(doc: Doc, para: number): { doc: Doc; pos: Position } {
 }
 
 /**
+ * Removes the table the paragraph is in, the innermost one for a table in a
+ * cell, with everything in it. The text around it stays, and the caret goes
+ * where the table was.
+ */
+export function deleteTable(doc: Doc, para: number): { doc: Doc; pos: Position } {
+  const loc = locateCell(doc, para);
+  if (!loc) return { doc, pos: { para, offset: 0 } };
+  const at = doc.paragraphs.findIndex((p) => cellOfTable(doc.tables, p.cell, loc.tableIndex));
+  let next = reshape(doc, loc.tableIndex, { ...loc.table, rows: [] }, () => createParagraph());
+  // A cell always holds a paragraph: one the table was the only thing in gets an empty one.
+  const parent = loc.table.parent;
+  if (parent && !next.paragraphs.some((p) => inCell(next.tables, p.cell, parent))) {
+    const paragraphs = next.paragraphs.slice();
+    paragraphs.splice(at, 0, emptyLike(doc.paragraphs[para], parent));
+    next = { ...next, paragraphs };
+  }
+  return { doc: next, pos: { para: Math.max(0, Math.min(at, next.paragraphs.length - 1)), offset: 0 } };
+}
+
+/**
  * Adds an empty column to the left or right of the cell of the paragraph. It
  * is as wide as the column next to it, and the others give up room so the
  * table stays as wide as it was.
@@ -407,6 +433,8 @@ const inRect = (rect: CellRect, rowIndex: number, start: number, cell: TableCell
 export function canMergeCells(doc: Doc, paraA: number, paraB: number): boolean {
   const rect = cellRect(doc, paraA, paraB);
   if (!rect) return false;
+  // A cell with a table in it is not merged: the table has no place to go in the one made of them.
+  if (doc.tables?.some((t) => t.parent?.table === rect.tableIndex && rect.table.rows.some((row, r) => row.id === t.parent!.row && r >= rect.rowFrom && r <= rect.rowTo))) return false;
   let count = 0;
   for (let r = rect.rowFrom; r <= rect.rowTo; r++) {
     const row = rect.table.rows[r];
@@ -504,8 +532,22 @@ export function splitCell(doc: Doc, para: number): Doc {
   return reshape(doc, loc.tableIndex, { ...table, rows }, (_row, _cell, ref) => emptyLike(doc.paragraphs[para], ref));
 }
 
-/** The borders and the shading of the cells of the block between the cells of two paragraphs. */
-export function setCellProps(doc: Doc, paraA: number, paraB: number, patch: { borders?: boolean; shade?: string }): Doc {
+/** What can be set on cells: whether they have borders, the line they are drawn with, the colour behind them and where their text sits. */
+export interface CellPatch {
+  borders?: boolean;
+  /** The line of all four sides; null for the plain one `borders` stands for. */
+  line?: Border | null;
+  shade?: string;
+  valign?: 'top' | 'center' | 'bottom';
+}
+
+/** How much room a border takes across the edge it is on: a double line is two lines and the room between them. */
+function lineRoom(line: Border | undefined): number {
+  return !line ? 0 : line.style === 'double' ? line.width * 3 : line.width;
+}
+
+/** The borders, the line, the shading and the place of the text of the cells of the block between the cells of two paragraphs. */
+export function setCellProps(doc: Doc, paraA: number, paraB: number, patch: CellPatch): Doc {
   const rect = cellRect(doc, paraA, paraB);
   if (!rect) return doc;
   const { table } = rect;
@@ -517,17 +559,29 @@ export function setCellProps(doc: Doc, paraA: number, paraB: number, patch: { bo
       start += cell.span;
       if (!inside) return cell;
       const next: TableCell = { ...cell };
-      if (patch.borders !== undefined && patch.borders !== cell.borders) {
+      if (patch.borders !== undefined && (patch.borders !== cell.borders || cell.lines)) {
         next.borders = patch.borders;
+        // Plain lines all round, or none: the lines the cell had of its own go.
+        delete next.lines;
         // A border takes room in the row; without it the row closes up.
         next.borderTop = patch.borders ? 0.5 : 0;
         next.borderBottom = patch.borders ? 0.5 : 0;
+      }
+      if (patch.line !== undefined) {
+        next.borders = true;
+        if (patch.line) next.lines = { top: patch.line, right: patch.line, bottom: patch.line, left: patch.line };
+        else delete next.lines;
+        next.borderTop = next.borderBottom = lineRoom(patch.line ?? DEFAULT_BORDER);
       }
       if (patch.shade !== undefined) {
         if (patch.shade) next.shade = patch.shade.toUpperCase();
         else delete next.shade;
       }
-      if (next.borders === cell.borders && next.shade === cell.shade) return cell;
+      if (patch.valign !== undefined) {
+        if (patch.valign === 'top') delete next.valign;
+        else next.valign = patch.valign;
+      }
+      if (next.borders === cell.borders && next.shade === cell.shade && next.lines === cell.lines && next.valign === cell.valign && next.borderTop === cell.borderTop) return cell;
       changed = true;
       return next;
     });
@@ -536,6 +590,30 @@ export function setCellProps(doc: Doc, paraA: number, paraB: number, patch: { bo
   if (!changed) return doc;
   const tables = (doc.tables ?? []).slice();
   tables[rect.tableIndex] = { ...table, rows };
+  return { ...doc, tables };
+}
+
+/**
+ * Makes the row of the paragraph a heading row, shown again at the top of
+ * every page the table goes on to, with the rows above it; or makes it and
+ * the rows below it ordinary rows again. Only rows a table starts with are
+ * headings, as in Word.
+ */
+export function setHeaderRow(doc: Doc, para: number, on: boolean): Doc {
+  const loc = locateCell(doc, para);
+  if (!loc) return doc;
+  const { table, rowIndex } = loc;
+  const rows = table.rows.map((row, i): TableRow => {
+    const want = on ? i <= rowIndex || !!row.header : i < rowIndex && !!row.header;
+    if (want === !!row.header) return row;
+    const next = { ...row };
+    if (want) next.header = true;
+    else delete next.header;
+    return next;
+  });
+  if (rows.every((row, i) => row === table.rows[i])) return doc;
+  const tables = (doc.tables ?? []).slice();
+  tables[loc.tableIndex] = { ...table, rows };
   return { ...doc, tables };
 }
 
@@ -562,5 +640,73 @@ export function resizeColumn(doc: Doc, tableIndex: number, boundary: number, del
   // The widths are now the ones given: the table no longer follows the width of the page.
   const { widthFraction: _, ...rest } = table;
   tables[tableIndex] = { ...rest, columns: next, fixed: true };
+  return { ...doc, tables };
+}
+
+/** The least height a row can be dragged to, in points. */
+export const MIN_ROW_HEIGHT = 6;
+
+/**
+ * Makes row `rowIndex` of a table `height` points tall, as it is drawn: the
+ * margins of its cells above and below their text are part of it. It is the
+ * least the row is given, and it grows still with what its cells hold; a row
+ * of an exact height keeps it exact.
+ */
+export function resizeRow(doc: Doc, tableIndex: number, rowIndex: number, height: number): Doc {
+  const table = doc.tables?.[tableIndex];
+  const row = table?.rows[rowIndex];
+  if (!table || !row) return doc;
+  const margins = Math.max(0, ...row.cells.map((c) => (c.padTop ?? table.padTop) + (c.padBottom ?? table.padBottom)));
+  const next = Math.round(Math.max(MIN_ROW_HEIGHT, row.exact ? height : height - margins) * 20) / 20;
+  if (Math.abs(next - row.height) < 0.05) return doc;
+  const rows = table.rows.slice();
+  rows[rowIndex] = { ...row, height: next };
+  const tables = (doc.tables ?? []).slice();
+  tables[tableIndex] = { ...table, rows };
+  return { ...doc, tables };
+}
+
+/**
+ * Makes a whole table wider or narrower and taller or shorter, as dragging its
+ * corner does: each column by `scaleX` from the widths it is laid out with,
+ * `columns`, and each row by `scaleY` from the height it is drawn at,
+ * `heights`. The text in it is not made larger or smaller.
+ */
+export function resizeTable(doc: Doc, tableIndex: number, columns: number[], scaleX: number, heights: number[], scaleY: number): Doc {
+  const table = doc.tables?.[tableIndex];
+  if (!table || columns.length !== table.columns.length) return doc;
+  let next = doc;
+  if (Math.abs(scaleX - 1) > 0.002) {
+    const tables = (next.tables ?? []).slice();
+    // The widths are now the ones given: the table no longer follows the width of the page.
+    const { widthFraction: _, ...rest } = table;
+    tables[tableIndex] = { ...rest, columns: columns.map((width) => Math.max(MIN_COLUMN_WIDTH, width * scaleX)), fixed: true };
+    next = { ...next, tables };
+  }
+  if (Math.abs(scaleY - 1) > 0.002) {
+    heights.forEach((height, rowIndex) => {
+      next = resizeRow(next, tableIndex, rowIndex, height * scaleY);
+    });
+  }
+  return next;
+}
+
+/**
+ * Sets the height of the row of the cell of the paragraph, in points, the
+ * margins of its cells not counted, as Word gives it: the least the row is
+ * given or, `exact`, the height it has whatever it holds. 0 lets the row be
+ * as tall as what it holds.
+ */
+export function setRowHeight(doc: Doc, para: number, height: number, exact = false): Doc {
+  const loc = locateCell(doc, para);
+  if (!loc) return doc;
+  const { table, row, rowIndex } = loc;
+  const next = Math.max(0, Math.round(height * 20) / 20);
+  const sure = next > 0 && exact;
+  if (next === row.height && sure === !!row.exact) return doc;
+  const rows = table.rows.slice();
+  rows[rowIndex] = defined<TableRow>({ ...row, height: next, exact: sure || undefined });
+  const tables = (doc.tables ?? []).slice();
+  tables[loc.tableIndex] = { ...table, rows };
   return { ...doc, tables };
 }

@@ -3,7 +3,13 @@
 
 import { strFromU8, unzipSync } from 'fflate';
 import {
+  type Border,
+  type BorderStyle,
+  type CellLines,
   type CellRef,
+  type TableCell,
+  type TableFloat,
+  type Columns,
   type Doc,
   type Note,
   type PageSetup,
@@ -12,10 +18,13 @@ import {
   type ParagraphStyle,
   type Run,
   type RunProps,
+  type Section,
+  type SectionStart,
   type Story,
   type Table,
   type TableRow,
   ANCHOR_CHAR,
+  DEFAULT_BORDER,
   DEFAULT_PAGE,
   OBJECT_CHAR,
   WRAP_SEPARATOR,
@@ -34,13 +43,14 @@ import { noteKey } from '../notes';
 import { normalizeRuns } from '../ops';
 import { standardStyles } from '../styles';
 import {
-  type BorderWidths,
+  type BorderSet,
   type CellPadding,
   type DocxSource,
   type SourceSlot,
   type StorySource,
   type Style,
   type StyleSheet,
+  type TablePart,
   inlineObjectSize,
   relationships,
 } from './source';
@@ -207,34 +217,73 @@ function parseNumbering(xml: string | undefined): Numbering | undefined {
   return numbering.lists.size || numbering.abstracts.size ? numbering : undefined;
 }
 
-/** Whether a set of borders draws any line; undefined when there is no such element. */
-function hasBorders(borders: XmlNode | undefined): boolean | undefined {
-  if (!borders) return undefined;
-  return borders.children.some((c) => c.name !== '#text' && val(c) !== undefined && val(c) !== 'none' && val(c) !== 'nil');
-}
-
 /** The colour a shading fills with, when it is a plain one. */
 function shadeOf(shd: XmlNode | undefined): string | undefined {
   const fill = shd?.attrs['w:fill'];
   return fill && /^[0-9a-fA-F]{6}$/.test(fill) && fill.toUpperCase() !== 'FFFFFF' ? fill.toUpperCase() : undefined;
 }
 
-/** Thickness of one border of a set, in points: 0 when it is switched off, undefined when the set does not name it. */
-function borderWidth(borders: XmlNode | undefined, side: string): number | undefined {
-  const border = child(borders, side);
-  if (!border) return undefined;
-  if (val(border) === 'none' || val(border) === 'nil') return 0;
-  // Sizes are in eighths of a point; Word draws an unsized border half a point thick.
-  return (int(border.attrs['w:sz']) ?? 4) / 8;
+/** The kinds of line Word has, by the four the layout draws. */
+const BORDER_STYLES: Record<string, BorderStyle> = {
+  double: 'double', triple: 'double', thinThickSmallGap: 'double', thickThinSmallGap: 'double', thinThickMediumGap: 'double',
+  thickThinMediumGap: 'double', thinThickLargeGap: 'double', thickThinLargeGap: 'double', doubleWave: 'double',
+  dashed: 'dashed', dashSmallGap: 'dashed', dashDotStroked: 'dashed', dotDash: 'dashed', dotDotDash: 'dashed',
+  dotted: 'dotted',
+};
+
+/** One border of a set: the line, null when it is switched off, undefined when the set does not name it. */
+function parseBorder(node: XmlNode | undefined): Border | null | undefined {
+  if (!node) return undefined;
+  const kind = val(node);
+  if (!kind || kind === 'none' || kind === 'nil') return null;
+  const color = node.attrs['w:color'];
+  return {
+    // Sizes are in eighths of a point; Word draws an unsized border half a point thick.
+    width: (int(node.attrs['w:sz']) ?? 4) / 8,
+    color: color && /^[0-9a-fA-F]{6}$/.test(color) ? color.toUpperCase() : '000000',
+    style: BORDER_STYLES[kind] ?? 'single',
+  };
 }
 
-function borderWidths(borders: XmlNode | undefined): BorderWidths | undefined {
+function parseBorders(borders: XmlNode | undefined): BorderSet | undefined {
   if (!borders) return undefined;
-  return {
-    top: borderWidth(borders, 'w:top') ?? 0,
-    bottom: borderWidth(borders, 'w:bottom') ?? 0,
-    inside: borderWidth(borders, 'w:insideH') ?? 0,
+  const side = (...names: string[]) => {
+    for (const name of names) {
+      const border = parseBorder(child(borders, name));
+      if (border !== undefined) return border;
+    }
+    return undefined;
   };
+  const set: BorderSet = {
+    top: side('w:top'),
+    bottom: side('w:bottom'),
+    left: side('w:left', 'w:start'),
+    right: side('w:right', 'w:end'),
+    insideH: side('w:insideH'),
+    insideV: side('w:insideV'),
+  };
+  for (const key of Object.keys(set) as (keyof BorderSet)[]) if (set[key] === undefined) delete set[key];
+  return set;
+}
+
+/** `over` on top of `under`, side by side. */
+function mergeBorders(under: BorderSet | undefined, over: BorderSet | undefined): BorderSet | undefined {
+  return under && over ? { ...under, ...over } : (over ?? under);
+}
+
+const VALIGN: Record<string, 'center' | 'bottom'> = { center: 'center', bottom: 'bottom' };
+
+/** How a part of a table looks, from the `w:tblStylePr` of a table style. */
+function parseTablePart(node: XmlNode): TablePart {
+  const tcPr = child(node, 'w:tcPr');
+  return defined<TablePart>({
+    pPr: parseParagraphProps(child(node, 'w:pPr')),
+    rPr: parseRunProps(child(node, 'w:rPr')),
+    shade: shadeOf(child(tcPr, 'w:shd')),
+    cellBorders: parseBorders(child(tcPr, 'w:tcBorders')),
+    borders: parseBorders(child(child(node, 'w:tblPr'), 'w:tblBorders')),
+    valign: VALIGN[val(child(tcPr, 'w:vAlign')) ?? ''],
+  });
 }
 
 function parsePadding(margins: XmlNode | undefined): CellPadding | undefined {
@@ -269,6 +318,8 @@ function parseStyles(xml: string | undefined): StyleSheet {
     const id = node.attrs['w:styleId'];
     if (!id) continue;
     const tblPr = child(node, 'w:tblPr');
+    const parts: Record<string, TablePart> = {};
+    for (const part of childrenOf(node, 'w:tblStylePr')) if (part.attrs['w:type']) parts[part.attrs['w:type']] = parseTablePart(part);
     sheet.styles.set(
       id,
       defined<Style>({
@@ -277,9 +328,10 @@ function parseStyles(xml: string | undefined): StyleSheet {
         basedOn: val(child(node, 'w:basedOn')),
         pPr: parseParagraphProps(child(node, 'w:pPr')),
         rPr: parseRunProps(child(node, 'w:rPr')),
-        borders: hasBorders(child(tblPr, 'w:tblBorders')),
-        borderWidths: borderWidths(child(tblPr, 'w:tblBorders')),
+        borders: parseBorders(child(tblPr, 'w:tblBorders')),
         padding: parsePadding(child(tblPr, 'w:tblCellMar')),
+        shade: shadeOf(child(child(node, 'w:tcPr'), 'w:shd')) ?? shadeOf(child(tblPr, 'w:shd')),
+        parts: Object.keys(parts).length ? parts : undefined,
       }),
     );
     const isDefault = node.attrs['w:default'] === '1' || node.attrs['w:default'] === 'true';
@@ -330,7 +382,7 @@ function styleCatalog(sheet: StyleSheet, used: Set<string>): ParagraphStyle[] | 
 export function resolveStyle(
   sheet: StyleSheet,
   id: string | undefined,
-): Required<Pick<Style, 'pPr' | 'rPr' | 'padding'>> & Pick<Style, 'borders' | 'borderWidths'> {
+): Required<Pick<Style, 'pPr' | 'rPr' | 'padding'>> & Pick<Style, 'borders' | 'shade' | 'parts'> {
   const chain: Style[] = [];
   const seen = new Set<string>();
   while (id && !seen.has(id)) {
@@ -340,13 +392,30 @@ export function resolveStyle(
     chain.unshift(style);
     id = style.basedOn;
   }
-  const out: ReturnType<typeof resolveStyle> = { pPr: {}, rPr: {}, padding: {}, borders: undefined, borderWidths: undefined };
+  const out: ReturnType<typeof resolveStyle> = { pPr: {}, rPr: {}, padding: {} };
   for (const style of chain) {
     Object.assign(out.pPr, style.pPr);
     Object.assign(out.rPr, style.rPr);
     Object.assign(out.padding, style.padding);
-    out.borders = style.borders ?? out.borders;
-    out.borderWidths = style.borderWidths ?? out.borderWidths;
+    out.borders = mergeBorders(out.borders, style.borders);
+    out.shade = style.shade ?? out.shade;
+    // A part a style sets out goes over the same part of the style it is based on.
+    for (const [name, part] of Object.entries(style.parts ?? {})) {
+      const was = out.parts?.[name];
+      out.parts = {
+        ...out.parts,
+        [name]: was
+          ? defined<TablePart>({
+              pPr: { ...was.pPr, ...part.pPr },
+              rPr: { ...was.rPr, ...part.rPr },
+              shade: part.shade ?? was.shade,
+              cellBorders: mergeBorders(was.cellBorders, part.cellBorders),
+              borders: mergeBorders(was.borders, part.borders),
+              valign: part.valign ?? was.valign,
+            })
+          : part,
+      };
+    }
   }
   return out;
 }
@@ -576,26 +645,150 @@ function parseParagraph(p: XmlNode, ctx: BlockContext): Paragraph {
   // One with marks and no text, the anchor of a picture say, is as tall as its paragraph mark makes it, like an empty one.
   const onlyMarks = inline.out.length > 0 && inline.out.every((run) => run.props.anchor);
   const runs = onlyMarks ? inline.out.map((run) => ({ ...run, props: defined<RunProps>({ ...run.props, fontSize: markProps.fontSize, fontFamily: markProps.fontFamily }) })) : inline.out;
+  // A section break inside a table cell is not one Word honours.
+  const sect = ctx.cell ? undefined : child(pPr, 'w:sectPr');
   const paragraph = defined<Paragraph>({
     props: styleId ? { ...props, styleId } : props,
     runs: normalizeRuns(runs, markProps),
     cell: ctx.cell,
     origin: slots.length,
+    section: sect && parseSection(sect, xml),
   });
   slots.push({ node: p, paragraph, baseRun: base });
   return paragraph;
 }
 
 const DEFAULT_CELL_PADDING = { padTop: 0, padRight: 5.4, padBottom: 0, padLeft: 5.4 };
-const TABLE_ALIGN: Record<string, Table['align']> = { center: 'center', right: 'right', end: 'right' };
+const TABLE_ALIGN: Record<string, Table['align']> = { center: 'center', right: 'right', end: 'right', left: 'left', start: 'left' };
+
+/** Which parts of its style a table shows: its heading row, its banded rows... As `w:tblLook` says, in words or in bits. */
+interface TableLook {
+  firstRow: boolean;
+  lastRow: boolean;
+  firstColumn: boolean;
+  lastColumn: boolean;
+  bandRows: boolean;
+  bandColumns: boolean;
+}
+
+function parseLook(tblPr: XmlNode | undefined): TableLook {
+  const look = child(tblPr, 'w:tblLook');
+  const bits = parseInt(look?.attrs['w:val'] ?? '', 16);
+  // Without one, what Word gives a new table: a heading row, a first column and banded rows.
+  const flag = (name: string, bit: number, otherwise: boolean) => {
+    const value = look?.attrs[`w:${name}`];
+    if (value !== undefined) return value === '1' || value === 'true' || value === 'on';
+    return Number.isNaN(bits) ? otherwise : (bits & bit) !== 0;
+  };
+  return {
+    firstRow: flag('firstRow', 0x20, true),
+    lastRow: flag('lastRow', 0x40, false),
+    firstColumn: flag('firstColumn', 0x80, true),
+    lastColumn: flag('lastColumn', 0x100, false),
+    bandRows: !flag('noHBand', 0x200, false),
+    bandColumns: !flag('noVBand', 0x400, true),
+  };
+}
+
+/** Where a cell is in its table, as the parts of a table style see it. */
+interface CellPlace {
+  row: number;
+  rows: number;
+  /** Its place among the cells of its row. */
+  cell: number;
+  cells: number;
+}
+
+/**
+ * The parts of a table style a cell is in, in the order they go one over
+ * another: the whole table, the bands, the first and last column, the first
+ * and last row, and the corners.
+ */
+function partsOf(look: TableLook, at: CellPlace, rowBand: number, columnBand: number): { name: string; across: boolean }[] {
+  const firstRow = look.firstRow && at.row === 0;
+  const lastRow = look.lastRow && at.row === at.rows - 1 && at.rows > 1;
+  const firstColumn = look.firstColumn && at.cell === 0;
+  const lastColumn = look.lastColumn && at.cell === at.cells - 1 && at.cells > 1;
+  // A part is either a row of cells (`across`) or a column of them.
+  const parts: { name: string; across: boolean }[] = [{ name: 'wholeTable', across: true }];
+  if (look.bandColumns && !firstColumn && !lastColumn) {
+    const k = at.cell - (look.firstColumn ? 1 : 0);
+    parts.push({ name: Math.floor(k / columnBand) % 2 ? 'band2Vert' : 'band1Vert', across: false });
+  }
+  if (look.bandRows && !firstRow && !lastRow) {
+    const k = at.row - (look.firstRow ? 1 : 0);
+    parts.push({ name: Math.floor(k / rowBand) % 2 ? 'band2Horz' : 'band1Horz', across: true });
+  }
+  if (firstColumn) parts.push({ name: 'firstCol', across: false });
+  if (lastColumn) parts.push({ name: 'lastCol', across: false });
+  if (firstRow) parts.push({ name: 'firstRow', across: true });
+  if (lastRow) parts.push({ name: 'lastRow', across: true });
+  if (firstRow && firstColumn) parts.push({ name: 'nwCell', across: true });
+  if (firstRow && lastColumn) parts.push({ name: 'neCell', across: true });
+  if (lastRow && firstColumn) parts.push({ name: 'swCell', across: true });
+  if (lastRow && lastColumn) parts.push({ name: 'seCell', across: true });
+  return parts;
+}
+
+type Sides = Partial<Record<'top' | 'bottom' | 'left' | 'right', Border | null>>;
+
+/**
+ * The sides of a cell a set of table borders gives it: the outer ones where
+ * the cell is at the edge of what the set is around, the inside ones elsewhere.
+ * `edges` says at which edges it is.
+ */
+function sidesFrom(set: BorderSet | undefined, edges: { top: boolean; bottom: boolean; left: boolean; right: boolean }): Sides {
+  if (!set) return {};
+  const sides: Sides = {
+    top: edges.top ? set.top : set.insideH,
+    bottom: edges.bottom ? set.bottom : set.insideH,
+    left: edges.left ? set.left : set.insideV,
+    right: edges.right ? set.right : set.insideV,
+  };
+  for (const key of Object.keys(sides) as (keyof Sides)[]) if (sides[key] === undefined) delete sides[key];
+  return sides;
+}
+
+const sameBorder = (a: Border | undefined, b: Border | undefined) => a === b || (!!a && !!b && a.width === b.width && a.color === b.color && a.style === b.style);
+
+/** Whether a colour is dark enough for Word to show its automatic text colour on it as white. */
+function darkColor(hex: string): boolean {
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.45;
+}
+
+/** How much room a border takes across the edge it is on: a double line is two lines and the room between them. */
+export function borderRoom(border: Border | undefined): number {
+  return !border ? 0 : border.style === 'double' ? border.width * 3 : border.width;
+}
+
+/** A table the text goes round, from its `w:tblpPr`. */
+function parseTableFloat(tblpPr: XmlNode | undefined): TableFloat | undefined {
+  if (!tblpPr) return undefined;
+  const at = (name: string) => twips(tblpPr.attrs[name]) ?? 0;
+  const spec = tblpPr.attrs['w:tblpXSpec'];
+  return defined<TableFloat>({
+    align: spec === 'center' ? 'center' : spec === 'right' || spec === 'outside' ? 'right' : spec === 'left' || spec === 'inside' ? 'left' : undefined,
+    x: at('w:tblpX'),
+    y: at('w:tblpY'),
+    gapLeft: at('w:leftFromText'),
+    gapRight: at('w:rightFromText'),
+    gapTop: at('w:topFromText'),
+    gapBottom: at('w:bottomFromText'),
+  });
+}
 
 /** Reads the structure of a table and, through `ctx`, the paragraphs of its cells. */
 function parseTable(tbl: XmlNode, ctx: BlockContext): void {
   const { sheet } = ctx;
   const tblPr = child(tbl, 'w:tblPr');
   const style = resolveStyle(sheet, val(child(tblPr, 'w:tblStyle')) ?? sheet.defaultTableStyle);
-  const tableBorders = hasBorders(child(tblPr, 'w:tblBorders')) ?? style.borders ?? false;
-  const tableWidths = borderWidths(child(tblPr, 'w:tblBorders')) ?? style.borderWidths ?? { top: 0, bottom: 0, inside: 0 };
+  // The table's own borders go over its style's, side by side.
+  const tableBorders = mergeBorders(style.borders, parseBorders(child(tblPr, 'w:tblBorders')));
+  const tableShade = shadeOf(child(tblPr, 'w:shd')) ?? style.shade;
+  const look = parseLook(tblPr);
+  const rowBand = Math.max(1, int(val(child(tblPr, 'w:tblStyleRowBandSize'))) ?? 1);
+  const columnBand = Math.max(1, int(val(child(tblPr, 'w:tblStyleColBandSize'))) ?? 1);
   const width = child(tblPr, 'w:tblW');
   const widthValue = width?.attrs['w:w'] ?? '';
   // A relative width is written in fiftieths of a percent, or as a percentage.
@@ -615,43 +808,80 @@ function parseTable(tbl: XmlNode, ctx: BlockContext): void {
     rows,
   };
   if (fraction > 0) table.widthFraction = fraction;
+  const spacing = twips(child(tblPr, 'w:tblCellSpacing')?.attrs['w:w']);
+  if (spacing) table.spacing = spacing;
+  // A table inside another is set in its cell, not beside the text.
+  const float = ctx.cell ? undefined : parseTableFloat(child(tblPr, 'w:tblpPr'));
+  if (float) table.float = float;
+  if (ctx.cell) table.parent = ctx.cell;
   ctx.tables.push(table);
   ctx.tableNodes.push(tbl);
 
-  const inner: BlockContext = { ...ctx, tableStyle: { pPr: style.pPr, rPr: style.rPr } };
-  for (const tr of childrenOf(tbl, 'w:tr')) {
+  const trs = childrenOf(tbl, 'w:tr');
+  let header = true;
+  trs.forEach((tr, r) => {
     const trPr = child(tr, 'w:trPr');
+    const tcs = childrenOf(tr, 'w:tc');
+    const trHeight = child(trPr, 'w:trHeight');
     // Rows and cells are numbered as they come in the file, which is how export finds their XML again.
     const row: TableRow = {
       id: rows.length,
       before: int(val(child(trPr, 'w:gridBefore'))) ?? 0,
-      height: twips(val(child(trPr, 'w:trHeight'))) ?? 0,
+      height: twips(trHeight?.attrs['w:val']) ?? 0,
       cells: [],
     };
+    if (trHeight?.attrs['w:hRule'] === 'exact' && row.height > 0) row.exact = true;
     if (trPr && toggle(trPr, 'w:cantSplit')) row.cantSplit = true;
-    for (const tc of childrenOf(tr, 'w:tc')) {
+    // Only the rows the table starts with are headings: one in the middle that says it is, is not.
+    header &&= !!trPr && !!toggle(trPr, 'w:tblHeader');
+    if (header) row.header = true;
+    tcs.forEach((tc, c) => {
       const tcPr = child(tc, 'w:tcPr');
       const merge = child(tcPr, 'w:vMerge');
-      const own = child(tcPr, 'w:tcBorders');
+      const parts = partsOf(look, { row: r, rows: trs.length, cell: c, cells: tcs.length }, rowBand, columnBand)
+        .map((part) => ({ ...part, look: style.parts?.[part.name] }))
+        .filter((part) => part.look);
+      const edges = { top: r === 0, bottom: r === trs.length - 1, left: c === 0, right: c === tcs.length - 1 };
+      // The lines of each side: the table's, then those of the parts of its style it is in, then its own.
+      const sides: Sides = sidesFrom(tableBorders, edges);
+      for (const { across, look: part } of parts) {
+        Object.assign(sides, sidesFrom(part!.borders, across ? { ...edges, top: true, bottom: true } : { ...edges, left: true, right: true }));
+        Object.assign(sides, sidesFrom(part!.cellBorders, { top: true, bottom: true, left: true, right: true }));
+      }
+      Object.assign(sides, sidesFrom(parseBorders(child(tcPr, 'w:tcBorders')), { top: true, bottom: true, left: true, right: true }));
+      const lines: CellLines = {};
+      for (const key of ['top', 'right', 'bottom', 'left'] as const) if (sides[key]) lines[key] = sides[key]!;
+      const drawn = Object.keys(lines).length > 0;
+      // Four plain lines are what a cell with borders is drawn with anyway.
+      const plain = (['top', 'right', 'bottom', 'left'] as const).every((key) => sameBorder(lines[key], DEFAULT_BORDER));
+      const partShade = parts.reduce<string | undefined>((shade, part) => part.look!.shade ?? shade, undefined);
+      const valign = VALIGN[val(child(tcPr, 'w:vAlign')) ?? ''] ?? parts.reduce<TableCell['valign']>((v, part) => part.look!.valign ?? v, undefined);
       row.cells.push(
-        defined({
+        defined<TableCell>({
           id: row.cells.length,
-          // The table's bottom border replaces the inside one on the last row, once all rows are read.
-          borderTop: borderWidth(own, 'w:top') ?? (rows.length ? tableWidths.inside : tableWidths.top),
-          borderBottom: borderWidth(own, 'w:bottom'),
+          borderTop: borderRoom(lines.top),
+          borderBottom: borderRoom(lines.bottom),
           span: Math.max(1, int(val(child(tcPr, 'w:gridSpan'))) ?? 1),
           merge: merge ? (val(merge) === 'restart' ? ('start' as const) : ('continue' as const)) : undefined,
-          borders: hasBorders(child(tcPr, 'w:tcBorders')) ?? tableBorders,
-          shade: shadeOf(child(tcPr, 'w:shd')),
+          borders: drawn,
+          lines: drawn && !plain ? lines : undefined,
+          shade: shadeOf(child(tcPr, 'w:shd')) ?? partShade ?? tableShade,
+          valign,
           ...parsePadding(child(tcPr, 'w:tcMar')),
         }),
       );
-      collectBlocks(tc, { ...inner, cell: { table: index, row: rows.length, cell: row.cells.length - 1 } });
-    }
+      // The paragraphs of the cell take the formatting of the table's style, and of the parts of it the cell is in.
+      const tableStyle = { pPr: { ...style.pPr }, rPr: { ...style.rPr } };
+      for (const { look: part } of parts) {
+        Object.assign(tableStyle.pPr, part!.pPr);
+        Object.assign(tableStyle.rPr, part!.rPr);
+      }
+      // Text of no colour of its own is white on a dark cell, as Word shows its automatic colour.
+      const cellShade = row.cells[row.cells.length - 1].shade;
+      if (cellShade && tableStyle.rPr.color === undefined && darkColor(cellShade)) tableStyle.rPr.color = 'FFFFFF';
+      collectBlocks(tc, { ...ctx, tableStyle, cell: { table: index, row: rows.length, cell: row.cells.length - 1 } });
+    });
     rows.push(row);
-  }
-  rows.forEach((row, i) => {
-    for (const cell of row.cells) cell.borderBottom ??= i === rows.length - 1 ? tableWidths.bottom : tableWidths.inside;
   });
 
   // A table without a usable grid gets equal columns across the text area.
@@ -669,14 +899,8 @@ function collectBlocks(node: XmlNode, ctx: BlockContext): void {
         ctx.out.push(parseParagraph(c, ctx));
         break;
       case 'w:tbl':
-        if (!ctx.cell) {
-          parseTable(c, ctx);
-          break;
-        }
-        // A table inside a cell is not modelled: its paragraphs are read as paragraphs of that cell.
-        for (const row of childrenOf(c, 'w:tr')) {
-          for (const cell of childrenOf(row, 'w:tc')) collectBlocks(cell, ctx);
-        }
+        // A table inside a cell is a table of its own, which says which cell it is in.
+        parseTable(c, ctx);
         break;
       case 'w:sdt': {
         const content = child(c, 'w:sdtContent');
@@ -687,8 +911,7 @@ function collectBlocks(node: XmlNode, ctx: BlockContext): void {
   }
 }
 
-function parsePage(body: XmlNode): PageSetup {
-  const sect = child(body, 'w:sectPr');
+function parsePage(sect: XmlNode | undefined): PageSetup {
   const size = child(sect, 'w:pgSz');
   const margin = child(sect, 'w:pgMar');
   return {
@@ -701,6 +924,42 @@ function parsePage(body: XmlNode): PageSetup {
     headerDistance: twips(margin?.attrs['w:header']) ?? 36,
     footerDistance: twips(margin?.attrs['w:footer']) ?? 36,
   };
+}
+
+const SECTION_STARTS = new Set<string>(['nextPage', 'continuous', 'nextColumn', 'evenPage', 'oddPage']);
+
+/** The columns a section's properties ask for, or nothing for the one that runs the whole width. */
+export function parseColumns(sect: XmlNode | undefined): Columns | undefined {
+  const cols = child(sect, 'w:cols');
+  const count = int(cols?.attrs['w:num']) ?? 1;
+  if (!cols || count < 2) return undefined;
+  const columns: Columns = { count, space: twips(cols.attrs['w:space']) ?? 36 };
+  const equal = cols.attrs['w:equalWidth'];
+  const own = childrenOf(cols, 'w:col');
+  // Columns of their own widths are listed one by one, each with the room after it.
+  if ((equal === '0' || equal === 'false' || equal === 'off') && own.length >= 2) {
+    columns.count = own.length;
+    columns.widths = own.map((col) => ({ width: twips(col.attrs['w:w']) ?? 0, space: twips(col.attrs['w:space']) ?? 0 }));
+  }
+  const sep = cols.attrs['w:sep'];
+  if (sep !== undefined && sep !== '0' && sep !== 'false' && sep !== 'off') columns.separator = true;
+  return columns;
+}
+
+/** How a section is set out, from its properties. */
+function parseSection(sect: XmlNode, xml: string): Section {
+  const start = val(child(sect, 'w:type'));
+  return defined<Section>({
+    page: parsePage(sect),
+    columns: parseColumns(sect),
+    start: start && SECTION_STARTS.has(start) && start !== 'nextPage' ? (start as SectionStart) : undefined,
+    xml: xml.slice(sect.start, sect.end),
+  });
+}
+
+/** Whether a section's properties name a header or a footer for its pages. */
+function namesStory(sect: XmlNode | undefined, reference: string): boolean {
+  return childrenOf(sect, reference).some((ref) => (ref.attrs['w:type'] ?? 'default') === 'default');
 }
 
 /** The text of a comment: its paragraphs, one to a line. */
@@ -832,8 +1091,26 @@ export function importDocx(data: Uint8Array): Doc {
   const compat = settings && /<w:compatSetting\b[^>]*w:name="compatibilityMode"[^>]*>/.exec(strFromU8(settings))?.[0];
   const compatMode = int(/w:val="(\d+)"/.exec(compat || '')?.[1]);
 
-  const page = parsePage(body);
+  const page = parsePage(sect);
   source.page = page;
+  const columns = parseColumns(sect);
+  if (columns) source.columns = columns;
+  const lastStart = val(child(sect, 'w:type'));
+  if (lastStart && SECTION_STARTS.has(lastStart) && lastStart !== 'nextPage') source.sectionStart = lastStart as SectionStart;
+
+  // A section that names no header shows the one of the section before it; the first ones may have none at all.
+  let header0 = false;
+  let footer0 = false;
+  for (const p of paragraphs) {
+    if (!p.section) continue;
+    const node = child(child(slots[p.origin!].node, 'w:pPr'), 'w:sectPr');
+    header0 ||= namesStory(node, 'w:headerReference');
+    footer0 ||= namesStory(node, 'w:footerReference');
+    if (!header0) p.section.noHeader = true;
+    if (!footer0) p.section.noFooter = true;
+  }
+  header0 ||= namesStory(sect, 'w:headerReference');
+  footer0 ||= namesStory(sect, 'w:footerReference');
 
   const read = readNotes(files, mainPath);
   if (read) Object.assign(source, { notesPath: read.path, notes: read.notes });
@@ -845,6 +1122,10 @@ export function importDocx(data: Uint8Array): Doc {
 
   return defined<Doc>({
     page,
+    columns,
+    sectionStart: source.sectionStart,
+    noHeader: header0 ? undefined : true,
+    noFooter: footer0 ? undefined : true,
     compatMode,
     paragraphs,
     tables: tables.length ? tables : undefined,

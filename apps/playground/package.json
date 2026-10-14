@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/playground",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "The test application every package is tried in.",
   "license": "MIT",
   "private": true,

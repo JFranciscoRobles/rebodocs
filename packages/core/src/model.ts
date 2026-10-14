@@ -102,6 +102,28 @@ export interface ParagraphStyle {
   next?: string;
 }
 
+export type BorderStyle = 'single' | 'double' | 'dashed' | 'dotted';
+
+/** A line along one side of a table cell. */
+export interface Border {
+  /** Thickness of the line, in points; a double line is two of them with as much room between. */
+  width: number;
+  /** Hex RGB without '#'. */
+  color: string;
+  style: BorderStyle;
+}
+
+/** The lines a cell is drawn with, side by side; a side without one has none. */
+export interface CellLines {
+  top?: Border;
+  right?: Border;
+  bottom?: Border;
+  left?: Border;
+}
+
+/** The line a cell with borders and nothing more said about them is drawn with. */
+export const DEFAULT_BORDER: Border = { width: 0.5, color: '000000', style: 'single' };
+
 export interface TableCell {
   /** Identifies the cell inside its row for as long as it exists; paragraphs point at it by this. */
   id: number;
@@ -110,8 +132,15 @@ export interface TableCell {
   /** A cell merged with the ones below it ('start') or with the one above ('continue'). */
   merge?: 'start' | 'continue';
   borders: boolean;
+  /**
+   * The line of each side, when they are not all the plain one `borders`
+   * stands for: the colours, thicknesses and kinds of line a file gave them.
+   */
+  lines?: CellLines;
   /** Colour behind the cell, as hex RGB without '#'. */
   shade?: string;
+  /** Where its text sits when the cell is taller than it: at the top unless this says otherwise. */
+  valign?: 'center' | 'bottom';
   /** Thickness of the cell's top and bottom borders, in points; they take room in the row. */
   borderTop?: number;
   borderBottom?: number;
@@ -127,11 +156,28 @@ export interface TableRow {
   id: number;
   /** Grid columns skipped before the first cell. */
   before: number;
-  /** Minimum height, in points. */
+  /** Minimum height, in points; the height it has whatever it holds when `exact`. */
   height: number;
+  exact?: boolean;
   /** True for a row that must stay whole on one page. Rows are broken across pages otherwise, as in Word. */
   cantSplit?: boolean;
+  /** A heading row: one of the first rows of the table, shown again at the top of every page the table goes on to. */
+  header?: boolean;
   cells: TableCell[];
+}
+
+/** A table that is not in the run of the text but beside it, the text going round it. */
+export interface TableFloat {
+  /** Where it goes across the text area: to one side or the other, or this far from its left edge. */
+  align?: 'left' | 'center' | 'right';
+  x: number;
+  /** How far down from the top of the paragraph after it. */
+  y: number;
+  /** The room kept clear around it. */
+  gapLeft: number;
+  gapRight: number;
+  gapTop: number;
+  gapBottom: number;
 }
 
 /** The structure of a table. Its text lives in the document's paragraphs, which point at their cell. */
@@ -149,6 +195,15 @@ export interface Table {
   padRight: number;
   padBottom: number;
   padLeft: number;
+  /** Room between the cells, which then each have their own borders; none when the cells touch. */
+  spacing?: number;
+  /** Set for a table the text goes round. */
+  float?: TableFloat;
+  /**
+   * The cell of another table this one is inside, for a table in a table. Its
+   * paragraphs come among those of that cell, and point at its own cells.
+   */
+  parent?: CellRef;
   rows: TableRow[];
 }
 
@@ -162,6 +217,21 @@ export interface CellRef {
 
 export function sameCell(a: CellRef | undefined, b: CellRef | undefined): boolean {
   return a === b || (!!a && !!b && a.table === b.table && a.row === b.row && a.cell === b.cell);
+}
+
+/**
+ * The cell of table `table` that `ref` is in: `ref` itself when it is one of
+ * that table's, the cell its table is inside when it is a table in a table, and
+ * so on up; undefined when it is in none of that table's cells.
+ */
+export function cellOfTable(tables: Table[] | undefined, ref: CellRef | undefined, table: number): CellRef | undefined {
+  for (let at = ref, depth = 0; at && depth < 32; at = tables?.[at.table]?.parent, depth++) if (at.table === table) return at;
+  return undefined;
+}
+
+/** Whether `ref` is cell `cell` or inside a table in it, however deep. */
+export function inCell(tables: Table[] | undefined, ref: CellRef | undefined, cell: CellRef): boolean {
+  return sameCell(cellOfTable(tables, ref, cell.table), cell);
 }
 
 /** Invariant: `runs` always has at least one run (possibly with empty text). */
@@ -178,7 +248,48 @@ export interface Paragraph {
    * and read by @rebodocs/collab; nothing else needs it.
    */
   id?: string;
+  /**
+   * Set on the last paragraph of a section that is not the last one: how the
+   * section it ends is set out. As in Word, the mark that ends the paragraph
+   * ends the section; the last section's own are the document's.
+   */
+  section?: Section;
 }
+
+/** How the text of a section is set in columns, as in a newspaper: down one, then down the next. */
+export interface Columns {
+  /** How many; 1 when the text runs the whole width. */
+  count: number;
+  /** Room between two columns, in points. */
+  space: number;
+  /** Each column's width and the room after it, when they are not all as wide. */
+  widths?: { width: number; space: number }[];
+  /** A line down the middle of the room between two columns. */
+  separator?: boolean;
+}
+
+/** Where a section starts: on a new page (an odd or an even one, maybe), in the next column, or right where the one before ends. */
+export type SectionStart = 'nextPage' | 'continuous' | 'nextColumn' | 'evenPage' | 'oddPage';
+
+/** How a stretch of the document is set out: its page, its columns and where it starts. */
+export interface Section {
+  page: PageSetup;
+  columns?: Columns;
+  /** 'nextPage' when not said. */
+  start?: SectionStart;
+  /**
+   * True for a section that shows no header, or no footer: neither it nor any
+   * before it has one, as the first pages of a document read from a file may
+   * not. The others show the document's.
+   */
+  noHeader?: boolean;
+  noFooter?: boolean;
+  /** The section's own properties as the file had them, which export writes back with what changed. */
+  xml?: string;
+}
+
+/** The columns of a section whose text runs the whole width. */
+export const ONE_COLUMN: Columns = { count: 1, space: 36 };
 
 export interface PageSetup {
   width: number;
@@ -220,7 +331,15 @@ export interface Media {
 
 /** Invariant: `paragraphs` always has at least one paragraph. */
 export interface Doc {
+  /** The page of the last section, which is the whole document's when it has only one. */
   page: PageSetup;
+  /** The columns of the last section; one when not said. Paragraphs that end the sections before say theirs. */
+  columns?: Columns;
+  /** Where the last section starts, when the document has others before it. */
+  sectionStart?: SectionStart;
+  /** Whether the last section shows no header or footer: see `Section`. */
+  noHeader?: boolean;
+  noFooter?: boolean;
   paragraphs: Paragraph[];
   /** The tables the paragraphs' `cell` refer to. */
   tables?: Table[];

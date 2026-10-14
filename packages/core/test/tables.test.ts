@@ -9,6 +9,7 @@ import {
   createParagraph,
   deleteColumn,
   deleteRow,
+  deleteTable,
   deleteRange,
   docEnd,
   docStart,
@@ -23,6 +24,9 @@ import {
   layoutDocument,
   locateCell,
   neighbourCell,
+  resizeRow,
+  resizeTable,
+  setRowHeight,
   splitParagraph,
 } from '../src';
 
@@ -67,7 +71,9 @@ describe('tables', () => {
     expect(doc.paragraphs.map((x) => x.cell && [x.cell.row, x.cell.cell])).toEqual([
       undefined, [0, 0], [0, 1], [0, 1], [1, 0], [1, 1], undefined,
     ]);
-    const cell = (id: number) => ({ id, span: 1, borders: true, borderTop: 0, borderBottom: 0 });
+    // The style draws a line above the table and between its rows, and none down its sides.
+    const line = { width: 0, color: '000000', style: 'single' };
+    const cell = (id: number, below = true) => ({ id, span: 1, borders: true, borderTop: 0, borderBottom: 0, lines: below ? { top: line, bottom: line } : { top: line } });
     expect(doc.tables).toEqual([
       {
         columns: [100, 100],
@@ -80,7 +86,7 @@ describe('tables', () => {
         padLeft: 5,
         rows: [
           { id: 0, before: 0, height: 0, cells: [cell(0), cell(1)] },
-          { id: 1, before: 0, height: 0, cells: [cell(0), cell(1)] },
+          { id: 1, before: 0, height: 0, cells: [cell(0, false), cell(1, false)] },
         ],
       },
     ]);
@@ -296,11 +302,38 @@ describe('tables', () => {
     expect(docText(importDocx(exportDocx(split)))).toBe('before\nA\n1\nB1\nB1b\nA2\nB2\nafter');
   });
 
-  it('reads a table inside a cell as paragraphs of that cell', () => {
-    const doc = open(tbl(tr(tc(p('outer') + tbl(tr(tc(p('inner'))), '', [500]) + p('tail')) + tc(p('b')))));
-    expect(doc.tables).toHaveLength(1);
-    expect(doc.paragraphs.map((x) => x.cell!.cell)).toEqual([0, 0, 0, 1]);
+  it('reads a table inside a cell as a table of its own, laid out in that cell', () => {
+    const doc = open(tbl(tr(tc(p('outer') + tbl(tr(tc(p('inner'))), '', [1500]) + p('tail')) + tc(p('b')))));
+    expect(doc.tables).toHaveLength(2);
+    expect(doc.tables![1].parent).toEqual({ table: 0, row: 0, cell: 0 });
+    expect(doc.paragraphs.map((x) => [x.cell!.table, x.cell!.cell])).toEqual([[0, 0], [1, 0], [0, 0], [0, 1]]);
+    // Untouched, it goes back into the file as it came.
     expect(importDocx(exportDocx(doc))).toEqual(doc);
+    // The inner table sits in the outer cell, between the paragraphs around it.
+    const layout = layoutDocument(doc, measurer);
+    const [outer, inner, tail] = [0, 1, 2].map((para) => layout.lines.find((l) => l.para === para)!);
+    // Each with the 5pt Normal leaves below a paragraph.
+    expect(inner.y).toBe(outer.y + outer.height + 5);
+    expect(tail.y).toBe(inner.y + inner.height + 5);
+    const boxes = layout.pages[0].cells;
+    expect(boxes[inner.cell!].table).toBe(1);
+    // A click inside the inner table lands in it, not in the cell around it.
+    expect(hitTest(layout, measurer, 0, inner.x + 1, inner.y + 1).para).toBe(1);
+  });
+
+  it('keeps a table in a cell with its cell when rows are added to the table around it, and writes it back there', () => {
+    const doc = open(tbl(tr(tc(p('outer') + tbl(tr(tc(p('inner'))), '', [1500]) + p('tail')) + tc(p('b')))));
+    const next = insertRow(doc, 3, true);
+    expect(docText(next)).toBe('outer\ninner\ntail\nb\n\n');
+    const back = importDocx(exportDocx(next));
+    expect(back.tables).toHaveLength(2);
+    expect(back.tables![0].rows).toHaveLength(2);
+    expect(back.tables![1].parent).toEqual({ table: 0, row: 0, cell: 0 });
+    expect(docText(back)).toBe('outer\ninner\ntail\nb\n\n');
+    // A row added to the inner table stays inside the outer cell.
+    const deeper = importDocx(exportDocx(insertRow(doc, 1, true)));
+    expect(deeper.tables![1].rows).toHaveLength(2);
+    expect(deeper.paragraphs.map((x) => x.cell!.table)).toEqual([0, 1, 1, 0, 0]);
   });
 });
 
@@ -465,5 +498,56 @@ describe('changing the shape of a table', () => {
     const mid = insertTable(open(p('one two') + p('end')), { para: 0, offset: 3 }, 1, 1).doc;
     expect(docText(importDocx(exportDocx(mid)))).toBe('one\n\n two\nend');
     expect(importDocx(exportDocx(mid)).paragraphs.map((x) => !!x.cell)).toEqual([false, true, false, false]);
+  });
+  it('deletes a whole table, and only the table in a cell when the caret is in that one', () => {
+    const doc = open(GRID);
+    const gone = deleteTable(doc, paraOf(doc, 'B1b'));
+    expect(docText(gone.doc)).toBe('before\nafter');
+    expect(gone.pos).toEqual({ para: 1, offset: 0 });
+    expect(layoutDocument(gone.doc, measurer).pages[0].cells).toHaveLength(0);
+    expect(xmlOf(gone.doc)).not.toContain('<w:tbl>');
+    // Outside a table nothing happens.
+    expect(deleteTable(doc, 0).doc).toBe(doc);
+
+    // The table in a cell goes; the cell keeps a paragraph.
+    const inner = tbl(tr(tc(p('in1')) + tc(p('in2'))), '<w:tblStyle w:val="TableGrid"/>', [900, 900]);
+    const nested = open(tbl(tr(tc(inner + p('')) + tc(p('B1')))) + p('after'));
+    const less = deleteTable(nested, paraOf(nested, 'in2'));
+    expect(docText(less.doc)).toBe('\nB1\nafter');
+    expect(less.doc.paragraphs[less.pos.para].cell).toMatchObject({ table: 0 });
+    expect(grid(importDocx(exportDocx(less.doc)))).toEqual([['', 'B1']]);
+  });
+
+  it('makes a row as tall as it is dragged to, and the whole table larger by its corner', () => {
+    const doc = open(GRID);
+    const layout = layoutDocument(doc, measurer);
+    const rowHeight = (d: Doc, row: number) => layoutDocument(d, measurer).pages[0].cells.find((c) => c.row === row)!.height;
+    const tall = resizeRow(doc, 0, 0, 50);
+    expect(rowHeight(tall, 0)).toBeCloseTo(50);
+    expect(rowHeight(tall, 1)).toBe(rowHeight(doc, 1));
+    // Never shorter than what it holds.
+    expect(rowHeight(resizeRow(doc, 0, 1, 2), 1)).toBe(rowHeight(doc, 1));
+    // The height goes into the file as the row's.
+    expect(xmlOf(tall)).toContain('<w:trHeight w:val="1000"/>');
+
+    const before = layout.pages[0].cells;
+    const big = resizeTable(doc, 0, [100, 100], 1.5, [before[0].height, before[2].height], 1.2);
+    expect(big.tables![0].columns).toEqual([150, 150]);
+    const after = layoutDocument(big, measurer).pages[0].cells;
+    expect(after[0].width).toBeCloseTo(before[0].width * 1.5);
+    expect(after[0].height).toBeCloseTo(before[0].height * 1.2);
+    expect(after[2].height).toBeCloseTo(before[2].height * 1.2);
+  });
+
+  it('sets the height of the row of the caret as Word gives it: the least, or exact, or as tall as it holds', () => {
+    const doc = open(GRID);
+    const at = paraOf(doc, 'A2');
+    const exact = setRowHeight(doc, at, 30, true);
+    expect(exact.tables![0].rows[1]).toMatchObject({ height: 30, exact: true });
+    expect(importDocx(exportDocx(exact)).tables![0].rows[1]).toMatchObject({ height: 30, exact: true });
+    const auto = setRowHeight(exact, at, 0, true);
+    expect(auto.tables![0].rows[1].height).toBe(0);
+    expect(auto.tables![0].rows[1].exact).toBeUndefined();
+    expect(setRowHeight(doc, 0, 30)).toBe(doc);
   });
 });

@@ -221,6 +221,8 @@ export function createBubble(editor: Editor): Bubble {
       : { label: t('bubble.merge'), title: t('bubble.mergeTitle'), disabled: !editor.canMergeCells, run: () => editor.mergeTableCells() },
     { label: editor.tableBorders() ? t('bubble.noBorders') : t('bubble.borders'), title: editor.tableBorders() ? t('bubble.noBordersTitle') : t('bubble.bordersTitle'), run: () => editor.setTableBorders(!editor.tableBorders()) },
     { label: t('bubble.shade'), title: t('bubble.shadeTitle'), on: !!editor.activeCellProps()?.shade, run: () => editor.setTableCellProps({ shade: editor.activeCellProps()?.shade ? '' : SHADE }) },
+    'sep',
+    { label: t('bubble.delTable'), title: t('bubble.delTableTitle'), className: 'dx-bb-danger', closes: true, run: () => editor.deleteTable() },
   ];
 
   /** What a keyboard has keys for and a finger does not: only offered to a finger. */

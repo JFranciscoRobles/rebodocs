@@ -231,4 +231,32 @@ describe('carets', () => {
     expect(mapAnchor({ id: 'p0', offset: 5 }, { t: 'split', id: 'p0', at: 3, newId: 'n' })).toEqual({ id: 'n', offset: 2 });
     expect(mapAnchor({ id: 'p1', offset: 2 }, { t: 'join', id: 'p0', next: 'p1', at: 4 })).toEqual({ id: 'p0', offset: 6 });
   });
+
+  it('keeps a table inside a cell where it is, among the paragraphs of that cell, as changes come and go', () => {
+    const cell = (table: number, row = 0, c = 0) => ({ table, row, cell: c });
+    const doc = stampIds({
+      ...createDoc([
+        { ...createParagraph('outer'), cell: cell(0) },
+        { ...createParagraph('inner'), cell: cell(1) },
+        { ...createParagraph('tail'), cell: cell(0) },
+        { ...createParagraph('b'), cell: cell(0, 0, 1) },
+        createParagraph('after'),
+      ]),
+      tables: [
+        { columns: [100, 100], fixed: true, align: 'left', indent: 0, padTop: 0, padRight: 0, padBottom: 0, padLeft: 0, rows: [{ id: 0, before: 0, height: 0, cells: [{ id: 0, span: 1, borders: true }, { id: 1, span: 1, borders: true }] }] },
+        { columns: [50], fixed: true, align: 'left', indent: 0, padTop: 0, padRight: 0, padBottom: 0, padLeft: 0, parent: cell(0), rows: [{ id: 0, before: 0, height: 0, cells: [{ id: 0, span: 1, borders: true }] }] },
+      ],
+    });
+    const typed = insertText(doc, { para: 1, offset: 5 }, '!').doc;
+    const ops = decode<Op[]>(encode(diff(doc, typed)));
+    const out = apply(doc, ops);
+    expect(texts(out)).toEqual(['outer', 'inner!', 'tail', 'b', 'after']);
+    expect(out.paragraphs.map((p) => p.cell?.table)).toEqual([0, 1, 0, 0, undefined]);
+    // A row added to the table around it leaves the inner one in its cell.
+    const grown = insertRow(doc, 3, true);
+    const both = apply(doc, decode<Op[]>(encode(diff(doc, grown))));
+    const cells = (d: Doc) => d.paragraphs.map((p) => [paragraphText(p), p.cell && `${p.cell.table}:${p.cell.row}:${p.cell.cell}`]);
+    expect(cells(both)).toEqual(cells(grown));
+    expect(both.tables).toEqual(grown.tables);
+  });
 });

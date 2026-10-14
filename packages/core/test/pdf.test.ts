@@ -64,7 +64,8 @@ describe('PDF export', () => {
     doc = setCellProps(insertText(doc, { para: 0, offset: 0 }, 'A').doc, 0, 0, { shade: 'D9E2F3' });
     const content = streams(exportPdf(layoutDocument(doc, measurer), { measurer }))[0];
     expect(content).toContain('0.851 0.886 0.953 rg 72 ');
-    expect(content.match(/0 0 0 RG 0\.5 w [\d. ]+ re S/g)).toHaveLength(2);
+    // Each side of each cell on its own, as cells may have a line of their own on every side.
+    expect(content.match(/q 0 0 0 RG 0\.5 w {2}[\d. ]+ m [\d. ]+ l S Q/g)).toHaveLength(8);
 
     const picture = { xml: '<w:r><w:drawing><wp:inline><wp:extent cx="1270000" cy="635000"/></wp:inline></w:drawing></w:r>' };
     const withPicture = createDoc([{ props: {}, runs: [{ text: '￼', props: { object: picture.xml, objectWidth: 100, objectHeight: 50 } }] }]);

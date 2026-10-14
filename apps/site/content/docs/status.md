@@ -33,8 +33,9 @@ Touch input was also tried on a real phone.
 
 **The format**
 
-- No sections with their own page setup, no columns, footnotes, text boxes or tracked changes. They survive a round trip, and are shown as plain text where they can be.
-- Tables: row height cannot be edited, header rows do not repeat on the next page, borders are all or nothing per cell.
+- Sections and columns are laid out, but every page has the size and the header of the last section, and the page setup changes only that one.
+- No footnotes, text boxes or tracked changes. They survive a round trip, and are shown as plain text where they can be.
+- Tables: tab stops in cells (decimal ones among them) and vertical text are not laid out; a table inside a cell does not break across pages.
 - No right-to-left text, and no scripts that need shaping.
 - No hyphenation.
 
@@ -74,7 +75,7 @@ In rough order of how much each would matter.
 3. **Browser tests in the repository.** The interface checks exist as scripts outside it; they belong in a test suite, and the demos have none.
 4. **Collaboration that scales**: several server processes per room, access checked while connected, a durable log.
 5. **Templates by locale**: dates and currency in the language and currency you choose.
-6. **Layout**: sections, footnotes, repeated table header rows.
+6. **Layout**: a page size and a header per section, tab stops in tables, footnotes.
 7. **Accessibility**: a readable mirror of the text for screen readers, and keyboard access to every menu.
 8. **Rich paste** from Word and the web.
 

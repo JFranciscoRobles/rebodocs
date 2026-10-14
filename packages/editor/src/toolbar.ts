@@ -4,6 +4,9 @@
 
 import {
   type Align,
+  type Border,
+  type BorderStyle,
+  type Columns,
   type ListKind,
   type PageNumberFormat,
   type PageNumbering,
@@ -97,6 +100,8 @@ const CSS = `
 .dx-tb-item svg{flex:none;color:#5f6470}
 .dx-tb-mark{font:600 15px/1 Georgia,"Times New Roman",serif}
 .dx-tb-swatch{position:absolute;left:7px;right:7px;bottom:4px;height:3px;border-radius:1px;box-shadow:0 0 0 .5px rgba(0,0,0,.25)}
+.dx-tb-num{width:72px;height:30px;padding:0 6px;border:1px solid #c4c7c5;border-radius:6px;background:transparent;color:inherit;font:inherit}
+.dx-tb-unit{align-self:center;padding:0 8px 0 4px;opacity:.7}
 .dx-tb-select{height:30px;max-width:150px;padding:0 4px;border:1px solid transparent;border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer}
 .dx-tb-select:hover{background:#e2e6ee}
 .dx-tb-pop{position:absolute;z-index:20;padding:6px;border:1px solid #d2d6de;border-radius:8px;background:#fff;box-shadow:0 6px 20px rgba(0,0,0,.14)}
@@ -166,6 +171,20 @@ const ICONS = {
   link: svg('<path d="M7.5 10.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.9.9"/><path d="M10.5 7.5a3 3 0 0 0-4.2 0L4 9.8A3 3 0 0 0 8.2 14l.9-.9"/>'),
   note: svg('<path d="M3.5 4.5h11v8h-6l-3 2.5v-2.5h-2z"/>'),
   pageBreak: svg('<path d="M4.5 2.5v4h9v-4M4.5 15.5v-4h9v4M2.5 9h2M6.5 9h2M10.5 9h2M14.5 9h1"/>'),
+  columns: svg('<path d="M2.5 4h5.5M2.5 7h5.5M2.5 10h5.5M2.5 13h4M10 4h5.5M10 7h5.5M10 10h5.5M10 13h3"/>'),
+  colOne: svg('<path d="M3 4h12M3 7h12M3 10h12M3 13h8"/>'),
+  colTwo: svg('<path d="M2.5 4h5.5M2.5 7h5.5M2.5 10h5.5M2.5 13h4M10 4h5.5M10 7h5.5M10 10h5.5M10 13h3"/>'),
+  colThree: svg('<path d="M2 4h3.6M2 7h3.6M2 10h3.6M7.2 4h3.6M7.2 7h3.6M7.2 10h3.6M12.4 4h3.6M12.4 7h3.6M12.4 10h2"/>'),
+  colLeft: svg('<path d="M2.5 4h3M2.5 7h3M2.5 10h3M7.5 4h8M7.5 7h8M7.5 10h8M7.5 13h5"/>'),
+  colRight: svg('<path d="M2.5 4h8M2.5 7h8M2.5 10h8M2.5 13h5M12.5 4h3M12.5 7h3M12.5 10h3"/>'),
+  alignTop: svg('<path d="M3 3h12M9 15V6.5M6 9.5l3-3 3 3"/>'),
+  alignMiddle: svg('<path d="M3 9h12M9 2.5v4M7 4.8l2 1.7 2-1.7M9 15.5v-4M7 13.2l2-1.7 2 1.7"/>'),
+  alignBottom: svg('<path d="M3 15h12M9 3v8.5M6 8.5l3 3 3-3"/>'),
+  lineSingle: svg('<path d="M2.5 9h13"/>'),
+  lineDouble: svg('<path d="M2.5 7.5h13M2.5 10.5h13"/>'),
+  lineDashed: svg('<path d="M2.5 9h13" stroke-dasharray="3 2"/>'),
+  lineDotted: svg('<path d="M2.5 9h13" stroke-dasharray=".1 2.5" stroke-width="2"/>'),
+  columnBreak: svg('<path d="M3 4h4.5M3 7h4.5M3 10h2.5M10.5 8h4.5M10.5 11h4.5M10.5 14h4.5M6.5 13.5 9 11 6.5 8.5"/>'),
   caret: '<svg viewBox="0 0 8 8" width="8" height="8" fill="currentColor" aria-hidden="true"><path d="M1 2.5h6L4 6z"/></svg>',
 };
 
@@ -176,6 +195,10 @@ function injectStyle(): void {
   style.textContent = CSS;
   document.head.appendChild(style);
 }
+
+/** Points in a centimetre. */
+const PT_PER_CM = 72 / 2.54;
+
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, html = ''): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -638,6 +661,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
         el('div', 'dx-tb-rule'),
         item(t('table.deleteRow'), () => editor.deleteTableRow(), !inside),
         item(t('table.deleteColumn'), () => editor.deleteTableColumn(), !inside),
+        item(t('table.deleteTable'), () => editor.deleteTable(), !inside),
       );
       const cell = editor.activeCellProps();
       if (cell) {
@@ -652,10 +676,68 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
           choice.addEventListener('click', run(() => editor.setTableCellProps({ shade: color })));
           shades.appendChild(choice);
         }
+        /** One of a row of choices for the cells, of which one is on. */
+        const choice = (html: string, label: string, on: boolean, onClick: () => void) => {
+          const node = el('button', `dx-tb-btn${on ? ' dx-on' : ''}`, html);
+          node.type = 'button';
+          node.dataset.tip = label;
+          node.setAttribute('aria-label', label);
+          node.setAttribute('aria-pressed', String(on));
+          node.addEventListener('click', run(onClick));
+          return node;
+        };
+        const segments = (...children: HTMLElement[]) => {
+          const node = el('div', 'dx-tb-seg');
+          node.append(...children);
+          return node;
+        };
+        /** The height of the caret's row, in centimetres: empty for as tall as what it holds, and whether it is exact. */
+        const rowHeight = (now: { height: number; exact: boolean }) => {
+          const node = el('div', 'dx-tb-seg');
+          const input = el('input', 'dx-tb-num');
+          input.type = 'number';
+          input.min = '0';
+          input.step = '0.1';
+          input.placeholder = t('table.rowAuto');
+          input.value = now.height ? String(Math.round((now.height / PT_PER_CM) * 100) / 100) : '';
+          input.setAttribute('aria-label', t('table.rowHeight'));
+          const set = (exact: boolean) => {
+            const cm = input.valueAsNumber;
+            editor.setTableRowHeight(Number.isFinite(cm) && cm > 0 ? cm * PT_PER_CM : 0, exact);
+          };
+          input.addEventListener('change', () => set(now.exact));
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') run(() => set(now.exact))();
+          });
+          const unit = el('span', 'dx-tb-unit');
+          unit.textContent = 'cm';
+          node.append(input, unit, item(t('table.rowExact'), () => set(!now.exact), !now.height, now.exact));
+          return node;
+        };
+        // The line of the borders of the cells, all round: as thick as the one they have, black unless it has a colour.
+        const line = (style: BorderStyle): Border => ({ width: style === 'double' ? 0.75 : Math.max(0.5, cell.line?.width ?? 0.5), color: cell.line?.color ?? '000000', style });
+        const lineStyle = cell.line?.style ?? (cell.borders ? 'single' : undefined);
         panel.append(
+          el('div', 'dx-tb-rule'),
+          item(t('table.headerRow'), () => editor.setHeaderRow(!cell.header), false, cell.header),
+          head(t('table.rowHeight')),
+          rowHeight(cell),
+          head(t('table.align')),
+          segments(
+            choice(ICONS.alignTop, t('table.alignTop'), cell.valign === 'top', () => editor.setTableCellProps({ valign: 'top' })),
+            choice(ICONS.alignMiddle, t('table.alignCenter'), cell.valign === 'center', () => editor.setTableCellProps({ valign: 'center' })),
+            choice(ICONS.alignBottom, t('table.alignBottom'), cell.valign === 'bottom', () => editor.setTableCellProps({ valign: 'bottom' })),
+          ),
           el('div', 'dx-tb-rule'),
           item(editor.tableBorders() ? t('table.hideBorders') : t('table.showBorders'), () => editor.setTableBorders(!editor.tableBorders())),
           item(t('table.cellBorders'), () => editor.setTableCellProps({ borders: !cell.borders }), false, cell.borders),
+          head(t('table.lineStyle')),
+          segments(
+            choice(ICONS.lineSingle, t('table.lineSingle'), lineStyle === 'single', () => editor.setTableCellProps({ line: line('single') })),
+            choice(ICONS.lineDouble, t('table.lineDouble'), lineStyle === 'double', () => editor.setTableCellProps({ line: line('double') })),
+            choice(ICONS.lineDashed, t('table.lineDashed'), lineStyle === 'dashed', () => editor.setTableCellProps({ line: line('dashed') })),
+            choice(ICONS.lineDotted, t('table.lineDotted'), lineStyle === 'dotted', () => editor.setTableCellProps({ line: line('dotted') })),
+          ),
           head(t('table.shading')),
           shades,
           item(t('table.noShading'), () => editor.setTableCellProps({ shade: '' }), !cell.shade),
@@ -747,7 +829,64 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     }
     return panel;
   };
-  group(page);
+
+  // --- Columns --------------------------------------------------------------------
+
+  // The text in one, two or three columns: the section the caret is in, or the selection on its own.
+  const columns = button(
+    'columns',
+    t('toolbar.columns'),
+    ICONS.columns + ICONS.caret,
+    () => openPopover(columns, columnsPanel()),
+    () => ({ on: editor.columns.count > 1, disabled: editor.area !== 'body' }),
+  );
+  const columnsPanel = (): HTMLElement => {
+    const panel = el('div', '');
+    panel.style.minWidth = '260px';
+    const now = editor.columns;
+    const { width, marginLeft, marginRight } = editor.doc.page;
+    const space = 36;
+    const room = width - marginLeft - marginRight - space;
+    // A narrow column is a third of the text's width, as in Word's columns to one side.
+    const narrow = Math.round(room / 3);
+    const presets: [string, string, string, Columns][] = [
+      ['one', ICONS.colOne, t('columns.one'), { count: 1, space }],
+      ['two', ICONS.colTwo, t('columns.two'), { count: 2, space }],
+      ['three', ICONS.colThree, t('columns.three'), { count: 3, space }],
+      ['left', ICONS.colLeft, t('columns.left'), { count: 2, space, widths: [{ width: narrow, space }, { width: room - narrow, space: 0 }] }],
+      ['right', ICONS.colRight, t('columns.right'), { count: 2, space, widths: [{ width: room - narrow, space }, { width: narrow, space: 0 }] }],
+    ];
+    const kind = (c: Columns) =>
+      c.count < 2 ? 'one' : c.widths?.length === 2 && Math.abs(c.widths[0].width - c.widths[1].width) > 1 ? (c.widths[0].width < c.widths[1].width ? 'left' : 'right') : c.count === 2 ? 'two' : c.count === 3 ? 'three' : '';
+    const apply = (next: Columns) => () => {
+      editor.setColumns(next);
+      editor.focus();
+      popover?.replaceChildren(columnsPanel());
+    };
+    const choices = el('div', 'dx-tb-seg');
+    for (const [name, icon, label, preset] of presets) {
+      const on = kind(now) === name;
+      const node = el('button', `dx-tb-btn${on ? ' dx-on' : ''}`, icon);
+      node.type = 'button';
+      node.dataset.name = `columns-${name}`;
+      node.dataset.tip = label;
+      node.setAttribute('aria-label', label);
+      node.setAttribute('aria-pressed', String(on));
+      // A choice of columns keeps the line between them, if they had one.
+      node.addEventListener('click', apply(preset.count > 1 ? { ...preset, separator: now.separator } : preset));
+      choices.appendChild(node);
+    }
+    const separator = item(t('columns.separator'), apply({ ...now, separator: !now.separator }), now.count < 2, !!now.separator);
+    separator.dataset.name = 'columns-separator';
+    const breaks = item(t('columns.break'), () => editor.insertColumnBreak(), editor.inTable, undefined, undefined, ICONS.columnBreak);
+    breaks.dataset.name = 'column-break';
+    // Whether it is the section or the selection that the columns are set for.
+    const hint = el('div', 'dx-tb-hint');
+    hint.textContent = editor.collapsed ? t('columns.forSection') : t('columns.forSelection');
+    panel.append(head(t('columns.title')), choices, hint, el('div', 'dx-tb-rule'), separator, breaks);
+    return panel;
+  };
+  group(page, columns);
 
   // What does not fit in the bar waits under a button at its end, in the same order, instead of making a second row.
   const tray = el('div', 'dx-tb-tray');

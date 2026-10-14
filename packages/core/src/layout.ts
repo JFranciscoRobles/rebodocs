@@ -2,6 +2,8 @@
 // It has no DOM dependency; text metrics come from a TextMeasurer.
 
 import {
+  type CellLines,
+  type Columns,
   type Doc,
   type PageSetup,
   type Paragraph,
@@ -9,9 +11,14 @@ import {
   type Range,
   type ResolvedParagraphProps,
   type ResolvedRunProps,
+  type SectionStart,
   type Story,
   type Table,
+  DEFAULT_BORDER,
+  ONE_COLUMN,
   comparePositions,
+  defined,
+  inCell,
   resolveParagraph,
   sameCell,
   resolveRun,
@@ -81,6 +88,8 @@ export interface Line {
 
 /** The part of a table cell that is on one page. A cell merged down is one box as tall as its rows. */
 export interface CellBox {
+  /** The line of each side, when the cell's are not the plain ones `borders` stands for. */
+  lines?: CellLines;
   x: number;
   y: number;
   width: number;
@@ -128,6 +137,22 @@ export interface LayoutPage {
   floats: FloatBox[];
   header?: Band;
   footer?: Band;
+  /** Index of the section the page starts in, for a document set out in several. */
+  section?: number;
+  /** The lines drawn down between columns, from `top` to `bottom` at `x`. */
+  rules?: { x: number; top: number; bottom: number }[];
+  /** The columns of the parts of the page set out in more than one, and the lines each holds, by their `index`, from `from` up to `to`. */
+  columns?: ColumnBox[];
+}
+
+/** A column on a page: where it is, and the lines in it. */
+export interface ColumnBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  from: number;
+  to: number;
 }
 
 export interface Layout {
@@ -145,6 +170,27 @@ export interface Rect {
   width: number;
   height: number;
 }
+
+/** A box with a plain line on every side: what a cell with borders and nothing more said about them has. */
+const FOUR_LINES: CellLines = { top: DEFAULT_BORDER, right: DEFAULT_BORDER, bottom: DEFAULT_BORDER, left: DEFAULT_BORDER };
+
+/** The lines a cell box is drawn with, side by side: its own, the plain ones of a cell with borders, or none. */
+export function boxLines(box: Pick<CellBox, 'lines' | 'borders'>): CellLines {
+  return box.lines ?? (box.borders ? FOUR_LINES : {});
+}
+
+/** The cell of a row that starts at grid column `column`, if one does. */
+function cellStartingAt(row: Table['rows'][number] | undefined, column: number): Table['rows'][number]['cells'][number] | undefined {
+  let start = row?.before ?? 0;
+  for (const cell of row?.cells ?? []) {
+    if (start === column) return cell;
+    start += cell.span;
+  }
+  return undefined;
+}
+
+/** A paragraph that leaves no space above or below it: what stands for a table in a cell. */
+const NO_SPACING = resolveParagraph({ spacingBefore: 0, spacingAfter: 0 });
 
 const TAB_STOP = 36;
 /**
@@ -185,7 +231,7 @@ export function fontOf(props: ResolvedRunProps): FontSpec {
   return { family: props.fontFamily, size: props.fontSize, bold: props.bold, italic: props.italic };
 }
 
-type PieceKind = 'word' | 'space' | 'tab' | 'break' | 'pagebreak' | 'object';
+type PieceKind = 'word' | 'space' | 'tab' | 'break' | 'pagebreak' | 'columnbreak' | 'object';
 
 interface Piece {
   kind: PieceKind;
@@ -209,6 +255,8 @@ interface RawLine {
   fragments: Fragment[];
   label?: Fragment;
   pageBreakAfter: boolean;
+  /** Set on a line that ends in a column break: what follows goes on in the next column. */
+  columnBreakAfter?: boolean;
   /** Room left empty above the line, inside its height: what it was pushed down by to clear a picture. */
   pad?: number;
   /**
@@ -225,6 +273,14 @@ interface RawLine {
  * cannot be there at all, how far down it has to go first.
  */
 type LineShape = (top: number, height: number, first: boolean) => { skip: number; segments: { left: number; right: number }[] };
+
+/** The XML of a column break, as a run of its own: what is put in the text for one. */
+export const COLUMN_BREAK_XML = '<w:r><w:br w:type="column"/></w:r>';
+
+/** Whether an object of the text is a column break: a break that ends the column, kept as Word wrote it. */
+export function isColumnBreak(xml: string): boolean {
+  return /^<w:r\b[^>]*>(?:<w:rPr>[\s\S]*?<\/w:rPr>|<w:rPr\/>)?<w:br\b[^>]*\bw:type="column"[^>]*\/><\/w:r>$/.test(xml);
+}
 
 function pieceKind(text: string): PieceKind {
   switch (text[0]) {
@@ -248,6 +304,11 @@ function tokenize(para: Paragraph, measurer: TextMeasurer): Piece[] {
     const props = resolveRun(run.props);
     const font = fontOf(props);
     const metrics = measurer.metrics(font);
+    if (props.object && isColumnBreak(props.object)) {
+      for (let i = 0; i < run.text.length; i++) pieces.push({ kind: 'columnbreak', text: run.text[i], start: offset + i, props, font, width: 0, metrics });
+      offset += run.text.length;
+      continue;
+    }
     if (props.object) {
       // One box per character; an anchor is an empty box that only holds a position.
       const box = props.anchor ? metrics : { ascent: props.objectHeight, descent: 0 };
@@ -258,7 +319,8 @@ function tokenize(para: Paragraph, measurer: TextMeasurer): Piece[] {
       offset += run.text.length;
       continue;
     }
-    for (const match of run.text.matchAll(/\t|\n|\f| +|[^\t\n\f ]+/g)) {
+    // A word may break after a hyphen inside it, as in Word: "pre-" ends one line and "approved" starts the next.
+    for (const match of run.text.matchAll(/\t|\n|\f| +|[^\t\n\f -]*[^\t\n\f -]-+(?=[^\t\n\f -])|[^\t\n\f ]+/g)) {
       const text = match[0];
       const kind = pieceKind(text);
       const width = kind === 'word' || kind === 'space' ? measurer.width(text, font) : 0;
@@ -274,7 +336,8 @@ function groupPieces(pieces: Piece[]): Piece[][] {
   const groups: Piece[][] = [];
   for (const piece of pieces) {
     const prev = groups[groups.length - 1];
-    if (piece.kind === 'word' && prev && prev[0].kind === 'word') prev.push(piece);
+    const after = prev?.[prev.length - 1];
+    if (piece.kind === 'word' && prev && prev[0].kind === 'word' && !after!.text.endsWith('-')) prev.push(piece);
     else groups.push([piece]);
   }
   return groups;
@@ -357,13 +420,15 @@ function breakParagraph(
   shape?: LineShape,
   /** Where the last line of the paragraph starts, when that is known: see `startLine`. */
   lastFrom?: number,
+  /** Where in the paragraph to start: the rest of one that goes on in a column of another width. */
+  from = 0,
 ): RawLine[] {
   const lines: RawLine[] = [];
-  const pieces = tokenize(para, measurer);
-  const label = listLabel && placeLabel(para, pp, measurer, listLabel);
+  const pieces = from > 0 ? tokenize(para, measurer).filter((p) => p.start >= from) : tokenize(para, measurer);
+  const label = from === 0 ? listLabel && placeLabel(para, pp, measurer, listLabel) : undefined;
   let cur: Piece[] = [];
   let curWidth = 0;
-  let nextOffset = 0;
+  let nextOffset = from;
   let lastProps = resolveRun(para.runs[0].props);
   let endedWithBreak = false;
 
@@ -418,7 +483,7 @@ function breakParagraph(
     return (m.ascent + m.descent) * pp.lineHeight;
   };
 
-  const ownIndent = () => (lines.length > 0 ? pp.indentLeft : label ? label.textStart : pp.indentLeft + pp.indentFirstLine);
+  const ownIndent = () => (lines.length > 0 || from > 0 ? pp.indentLeft : label ? label.textStart : pp.indentLeft + pp.indentFirstLine);
   /** Where the line starts: at its indent, or past the picture that is in its way. */
   const indent = () => Math.max(ownIndent(), room.left);
   const avail = () => Math.max(MIN_LINE_WIDTH, contentWidth - indent() - Math.max(pp.indentRight, room.right));
@@ -446,7 +511,7 @@ function breakParagraph(
     rowStart = lines.length;
   };
 
-  const flush = (forced: boolean, pageBreakAfter: boolean, lastLine: boolean) => {
+  const flush = (forced: boolean, breakAfter: 'page' | 'column' | undefined, lastLine: boolean) => {
     // A break, or the end of the paragraph, ends the row where it is: nothing goes on the other side.
     if (forced || lastLine) pending = [];
     const lineIndent = indent();
@@ -473,7 +538,7 @@ function breakParagraph(
 
     // Trailing spaces and breaks hang past the edge and do not count for alignment.
     let visibleCount = cur.length;
-    const hangs = (kind: PieceKind) => kind === 'space' || kind === 'break' || kind === 'pagebreak';
+    const hangs = (kind: PieceKind) => kind === 'space' || kind === 'break' || kind === 'pagebreak' || kind === 'columnbreak';
     while (visibleCount > 0 && hangs(cur[visibleCount - 1].kind)) visibleCount--;
     let visible = 0;
     let spaces = 0;
@@ -537,7 +602,8 @@ function breakParagraph(
       height: (ascent + descent) * pp.lineHeight + room.pad,
       fragments,
       label: lineLabel && { ...lineLabel.fragment, x: lineLabel.fragment.x + shift + (lineIndent - ownIndent()) },
-      pageBreakAfter,
+      pageBreakAfter: breakAfter === 'page',
+      ...(breakAfter === 'column' ? { columnBreakAfter: true } : {}),
       ...(room.pad ? { pad: room.pad } : {}),
     });
     if (pending.length) {
@@ -550,7 +616,9 @@ function breakParagraph(
     }
     if (last) lastProps = last.props;
     nextOffset = end;
-    endedWithBreak = forced;
+    // After a page or a column break the paragraph mark stays on the line of the break, as in Word 2013 and later;
+    // after a line break it starts a line of its own.
+    endedWithBreak = forced && !breakAfter;
     cur = [];
     curWidth = 0;
     startLine();
@@ -594,32 +662,33 @@ function breakParagraph(
     } else if (head.kind === 'tab' && pp.leaderTab > 0) {
       // What follows, up to the end of the line, ends at the stop: the tab takes the room that leaves.
       let rest = 0;
-      for (let n = g + 1; n < groups.length && groups[n][0].kind !== 'break' && groups[n][0].kind !== 'pagebreak' && groups[n][0].kind !== 'tab'; n++) {
+      const ends = (kind: PieceKind) => kind === 'break' || kind === 'pagebreak' || kind === 'columnbreak' || kind === 'tab';
+      for (let n = g + 1; n < groups.length && !ends(groups[n][0].kind); n++) {
         for (const p of groups[n]) rest += p.width;
       }
       const stop = () => Math.min(pp.leaderTab - indent(), avail());
       // No room left for it on this line: it starts the next, and still ends at the stop.
-      if (curWidth + rest > stop() + EPSILON && cur.length) flush(false, false, false);
+      if (curWidth + rest > stop() + EPSILON && cur.length) flush(false, undefined, false);
       push({ ...head, width: Math.max(0, stop() - curWidth - rest) });
     } else if (head.kind === 'tab') {
       let tabWidth = TAB_STOP - ((indent() + curWidth) % TAB_STOP);
       if (curWidth + tabWidth > avail() + EPSILON && cur.length) {
-        flush(false, false, false);
+        flush(false, undefined, false);
         tabWidth = TAB_STOP - (indent() % TAB_STOP);
       }
       push({ ...head, width: tabWidth });
-    } else if (head.kind === 'break' || head.kind === 'pagebreak') {
+    } else if (head.kind === 'break' || head.kind === 'pagebreak' || head.kind === 'columnbreak') {
       push(head);
-      flush(true, head.kind === 'pagebreak', false);
+      flush(true, head.kind === 'pagebreak' ? 'page' : head.kind === 'columnbreak' ? 'column' : undefined, false);
     } else if (head.kind === 'object') {
       // A box is never split: it moves to a new line, where it may overflow.
-      if (curWidth + head.width > avail() + EPSILON && cur.length) flush(false, false, false);
+      if (curWidth + head.width > avail() + EPSILON && cur.length) flush(false, undefined, false);
       push(head);
     } else {
       let groupWidth = 0;
       for (const p of group) groupWidth += p.width;
       let fits = curWidth + groupWidth <= avail() + EPSILON || fitsShrunk(groupWidth);
-      if (!fits && cur.length) flush(false, false, false);
+      if (!fits && cur.length) flush(false, undefined, false);
       // Too wide for what is left of this side of a picture: it goes on the other, not cut in two; and
       // when it fits on neither, down to where the picture leaves it room, as in Word.
       while (!fits && !cur.length && pending.length && groupWidth > avail() + EPSILON) startLine();
@@ -658,7 +727,7 @@ function breakParagraph(
           const headText = p.text.slice(0, lo);
           push({ ...p, text: headText, width: measurer.width(headText, p.font) });
         }
-        flush(false, false, false);
+        flush(false, undefined, false);
         if (lo < p.text.length) {
           const tailText = p.text.slice(lo);
           queue.unshift({ ...p, text: tailText, start: p.start + lo, width: measurer.width(tailText, p.font) });
@@ -667,8 +736,13 @@ function breakParagraph(
     }
   }
 
-  if (cur.length || lines.length === 0 || endedWithBreak) flush(false, false, true);
+  if (cur.length || lines.length === 0 || endedWithBreak) flush(false, undefined, true);
   return lines;
+}
+
+/** Whether a line holds nothing but a break that ends its page or its column: it takes its place wherever it is, as in Word. */
+function breakOnly(rl: RawLine): boolean {
+  return (rl.pageBreakAfter || !!rl.columnBreakAfter) && rl.fragments.every((f) => f.kind === 'break' || (f.kind === 'object' && f.width === 0));
 }
 
 function sameLabel(a: ListLabel | undefined, b: ListLabel | undefined): boolean {
@@ -692,46 +766,105 @@ export function createLayoutCache(): LayoutCache {
   return new WeakMap();
 }
 
-/** Column widths of a table as laid out, and where its left edge is, relative to the text area. */
-/** Where a table starts, from the left of the text area, and how wide its columns are once fitted to it. */
-export function tableGeometry(table: Table, contentWidth: number): { left: number; columns: number[] } {
+/**
+ * Where a table starts, from the left of the text area, and how wide its
+ * columns are once fitted to it. `legacy` is for the layout of Word 2010 and
+ * before, which lines up the text of a table's cells with the text around it
+ * and not their edges: the table stands out on either side by the margins of
+ * its cells, and one as wide as the text area is that much wider.
+ */
+export function tableGeometry(table: Table, contentWidth: number, legacy = false): { left: number; columns: number[] } {
   let columns = table.columns;
   let total = columns.reduce((a, b) => a + b, 0);
   const scaleTo = (width: number) => {
     columns = columns.map((w) => (w * width) / total);
     total = width;
   };
-  if (table.widthFraction) scaleTo(contentWidth * table.widthFraction);
+  const first = table.rows[0]?.cells;
+  const outLeft = legacy ? (first?.[0]?.padLeft ?? table.padLeft) + (table.spacing ?? 0) : 0;
+  const outRight = legacy ? (first?.[first.length - 1]?.padRight ?? table.padRight) + (table.spacing ?? 0) : 0;
+  if (table.widthFraction) scaleTo((contentWidth + outLeft + outRight) * table.widthFraction);
   // A table that is not fixed is narrowed to the room it has, as Word's autofit does.
   const room = contentWidth - Math.max(0, table.indent);
   if (!table.fixed && total > room + EPSILON) scaleTo(room);
   const left =
-    table.align === 'center' ? (contentWidth - total) / 2 : table.align === 'right' ? contentWidth - total : table.indent;
+    table.align === 'center' ? (contentWidth - total) / 2 : table.align === 'right' ? contentWidth - total + outRight : table.indent - outLeft;
   return { left, columns };
 }
 
+/** A section as the layout takes it: how its pages are set out, and where its paragraphs end. */
+export interface FlowSection {
+  page: PageSetup;
+  columns: Columns;
+  start: SectionStart;
+  noHeader?: boolean;
+  noFooter?: boolean;
+  /** Index of the paragraph after its last one. */
+  end: number;
+}
+
+/** The sections of a document, in order; the last one is the document's own. */
+export function sectionsOf(doc: Pick<Doc, 'page' | 'paragraphs' | 'columns' | 'sectionStart' | 'noHeader' | 'noFooter'>): FlowSection[] {
+  const sections: FlowSection[] = [];
+  doc.paragraphs.forEach((p, i) => {
+    // The last paragraph's mark is the document's: what it says of a section, the document says.
+    const s = i < doc.paragraphs.length - 1 && !p.cell ? p.section : undefined;
+    if (s) sections.push(defined({ page: s.page, columns: s.columns ?? ONE_COLUMN, start: s.start ?? 'nextPage', noHeader: s.noHeader, noFooter: s.noFooter, end: i + 1 }));
+  });
+  sections.push(
+    defined({ page: doc.page, columns: doc.columns ?? ONE_COLUMN, start: doc.sectionStart ?? 'nextPage', noHeader: doc.noHeader, noFooter: doc.noFooter, end: doc.paragraphs.length }),
+  );
+  return sections;
+}
+
+/** Where each column of a section is across its pages, and how wide. */
+export function columnGeometry(page: PageSetup, columns: Columns): { x: number; width: number }[] {
+  const width = page.width - page.marginLeft - page.marginRight;
+  if (columns.count < 2) return [{ x: page.marginLeft, width }];
+  const out: { x: number; width: number }[] = [];
+  let x = page.marginLeft;
+  if (columns.widths?.length) {
+    for (const col of columns.widths) {
+      out.push({ x, width: Math.max(MIN_LINE_WIDTH, col.width) });
+      x += col.width + col.space;
+    }
+    return out;
+  }
+  const each = Math.max(MIN_LINE_WIDTH, (width - columns.space * (columns.count - 1)) / columns.count);
+  for (let k = 0; k < columns.count; k++, x += each + columns.space) out.push({ x, width: each });
+  return out;
+}
+
+interface FlowOptions {
+  /** The text area of a page of a section, from its top to its bottom: what its header and footer leave. */
+  area: (section: FlowSection, pageIndex: number) => { top: number; bottom: number };
+  /** The sections, when the flow is set out in them; otherwise it is one, of the document's page and in one column. */
+  sections?: FlowSection[];
+  /** Set for text that runs on down one endless page: nothing starts another, and no picture is put off its line. */
+  continuous?: boolean;
+}
+
 /**
- * Lays out a flow of paragraphs and tables down pages whose text area runs
- * from `top` to `bottom`; on the first page from `first.top` to
- * `first.bottom`, when its header and footer are not those of the others.
+ * Lays out a flow of paragraphs and tables down pages and, inside a page, down
+ * the columns of the section each paragraph is in.
  */
 function layoutFlow(
   doc: Pick<Doc, 'page' | 'paragraphs' | 'tables' | 'numbering' | 'compatMode'>,
   measurer: TextMeasurer,
   cache: LayoutCache | undefined,
-  restTop: number,
-  restBottom: number,
-  first: { top: number; bottom: number } = { top: restTop, bottom: restBottom },
-  /** Set for text that runs on down one endless page: nothing starts another, and no picture is put off its line. */
-  continuous = false,
+  options: FlowOptions,
 ): Layout & { endY: number } {
-  let { top, bottom } = first;
-  const page = doc.page;
+  const { continuous = false, area } = options;
+  const sections = options.sections ?? [{ page: doc.page, columns: ONE_COLUMN, start: 'nextPage' as const, end: doc.paragraphs.length }];
+  let sectionIndex = 0;
+  let section = sections[0];
+  let page = section.page;
+  let { top, bottom } = area(section, 0);
   const { paragraphs } = doc;
   const labels = listLabels(doc);
   const shrinkSpaces = (doc.compatMode ?? 0) >= SHRINK_COMPAT_MODE;
-  const contentWidth = page.width - page.marginLeft - page.marginRight;
-  const pages: LayoutPage[] = [{ index: 0, lines: [], cells: [], floats: [] }];
+  const legacyTables = doc.compatMode !== undefined && doc.compatMode < SHRINK_COMPAT_MODE;
+  const pages: LayoutPage[] = [{ index: 0, lines: [], cells: [], floats: [], ...(options.sections ? { section: 0 } : {}) }];
   const lines: Line[] = [];
   const paraFirstLine: number[] = [];
   let y = top;
@@ -742,8 +875,62 @@ function layoutFlow(
    */
   let spaceAbove = 0;
 
+  /** The columns of the section, the one the text is in, and where they start on this page. */
+  let columns = continuous ? columnGeometry(page, ONE_COLUMN) : columnGeometry(page, section.columns);
+  let col = 0;
+  /** The page coordinate of the left edge of the column, and its width: the text area the text is set in. */
+  let colLeft = columns[0].x;
+  let contentWidth = columns[0].width;
+  let colTop = top;
+  /** How far down the text of the columns of this page went, in the column that went furthest. */
+  let deepest = top;
+  /** What the page held when the column was started: anything more was put in the column. */
+  let columnFrom = { lines: 0, cells: 0 };
+  /** The index in `lines` of the first line of each column of this page up to the one the text is in. */
+  let columnStarts = [0];
+  /** While columns are balanced: the page they end on, and how far down it they may go. */
+  let cap: { page: number; bottom: number } | undefined;
+
   const anchorOf = (xml: string | undefined): Anchor | undefined => (continuous || !xml ? undefined : anchoredObject(xml));
   const current = () => pages[pages.length - 1];
+  const setColumn = (k: number) => {
+    col = k;
+    colLeft = columns[k].x;
+    contentWidth = columns[k].width;
+    columnFrom = { lines: current().lines.length, cells: current().cells.length };
+    columnStarts = [...columnStarts.slice(0, k), lines.length];
+  };
+  /** Ends the columns of this page, with the lines between them their section asks for. */
+  const closeColumns = () => {
+    deepest = Math.max(deepest, y);
+    if (continuous || columns.length < 2 || deepest <= colTop + EPSILON) return;
+    const at = current();
+    for (let k = 0; k <= col; k++) {
+      const c = columns[k];
+      (at.columns ??= []).push({ x: c.x, y: colTop, width: c.width, height: deepest - colTop, from: columnStarts[k], to: k < col ? columnStarts[k + 1] : lines.length });
+    }
+    if (!section.columns.separator) return;
+    const rules = (at.rules ??= []);
+    for (let k = 0; k + 1 < columns.length; k++) {
+      const x = (columns[k].x + columns[k].width + columns[k + 1].x) / 2;
+      rules.push({ x, top: colTop, bottom: deepest });
+    }
+  };
+  /** Takes the text area of the page for the section it is in now. */
+  const startArea = () => {
+    ({ top, bottom } = area(section, pages.length - 1));
+    if (cap && cap.page === pages.length - 1) bottom = Math.min(bottom, cap.bottom);
+    y = top;
+    colTop = top;
+    deepest = top;
+    spaceAbove = 0;
+    wraps = [];
+    setColumn(0);
+  };
+  const pushPage = () => {
+    pages.push({ index: pages.length, lines: [], cells: [], floats: [], ...(options.sections ? { section: sectionIndex } : {}) });
+    startArea();
+  };
   const newPage = () => {
     if (continuous) {
       // Where a page was asked to end, the text only steps down.
@@ -751,12 +938,22 @@ function layoutFlow(
       spaceAbove = 0;
       return;
     }
-    pages.push({ index: pages.length, lines: [], cells: [], floats: [] });
-    top = restTop;
-    bottom = restBottom;
-    y = top;
-    spaceAbove = 0;
-    wraps = [];
+    closeColumns();
+    pushPage();
+  };
+  /**
+   * Goes on at the top of the next column, or of the next page after the last
+   * one. What starts there because the column before had no more room for it
+   * starts without the space it asks for above it, as in Word.
+   */
+  const nextColumn = (soft = true) => {
+    if (continuous || col + 1 >= columns.length) newPage();
+    else {
+      deepest = Math.max(deepest, y);
+      setColumn(col + 1);
+      y = colTop;
+    }
+    spaceAbove = soft ? Infinity : 0;
   };
 
   const breakCached = (paraIndex: number, pp: ResolvedParagraphProps, width: number): RawLine[] => {
@@ -870,7 +1067,7 @@ function layoutFlow(
    * is in its way. The text goes
    * down the wider side of a picture, and below it when neither side has room.
    */
-  const shapeFrom = (startY: number, lead: number, within: { wraps: Wrap[]; edge: number; width: number } = { wraps, edge: page.marginLeft, width: contentWidth }): LineShape | undefined => {
+  const shapeFrom = (startY: number, lead: number, within: { wraps: Wrap[]; edge: number; width: number } = { wraps, edge: colLeft, width: contentWidth }): LineShape | undefined => {
     const near = within.wraps.filter((wrap) => wrap.bottom > startY + EPSILON);
     if (!near.length) return undefined;
     const { edge, width: contentWidth } = within;
@@ -905,9 +1102,12 @@ function layoutFlow(
     };
   };
 
-  const emptyPage = () => !current().lines.length && !current().cells.length;
-  // What fits on a page at all is asked of the pages after the first, which most are.
-  const pageHeight = restBottom - restTop;
+  /** Whether nothing was put in the column yet: what does not fit in it then goes in anyway, or it never would. */
+  const emptyPage = () => current().lines.length === columnFrom.lines && current().cells.length === columnFrom.cells;
+  /** Whether nothing at all was put on the page yet. */
+  const blankPage = () => !current().lines.length && !current().cells.length;
+  /** How tall a column is, for what is too tall to be moved to the next one. */
+  const pageHeight = () => bottom - colTop;
   const heightOf = (raw: RawLine[]) => raw.reduce((h, rl) => h + rl.height, 0);
 
   /** Height of the first line of a paragraph, laid out as running text. */
@@ -937,17 +1137,27 @@ function layoutFlow(
     if (end === paraIndex) return;
     keptUntil = end;
     needed += firstLineHeight(end);
-    if (y + needed > bottom + EPSILON && needed <= pageHeight + EPSILON && !emptyPage()) newPage();
+    if (y + needed > bottom + EPSILON && needed <= pageHeight() + EPSILON && !emptyPage()) nextColumn();
   };
 
   const flow = (paraIndex: number) => {
     const pp = resolveParagraph(paragraphs[paraIndex].props);
     let raw = breakCached(paraIndex, pp, contentWidth);
-    if (pp.pageBreakBefore && !emptyPage()) newPage();
-    keepWithNext(paraIndex);
+    // An empty paragraph that only holds the end of a section takes no room, as in Word: its line is there for the caret.
+    if (options.sections && paragraphs[paraIndex].section && paraIndex < paragraphs.length - 1 && raw.length === 1 && raw[0].end === 0) {
+      paraFirstLine.push(lines.length);
+      place(paraIndex, raw[0], true, colLeft, y);
+      // Nor does the space below it: what follows starts as if after nothing.
+      spaceAbove = 0;
+      return;
+    }
+    if (pp.pageBreakBefore && !blankPage()) newPage();
+    // What starts with a break goes on after it wherever it falls: nothing has to be kept here.
+    const breaks = breakOnly(raw[0]);
+    if (!breaks) keepWithNext(paraIndex);
     const total = heightOf(raw);
-    if (pp.keepLines && y + pp.spacingBefore + total > bottom + EPSILON && total <= pageHeight + EPSILON && !emptyPage()) {
-      newPage();
+    if (!breaks && pp.keepLines && y + pp.spacingBefore + total > bottom + EPSILON && total <= pageHeight() + EPSILON && !emptyPage()) {
+      nextColumn();
     }
     // Where the paragraph starts, the space it asks for above it included: what its pictures are measured from.
     let paraTop = y;
@@ -964,7 +1174,7 @@ function layoutFlow(
         offset += run.text.length;
         const anchor = anchorOf(run.props.object);
         if (!anchor || placed.has(run.props.object!)) continue;
-        const box = floatAt(anchor, run.props.object!, page.marginLeft, paraTop, paraIndex, at);
+        const box = floatAt(anchor, run.props.object!, colLeft, paraTop, paraIndex, at);
         placed.set(run.props.object!, box);
         if (anchor.wrap === 'none') continue;
         wraps.push({
@@ -986,9 +1196,9 @@ function layoutFlow(
       let fit = 0;
       let used = 0;
       let forced = false;
-      while (i + fit < raw.length && !forced && y + used + raw[i + fit].height <= bottom + PAGE_SLACK) {
+      while (i + fit < raw.length && !forced && (y + used + raw[i + fit].height <= bottom + PAGE_SLACK || breakOnly(raw[i + fit]))) {
         used += raw[i + fit].height;
-        forced = raw[i + fit].pageBreakAfter;
+        forced = raw[i + fit].pageBreakAfter || !!raw[i + fit].columnBreakAfter;
         fit++;
       }
       const rest = raw.length - i - fit;
@@ -1006,30 +1216,81 @@ function layoutFlow(
       while (fit > 0 && raw[i + fit - 1].box !== undefined) fit--;
       if (fit === 0 && emptyPage()) for (fit = 1; raw[i + fit - 1].box !== undefined && i + fit < raw.length; ) fit++;
       for (let k = 0; k < fit; k++, i++) {
-        place(paraIndex, raw[i], i === raw.length - 1, page.marginLeft, y);
+        place(paraIndex, raw[i], i === raw.length - 1, colLeft, y);
         y += raw[i].height;
       }
       if (forced || i < raw.length) {
-        newPage();
+        const width = contentWidth;
+        if (forced && raw[i - 1].pageBreakAfter) {
+          newPage();
+          // What comes after a page break starts at the top of its page without the space above it, as in Word.
+          spaceAbove = Infinity;
+        } else nextColumn(!forced);
         // None of it stayed behind: it starts again at the top of the new page, its pictures with it.
         if (i === 0) {
           paraTop = y;
           settle();
+        } else if (i < raw.length && contentWidth !== width) {
+          // The rest goes on in a column of another width, broken into lines again for it.
+          raw = raw.slice(0, i).concat(breakParagraph(paragraphs[paraIndex], pp, contentWidth, measurer, labels[paraIndex], shrinkSpaces, undefined, undefined, raw[i].start));
         }
+        // A paragraph that starts with the break starts where the break sends it, with the space it asks for above it.
+        if (i === 1 && breaks && i < raw.length) y += pp.spacingBefore;
       }
     }
     placed = new Map();
+    // A paragraph that ends in a break leaves its space below it where the break was, not at the top of what comes next.
+    const last = raw[raw.length - 1];
+    if (last.pageBreakAfter || last.columnBreakAfter) return;
     y += pp.spacingAfter;
     spaceAbove = pp.spacingAfter;
   };
 
   /** Lays out the table whose paragraphs start at `from`; returns the index after the ones it placed. */
   const layoutTable = (tableIndex: number, table: Table, from: number): number => {
-    const { left, columns } = tableGeometry(table, contentWidth);
+    // A table in a cell starts at the edge of what the cell holds, even in the layout of Word 2010: measured against it.
+    const geometry = tableGeometry(table, contentWidth, legacyTables && !table.parent);
+    const { columns } = geometry;
+    const total = columns.reduce((a, b) => a + b, 0);
+    // A table the text goes round is set where it floats, all of it on this page; the text after it starts where it did.
+    const float = continuous ? undefined : table.float;
+    const startY = y;
+    const keptBottom = bottom;
+    const keptAbove = spaceAbove;
+    const left = !float
+      ? geometry.left
+      : float.align === 'right'
+        ? contentWidth - total + (legacyTables ? (table.rows[0]?.cells.at(-1)?.padRight ?? table.padRight) : 0)
+        : float.align === 'center'
+          ? (contentWidth - total) / 2
+          : float.align === 'left'
+            ? 0
+            : float.x;
+    if (float) {
+      y += float.y;
+      bottom = Infinity;
+    }
+    /** Room between the cells of a table whose cells stand apart, and around them. */
+    const gap = table.spacing ?? 0;
     const edges = [0];
     for (const w of columns) edges.push(edges[edges.length - 1] + w);
     const edge = (column: number) => edges[Math.min(column, columns.length)];
+    /** The last row of the run of merged cells that the cell starting at `column` of row `rowIndex` is in. */
+    const runEnd = (rowIndex: number, column: number) => {
+      let k = rowIndex;
+      while (cellStartingAt(table.rows[k + 1], column)?.merge === 'continue') k++;
+      return k;
+    };
     let next = from;
+    /** The tables inside cells of this one, each laid out on its own, by the line box that stands for it. */
+    const nested = new Map<RawLine, { page: LayoutPage; offset: number }>();
+    const nestedTable = (start: number, stop: number, width: number): RawLine => {
+      const page: PageSetup = { width, height: Infinity, marginTop: 0, marginRight: 0, marginBottom: 0, marginLeft: 0 };
+      const sub = layoutFlow({ ...doc, page, paragraphs: paragraphs.slice(start, stop) }, measurer, cache, { area: () => ({ top: 0, bottom: Infinity }) });
+      const raw: RawLine = { start: 0, end: 0, x: 0, width, ascent: 0, descent: 0, height: sub.endY, fragments: [], pageBreakAfter: false };
+      nested.set(raw, { page: sub.pages[0], offset: start });
+      return raw;
+    };
 
     // Break the paragraphs of every cell first: a row is as tall as its tallest cell.
     const rows = table.rows.map((row, rowIndex) => {
@@ -1041,17 +1302,32 @@ function layoutFlow(
         const width = edge(column + cell.span) - x;
         const start = column;
         column += cell.span;
-        const padLeft = cell.padLeft ?? table.padLeft;
-        const padTop = cell.padTop ?? table.padTop;
-        const inner = Math.max(MIN_LINE_WIDTH, width - padLeft - (cell.padRight ?? table.padRight));
+        const padLeft = (cell.padLeft ?? table.padLeft) + gap;
+        // Cells that stand apart have room around each, and as much again between them and the edge of the table.
+        const padTop = (cell.padTop ?? table.padTop) + gap + (rowIndex === 0 ? gap : 0);
+        const padBottom = (cell.padBottom ?? table.padBottom) + gap + (rowIndex === table.rows.length - 1 ? gap : 0);
+        const inner = Math.max(MIN_LINE_WIDTH, width - padLeft - (cell.padRight ?? table.padRight) - gap);
         const content: { para: number; pp: ResolvedParagraphProps; raw: RawLine[]; before: number }[] = [];
-        let height = padTop + (cell.padBottom ?? table.padBottom);
+        let height = padTop + padBottom;
         let above = 0;
         const ref = { table: tableIndex, row: row.id, cell: cell.id };
         // The pictures of the cell that its text goes round, measured from the top left of what it holds.
         const within = { wraps: [] as Wrap[], edge: 0, width: inner };
         let down = 0;
-        while (next < paragraphs.length && sameCell(paragraphs[next].cell, ref)) {
+        while (next < paragraphs.length && inCell(doc.tables, paragraphs[next].cell, ref)) {
+          if (!sameCell(paragraphs[next].cell, ref)) {
+            // A table inside the cell: laid out on its own as wide as what the cell holds, and set in it as one block.
+            let stop = next;
+            while (stop < paragraphs.length && inCell(doc.tables, paragraphs[stop].cell, ref) && !sameCell(paragraphs[stop].cell, ref)) stop++;
+            const raw = nestedTable(next, stop, inner);
+            down += raw.height;
+            height += raw.height;
+            above = 0;
+            any = true;
+            content.push({ para: next, pp: NO_SPACING, raw: [raw], before: 0 });
+            next = stop;
+            continue;
+          }
           const pp = resolveParagraph(paragraphs[next].props);
           const before = Math.max(0, pp.spacingBefore - above);
           for (const run of paragraphs[next].runs) {
@@ -1077,21 +1353,61 @@ function layoutFlow(
           any = true;
           content.push({ para: next++, pp, raw, before });
         }
-        return { cell, cellIndex, start, x, width, height, content, padLeft, padTop, padBottom: cell.padBottom ?? table.padBottom };
+        // A cell merged down holds its text across the rows of the run; one merged with the cell above shows none of its own.
+        const last = cell.merge ? runEnd(rowIndex, start) : rowIndex;
+        return { cell, cellIndex, start, x, width, height, content, padLeft, padTop, padBottom, last };
       });
       // Horizontal borders take room: the first row's top one, and under every row the thicker of its
       // bottom border and the top border of the row below.
       const below = table.rows[rowIndex + 1]?.cells ?? [];
       const borderTop = rowIndex === 0 ? Math.max(0, ...row.cells.map((c) => c.borderTop ?? 0)) : 0;
       const borderBottom = Math.max(0, ...row.cells.map((c) => c.borderBottom ?? 0), ...below.map((c) => c.borderTop ?? 0));
-      const height = Math.max(row.height, ...cells.map((c) => c.height)) + borderTop + borderBottom;
+      // The cells that are the whole of their run of rows say how tall the row is.
+      const own = cells.filter((c) => !c.cell.merge || (c.cell.merge === 'start' && c.last === rowIndex)).map((c) => c.height);
+      // The least height a row is given is what its cells hold, without the margins above and below their text: measured against Word.
+      const margins = Math.max(0, ...cells.map((c) => c.padTop + c.padBottom));
+      const height = row.exact ? row.height + borderTop + borderBottom : Math.max(row.height ? row.height + margins : 0, ...own) + borderTop + borderBottom;
       // A row whose paragraphs all ask to be kept with the next stays with the row after it.
-      return { cells, height, borderTop, borderBottom, min: row.height, cantSplit: !!row.cantSplit, kept: kept && any };
+      return { cells, height, borderTop, borderBottom, exact: !!row.exact, cantSplit: !!row.cantSplit, kept: kept && any };
+    });
+    // A cell merged down whose text needs more room than its rows have makes the last of them taller, as in Word.
+    rows.forEach((row, rowIndex) => {
+      for (const c of row.cells) {
+        if (c.cell.merge !== 'start' || c.last === rowIndex) continue;
+        let room = -row.borderTop - rows[c.last].borderBottom;
+        for (let k = rowIndex; k <= c.last; k++) room += rows[k].height;
+        if (c.height > room && !rows[c.last].exact) rows[c.last].height += c.height - room;
+      }
     });
 
+    type Item = { para: number; rl: RawLine; last: boolean; above: number; below: number; ghost?: boolean };
+    /** The lines of the table as they go on its pages, put in the document once the whole table is laid out. */
+    const set: (Item & { left: number; top: number; box: number; on: LayoutPage; copy?: boolean })[] = [];
     /** Per grid column, the box on this page that a cell merged with the one above goes on in. */
     let merged: (number | undefined)[] = [];
+    /** Per grid column, the lines of a cell merged down that the rows so far had no room for: they go on in the rows below. */
+    const carried = new Map<number, Item[]>();
     let keptRows = -1;
+    // Heading rows, when the table starts with some and has others: shown again at the top of every page it goes on to.
+    let headings = 0;
+    while (headings < table.rows.length && table.rows[headings].header) headings++;
+    if (headings === table.rows.length) headings = 0;
+    let heading: { top: number; height: number; left: number; boxes: CellBox[]; firstBox: number; items: typeof set } | undefined;
+    const headingFrom = { top: y, boxes: current().cells.length, page: current() };
+    /** Goes on in the next column or page, with the heading rows at its top. */
+    const breakTable = (rowIndex: number) => {
+      nextColumn();
+      merged = [];
+      if (!heading || rowIndex < headings) return;
+      const dy = y - heading.top;
+      const dx = colLeft - heading.left;
+      const page = current();
+      const base = page.cells.length;
+      for (const box of heading.boxes) page.cells.push({ ...box, x: box.x + dx, y: box.y + dy });
+      for (const it of heading.items) set.push({ ...it, left: it.left + dx, top: it.top + dy, box: base + it.box - heading.firstBox, on: page, copy: true });
+      y += heading.height;
+    };
+
     rows.forEach((row, rowIndex) => {
       if (row.kept && rowIndex > keptRows) {
         // The kept rows, the row after them and, past the end of the table, the first line that follows.
@@ -1100,49 +1416,44 @@ function layoutFlow(
         while (end < rows.length && rows[end].kept) needed += rows[end++].height;
         needed += end < rows.length ? rows[end].height : firstLineHeight(next);
         keptRows = end;
-        if (y + needed > bottom + EPSILON && needed <= pageHeight + EPSILON && !emptyPage()) {
-          newPage();
-          merged = [];
-        }
+        if (y + needed > bottom + EPSILON && needed <= pageHeight() + EPSILON && !emptyPage()) breakTable(rowIndex);
       }
       // The lines each cell still has to place, with the space that goes above and below each.
-      const queues = row.cells.map((c) =>
-        c.content.flatMap(({ para, pp, raw, before }) =>
-          raw.map((rl, i) => ({
-            para,
-            rl,
-            last: i === raw.length - 1,
-            above: i === 0 ? before : 0,
-            below: i === raw.length - 1 ? pp.spacingAfter : 0,
-          })),
-        ),
-      );
-      const set: { para: number; rl: RawLine; last: boolean; left: number; top: number; box: number; on: LayoutPage; above: number }[] = [];
+      const queues = row.cells.map((c): Item[] => {
+        const own = c.content.flatMap(({ para, pp, raw, before }) =>
+          raw.map((rl, i) => ({ para, rl, last: i === raw.length - 1, above: i === 0 ? before : 0, below: i === raw.length - 1 ? pp.spacingAfter : 0 })),
+        );
+        if (c.cell.merge !== 'continue') return own;
+        // What the run had no room for yet goes on here; the cell's own paragraphs, which Word does not show, take no room.
+        const rest = carried.get(c.start) ?? [];
+        carried.delete(c.start);
+        return [...rest, ...own.map((it) => ({ ...it, ghost: true }))];
+      });
+      /** Whether the cell's run goes on in the row below: its text does not make this row taller. */
+      const spans = row.cells.map((c) => c.last > rowIndex);
+      const tall = (it: Item) => (it.ghost ? 0 : it.above + it.rl.height + it.below);
 
       // A row goes on the page whole when it fits. Otherwise it is broken between lines, each cell
       // going on in the next page, unless it must not be split or not even a first line fits here.
       let first = true;
       for (;;) {
         const lead = (c: (typeof row.cells)[number]) => (first ? row.borderTop + c.padTop : 0);
-        const tallest = Math.max(
-          ...row.cells.map((c, i) => lead(c) + queues[i].reduce((h, it) => h + it.above + it.rl.height + it.below, 0) + c.padBottom),
-        );
-        const height = (first ? Math.max(tallest, row.min + row.borderTop) : tallest) + row.borderBottom;
+        const tallest = Math.max(0, ...row.cells.map((c, i) => (spans[i] ? 0 : lead(c) + queues[i].reduce((h, it) => h + tall(it), 0) + c.padBottom)));
+        const height = row.exact && first ? row.height : (first ? Math.max(tallest, row.height - row.borderBottom) : tallest) + row.borderBottom;
         const blank = emptyPage();
         let whole = y + height <= bottom + EPSILON;
         if (!whole) {
           const starts = row.cells.every((c, i) => {
             const [head] = queues[i];
-            return !head || y + lead(c) + head.above + head.rl.height <= bottom + EPSILON;
+            return spans[i] || !head || y + lead(c) + head.above + head.rl.height <= bottom + EPSILON;
           });
-          if (row.cantSplit || !starts) {
+          if (row.cantSplit || row.exact || !starts) {
             if (!blank) {
-              newPage();
-              merged = [];
+              breakTable(rowIndex);
               continue;
             }
             // Nothing above to move away from: a row that must stay whole runs off the page.
-            whole = row.cantSplit;
+            whole = row.cantSplit || row.exact;
           }
         }
         const segment = whole ? height : bottom - y;
@@ -1150,79 +1461,294 @@ function layoutFlow(
         row.cells.forEach((c, i) => {
           const boxes = current().cells;
           let box = c.cell.merge === 'continue' ? merged[c.start] : undefined;
+          const cellLines = c.cell.lines ?? (c.cell.borders ? undefined : {});
           if (box !== undefined) {
             boxes[box].height += segment;
+            // The run ends with the bottom line of its last cell.
+            const was = boxes[box];
+            if (was.lines || c.cell.lines) was.lines = { ...(was.lines ?? FOUR_LINES), bottom: (cellLines ?? FOUR_LINES).bottom };
           } else {
             box = boxes.length;
             boxes.push({
-              x: page.marginLeft + left + c.x,
-              y,
-              width: c.width,
-              height: segment,
+              x: colLeft + left + c.x + gap,
+              y: y + (first ? gap : 0),
+              width: c.width - 2 * gap,
+              height: segment - (first ? gap : 0) - (whole ? gap : 0),
               table: tableIndex,
               row: rowIndex,
               cell: c.cellIndex,
               borders: c.cell.borders,
+              ...(c.cell.lines ? { lines: c.cell.lines } : {}),
               ...(c.cell.shade ? { shade: c.cell.shade } : {}),
             });
           }
           merged[c.start] = c.cell.merge ? box : undefined;
           let top = y + lead(c);
+          /** Set when all the text of a cell merged down goes in now, its rows having room for it on this page. */
+          let settled = false;
+          if (first && whole && c.cell.merge !== 'continue') {
+            // The room of the cell: its row, or all the rows of its run.
+            let room = segment - row.borderBottom;
+            for (let k = rowIndex + 1; k <= c.last; k++) room += rows[k].height;
+            room -= c.last > rowIndex ? rows[c.last].borderBottom - row.borderBottom : 0;
+            const spare = room - lead(c) - queues[i].reduce((h, it) => h + tall(it), 0) - c.padBottom;
+            const onPage = y + room <= bottom + EPSILON;
+            settled = spans[i] && onPage && spare >= -EPSILON;
+            // Text set lower in its cell: by what the cell has to spare.
+            if (c.cell.valign && spare > 0 && (onPage || !spans[i])) top += c.cell.valign === 'center' ? spare / 2 : spare;
+          }
+          const end = y + segment - (spans[i] ? 0 : row.borderBottom);
           let taken = 0;
           for (const queue = queues[i]; queue.length; taken++) {
             const [it] = queue;
             // On a blank page every cell takes at least one line, or a line taller than the page would never be placed.
-            const fits = whole || top + it.above + it.rl.height <= bottom + EPSILON || (blank && taken === 0);
+            const fits = it.ghost || settled || (spans[i] ? top + it.above + it.rl.height <= end + EPSILON : whole || top + it.above + it.rl.height <= bottom + EPSILON || (blank && taken === 0));
             if (!fits) break;
-            top += it.above;
-            set.push({ para: it.para, rl: it.rl, last: it.last, left: page.marginLeft + left + c.x + c.padLeft, top, box, on: current(), above: it.above });
-            top += it.rl.height + it.below;
+            if (!it.ghost) top += it.above;
+            set.push({ ...it, left: colLeft + left + c.x + c.padLeft, top, box, on: current() });
+            if (!it.ghost) top += it.rl.height + it.below;
             queue.shift();
           }
+          // What a run merged down had no room for here goes on in the row below.
+          if (spans[i] && queues[i].length) carried.set(c.start, queues[i].splice(0));
         });
         y += segment;
         if (queues.every((queue) => !queue.length)) break;
-        newPage();
-        merged = [];
+        breakTable(rowIndex);
         first = false;
       }
-
-      // Lines go into the document in paragraph order, whichever page each one landed on.
-      set.sort((a, b) => a.para - b.para);
-      let lastPara = -1;
-      for (const it of set) {
-        if (it.para !== lastPara) {
-          paraFirstLine.push(lines.length);
-          // The pictures anchored in the paragraph are measured from its top, the space above it included,
-          // and from the left of what its cell holds.
-          placed = new Map();
-          let offset = 0;
-          for (const run of paragraphs[it.para].runs) {
-            const at = offset;
-            offset += run.text.length;
-            const anchor = anchorOf(run.props.object);
-            if (anchor && !placed.has(run.props.object!)) placed.set(run.props.object!, floatAt(anchor, run.props.object!, it.left, it.top - it.above, it.para, at));
-          }
-        }
-        lastPara = it.para;
-        place(it.para, it.rl, it.last, it.left, it.top, it.box, it.on);
+      // The heading rows, once all are placed on one page, are what is shown again on the next.
+      if (rowIndex === headings - 1 && headingFrom.page === current()) {
+        heading = {
+          top: headingFrom.top,
+          height: y - headingFrom.top,
+          left: colLeft,
+          boxes: current().cells.slice(headingFrom.boxes),
+          firstBox: headingFrom.boxes,
+          items: set.filter((it) => it.on === current() && it.box >= headingFrom.boxes),
+        };
       }
-      placed = new Map();
       spaceAbove = 0;
     });
+
+    // Lines go into the document in paragraph order, whichever page and row each one landed on;
+    // the heading rows shown again come last, as copies of lines already there.
+    const ordered = set.filter((it) => !it.copy).sort((a, b) => a.para - b.para);
+    const lineOf = new Map<RawLine, Line>();
+    let lastPara = -1;
+    for (const it of ordered) {
+      const inner = nested.get(it.rl);
+      if (inner) {
+        // A table in a cell: its boxes and its lines where the cell has it, its paragraphs among the cell's.
+        const base = it.on.cells.length;
+        const { page: sub, offset } = inner;
+        for (const box of sub.cells) it.on.cells.push({ ...box, x: box.x + it.left, y: box.y + it.top });
+        for (const f of sub.floats) it.on.floats.push({ ...f, x: f.x + it.left, y: f.fixed ? f.y : f.y + it.top, para: f.para + offset });
+        for (const l of sub.lines) {
+          const para = l.para + offset;
+          if (para !== lastPara) paraFirstLine.push(lines.length);
+          lastPara = para;
+          const line: Line = {
+            ...l,
+            index: lines.length,
+            page: it.on.index,
+            para,
+            x: l.x + it.left,
+            y: l.y + it.top,
+            baseline: l.baseline + it.top,
+            fragments: l.fragments.map((f) => ({ ...f, x: f.x + it.left, ...(f.leader ? { leader: { ...f.leader, x: f.leader.x + it.left } } : {}) })),
+            ...(l.label ? { label: { ...l.label, x: l.label.x + it.left } } : {}),
+            cell: l.cell === undefined ? it.box : base + l.cell,
+          };
+          lines.push(line);
+          it.on.lines.push(line);
+        }
+        continue;
+      }
+      if (it.para !== lastPara) {
+        paraFirstLine.push(lines.length);
+        // The pictures anchored in the paragraph are measured from its top, the space above it included,
+        // and from the left of what its cell holds.
+        placed = new Map();
+        let offset = 0;
+        for (const run of paragraphs[it.para].runs) {
+          const at = offset;
+          offset += run.text.length;
+          const anchor = anchorOf(run.props.object);
+          if (anchor && !placed.has(run.props.object!)) placed.set(run.props.object!, floatAt(anchor, run.props.object!, it.left, it.top - it.above, it.para, at));
+        }
+      }
+      lastPara = it.para;
+      place(it.para, it.rl, it.last, it.left, it.top, it.box, it.on);
+      lineOf.set(it.rl, lines[lines.length - 1]);
+    }
+    for (const it of set) {
+      if (!it.copy) continue;
+      const line = lineOf.get(it.rl);
+      if (!line) continue;
+      const dx = it.left - (line.x - it.rl.x);
+      const dy = it.top + (it.rl.pad ?? 0) - line.y;
+      it.on.lines.push({
+        ...line,
+        page: it.on.index,
+        x: line.x + dx,
+        y: line.y + dy,
+        baseline: line.baseline + dy,
+        fragments: line.fragments.map((f) => ({ ...f, x: f.x + dx, ...(f.leader ? { leader: { ...f.leader, x: f.leader.x + dx } } : {}) })),
+        ...(line.label ? { label: { ...line.label, x: line.label.x + dx } } : {}),
+        cell: it.box,
+      });
+    }
+    placed = new Map();
+
+    if (float) {
+      // The text after the table goes round it, from where the table started.
+      wraps.push({
+        left: colLeft + left - float.gapLeft,
+        right: colLeft + left + total + float.gapRight,
+        top: startY + float.y - float.gapTop,
+        bottom: y + float.gapBottom,
+        whole: false,
+        side: 'both',
+      });
+      y = startY;
+      bottom = keptBottom;
+      spaceAbove = keptAbove;
+    }
     return next;
   };
 
-  for (let i = 0; i < paragraphs.length; ) {
-    const ref = paragraphs[i].cell;
-    const table = ref && doc.tables?.[ref.table];
-    // A cell paragraph the table did not take (out of order, or of a missing table) flows as plain text.
-    const end = table && !(i > 0 && paragraphs[i - 1].cell?.table === ref.table) ? layoutTable(ref.table, table, i) : i;
-    if (end > i) i = end;
-    else flow(i++);
-  }
+  /** Lays out the paragraphs from `from` up to, not including, `to`. */
+  const run = (from: number, to: number) => {
+    for (let i = from; i < to; ) {
+      const ref = paragraphs[i].cell;
+      const table = ref && doc.tables?.[ref.table];
+      // A cell paragraph the table did not take (out of order, or of a missing table) flows as plain text.
+      const end = table && !(i > 0 && paragraphs[i - 1].cell?.table === ref.table) ? layoutTable(ref.table, table, i) : i;
+      if (end > i) i = end;
+      else flow(i++);
+    }
+  };
 
-  return { page, pages, lines, paraFirstLine, endY: y };
+  /** Everything the layout has done so far, to go back to it and lay out again from there. */
+  const mark = () => {
+    const at = current();
+    return {
+      pages: pages.length,
+      on: { lines: at.lines.length, cells: at.cells.length, floats: at.floats.length, rules: at.rules?.length ?? 0, columns: at.columns?.length ?? 0 },
+      lines: lines.length,
+      firsts: paraFirstLine.length,
+      state: { y, spaceAbove, top, bottom, col, colTop, deepest, columnFrom, columnStarts, keptUntil },
+      wraps: wraps.slice(),
+    };
+  };
+  const restore = (m: ReturnType<typeof mark>) => {
+    pages.length = m.pages;
+    const at = current();
+    at.lines.length = m.on.lines;
+    at.cells.length = m.on.cells;
+    at.floats.length = m.on.floats;
+    if (at.rules) at.rules.length = m.on.rules;
+    if (at.columns) at.columns.length = m.on.columns;
+    lines.length = m.lines;
+    paraFirstLine.length = m.firsts;
+    ({ y, spaceAbove, top, bottom, col, colTop, deepest, columnFrom, columnStarts, keptUntil } = m.state);
+    colLeft = columns[col].x;
+    contentWidth = columns[col].width;
+    wraps = m.wraps.slice();
+    placed = new Map();
+  };
+
+  /**
+   * Evens out the columns of the section just laid out, on the page it ends on,
+   * as Word does before a section that starts on the same page: the text is
+   * laid out again down shorter columns, as short as they can be with all of
+   * it still on that page.
+   */
+  const balance = (m: ReturnType<typeof mark>, from: number, to: number) => {
+    const last = pages.length - 1;
+    let lo = colTop;
+    let hi = bottom;
+    const fits = (limit: number) => {
+      restore(m);
+      cap = { page: last, bottom: limit };
+      if (pages.length - 1 === last) bottom = Math.min(bottom, limit);
+      run(from, to);
+      return pages.length - 1 === last;
+    };
+    for (let k = 0; k < 16 && hi - lo > 0.5; k++) {
+      const mid = (lo + hi) / 2;
+      if (fits(mid)) hi = mid;
+      else lo = mid;
+    }
+    fits(hi);
+    cap = undefined;
+    // The page goes on below the columns as far down as it did.
+    bottom = area(section, pages.length - 1).bottom;
+  };
+
+  /** Goes on to section `next`, where it asks to start. */
+  const startSection = (next: number) => {
+    const before = section;
+    const s = sections[next];
+    const geometry = columnGeometry(s.page, s.columns);
+    // A page of another size is always a new one.
+    const samePage = s.page.width === before.page.width && s.page.height === before.page.height;
+    let start = samePage ? s.start : 'nextPage';
+    if (start === 'nextColumn' && (geometry.length !== columns.length || col + 1 >= columns.length)) start = 'nextPage';
+    const enter = () => {
+      section = s;
+      sectionIndex = next;
+      page = s.page;
+      columns = geometry;
+    };
+    if (start === 'continuous') {
+      // It starts under the deepest column of the one before, in columns of its own.
+      closeColumns();
+      const wasColumns = before.columns.count > 1;
+      enter();
+      y = deepest;
+      colTop = y;
+      setColumn(0);
+      if (wasColumns) spaceAbove = 0;
+      return;
+    }
+    if (start === 'nextColumn') {
+      enter();
+      nextColumn(false);
+      return;
+    }
+    if (blankPage()) {
+      // Nothing is on this page yet: the section takes it.
+      enter();
+      current().section = next;
+      startArea();
+      return;
+    }
+    closeColumns();
+    // The space below the last paragraph of the section before still counts against the space above the first of this one, on its new page; not on a page of another size.
+    const after = samePage ? spaceAbove : 0;
+    enter();
+    pushPage();
+    // A section that starts on an odd page, or on an even one, leaves a page blank when it has to.
+    const number = pages.length;
+    if ((start === 'oddPage' && number % 2 === 0) || (start === 'evenPage' && number % 2 === 1)) pushPage();
+    spaceAbove = after;
+  };
+
+  let from = 0;
+  sections.forEach((s, k) => {
+    if (k > 0) startSection(k);
+    const m = mark();
+    run(from, Math.min(s.end, paragraphs.length));
+    const next = sections[k + 1];
+    const sameSize = next && next.page.width === s.page.width && next.page.height === s.page.height;
+    if (!continuous && next?.start === 'continuous' && sameSize && columns.length > 1) balance(m, from, Math.min(s.end, paragraphs.length));
+    from = s.end;
+  });
+  closeColumns();
+
+  return { page: sections[sections.length - 1].page, pages, lines, paraFirstLine, endY: y };
 }
 
 /** Stories with their page fields filled in, so the same page always gets the same paragraphs. */
@@ -1301,12 +1827,12 @@ function fillFields(story: Story, pageNumber: number, pageCount: number): Story 
 
 /** `cache` must always be used with the same measurer. */
 export function layoutDocument(doc: Doc, measurer: TextMeasurer, cache?: LayoutCache): Layout {
-  const { page } = doc;
+  const sections = sectionsOf(doc);
 
-  /** A header or footer laid out from y = 0, and its height. `part` is where its pictures live. */
-  const band = (story: Story, part: StoryPart, pageNumber: number, pageCount: number) => {
+  /** A header or footer laid out from y = 0 across `page`, and its height. `part` is where its pictures live. */
+  const band = (story: Story, part: StoryPart, pageNumber: number, pageCount: number, page: PageSetup) => {
     const filled = fillFields(story, pageNumber, pageCount);
-    const flow = layoutFlow({ ...doc, paragraphs: filled.paragraphs, tables: filled.tables }, measurer, cache, 0, Infinity);
+    const flow = layoutFlow({ ...doc, page, paragraphs: filled.paragraphs, tables: filled.tables }, measurer, cache, { area: () => ({ top: 0, bottom: Infinity }) });
     const [first] = flow.pages;
     const own = part === 'firstHeader' || part === 'firstFooter';
     const at = (dy: number): Band => ({
@@ -1317,33 +1843,49 @@ export function layoutDocument(doc: Doc, measurer: TextMeasurer, cache?: LayoutC
     });
     return { height: flow.endY, at, varies: filled !== story };
   };
-  const headerTop = page.headerDistance ?? 36;
-  const footerBottom = page.height - (page.footerDistance ?? 36);
   /** The header and the footer of a kind of page, and the text area they leave: one too tall for its margin takes room from it, as in Word. */
-  const frame = (head: Story | undefined, foot: Story | undefined, parts: [StoryPart, StoryPart]) => {
-    const header = head?.paragraphs.length ? { story: head, part: parts[0], ...band(head, parts[0], 1, 1) } : undefined;
-    const footer = foot?.paragraphs.length ? { story: foot, part: parts[1], ...band(foot, parts[1], 1, 1) } : undefined;
+  const frame = (page: PageSetup, head: Story | undefined, foot: Story | undefined, parts: [StoryPart, StoryPart]) => {
+    const header = head?.paragraphs.length ? { story: head, part: parts[0], ...band(head, parts[0], 1, 1, page) } : undefined;
+    const footer = foot?.paragraphs.length ? { story: foot, part: parts[1], ...band(foot, parts[1], 1, 1, page) } : undefined;
+    const headerTop = page.headerDistance ?? 36;
+    const footerBottom = page.height - (page.footerDistance ?? 36);
     return {
+      page,
       header,
       footer,
+      headerTop,
+      footerBottom,
       top: header ? Math.max(page.marginTop, headerTop + header.height) : page.marginTop,
       bottom: footer ? Math.min(page.height - page.marginBottom, footerBottom - footer.height) : page.height - page.marginBottom,
     };
   };
-  const rest = frame(doc.header, doc.footer, ['header', 'footer']);
-  // The first page shows its own when the document says it has them, even if that is nothing.
-  const opening = doc.firstPage ? frame(doc.firstPage.header, doc.firstPage.footer, ['firstHeader', 'firstFooter']) : rest;
+  /** The frames already worked out, by page setup and by what they hold. */
+  const frames = new Map<PageSetup, Map<string, ReturnType<typeof frame>>>();
+  /** The frame of a page of a section: the first page shows its own header and footer when the document says it has them, even if that is nothing. */
+  const frameFor = (section: FlowSection, pageIndex: number) => {
+    const first = pageIndex === 0 && !!doc.firstPage;
+    const head = first ? doc.firstPage!.header : section.noHeader ? undefined : doc.header;
+    const foot = first ? doc.firstPage!.footer : section.noFooter ? undefined : doc.footer;
+    const key = `${first}:${!!head}:${!!foot}`;
+    let byPage = frames.get(section.page);
+    if (!byPage) frames.set(section.page, (byPage = new Map()));
+    let made = byPage.get(key);
+    if (!made) byPage.set(key, (made = frame(section.page, head, foot, first ? ['firstHeader', 'firstFooter'] : ['header', 'footer'])));
+    return made;
+  };
 
-  const { endY: _, ...layout } = layoutFlow(doc, measurer, cache, rest.top, rest.bottom, opening);
+  const { endY: _, ...layout } = layoutFlow(doc, measurer, cache, { area: frameFor, sections });
   const count = layout.pages.length;
   // One that says the page it is on is laid out again for each; any other is the same, the very same, on all its pages.
   const same = new Map<object, Band>();
   const once = (of: { at: (dy: number) => Band }, dy: number) => same.get(of) ?? (same.set(of, of.at(dy)), same.get(of)!);
   for (const p of layout.pages) {
-    const { header, footer } = p.index === 0 ? opening : rest;
-    if (header) p.header = header.varies ? band(header.story, header.part, p.index + 1, count).at(headerTop) : once(header, headerTop);
-    if (footer) p.footer = footer.varies ? band(footer.story, footer.part, p.index + 1, count).at(footerBottom - footer.height) : once(footer, footerBottom - footer.height);
+    const { header, footer, page, headerTop, footerBottom } = frameFor(sections[p.section ?? sections.length - 1], p.index);
+    if (header) p.header = header.varies ? band(header.story, header.part, p.index + 1, count, page).at(headerTop) : once(header, headerTop);
+    if (footer) p.footer = footer.varies ? band(footer.story, footer.part, p.index + 1, count, page).at(footerBottom - footer.height) : once(footer, footerBottom - footer.height);
   }
+  // A document of one section says nothing of sections on its pages.
+  if (sections.length === 1) for (const p of layout.pages) delete p.section;
   return layout;
 }
 
@@ -1354,7 +1896,7 @@ export function layoutDocument(doc: Doc, measurer: TextMeasurer, cache?: LayoutC
  */
 export function layoutContinuous(doc: Doc, measurer: TextMeasurer, cache?: LayoutCache): Layout {
   const { page } = doc;
-  const { endY, ...layout } = layoutFlow(doc, measurer, cache, page.marginTop, Infinity, undefined, true);
+  const { endY, ...layout } = layoutFlow(doc, measurer, cache, { area: () => ({ top: page.marginTop, bottom: Infinity }), continuous: true });
   return { ...layout, page: { ...page, height: endY + page.marginBottom } };
 }
 
@@ -1431,6 +1973,27 @@ export function caretRect(layout: Layout, measurer: TextMeasurer, pos: Position)
   return { page: line.page, x: xAtOffset(line, pos.offset, measurer), y: line.y, width: 0, height: line.height };
 }
 
+/**
+ * Of the lines of a page set out in columns, those of the column the point is
+ * in, or the nearest one of that part of the page. Elsewhere, the lines in no
+ * column.
+ */
+function columnAt(page: LayoutPage, lines: Line[], x: number, y: number): Line[] {
+  const columns = page.columns;
+  if (!columns?.length) return lines;
+  const within = (l: Line, c: ColumnBox) => l.index >= c.from && l.index < c.to;
+  const band = columns.filter((c) => y >= c.y && y < c.y + c.height);
+  if (!band.length) {
+    const outside = lines.filter((l) => !columns.some((c) => within(l, c)));
+    return outside.length ? outside : lines;
+  }
+  const gap = (c: ColumnBox) => (x < c.x ? c.x - x : x > c.x + c.width ? x - c.x - c.width : 0);
+  let column = band[0];
+  for (const c of band) if (gap(c) < gap(column)) column = c;
+  const inside = lines.filter((l) => within(l, column));
+  return inside.length ? inside : lines;
+}
+
 /** Maps a point in page coordinates to the nearest document position. */
 export function hitTest(layout: Layout, measurer: TextMeasurer, pageIndex: number, x: number, y: number): Position {
   const page = layout.pages[Math.max(0, Math.min(pageIndex, layout.pages.length - 1))];
@@ -1441,7 +2004,8 @@ export function hitTest(layout: Layout, measurer: TextMeasurer, pageIndex: numbe
   page.cells.forEach((c, i) => {
     if (y < c.y || y >= c.y + c.height) return;
     const d = x < c.x ? c.x - x : x >= c.x + c.width ? x - (c.x + c.width) + EPSILON : 0;
-    if (d < distance) {
+    // Of boxes one inside another, a table's in a cell, the inner one, which comes after.
+    if (d <= distance) {
       box = i;
       distance = d;
     }
@@ -1453,6 +2017,7 @@ export function hitTest(layout: Layout, measurer: TextMeasurer, pageIndex: numbe
     const before = layout.lines.filter((l) => l.page < page.index);
     pageLines = [before[before.length - 1] ?? layout.lines[0]];
   }
+  if (box < 0) pageLines = columnAt(page, pageLines, x, y);
   let line = pageLines[0];
   for (const candidate of pageLines) {
     if (candidate.y <= y) line = candidate;

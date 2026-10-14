@@ -97,7 +97,7 @@ export default async function Home() {
   return (
     <main>
       <section className="mx-auto max-w-6xl px-4 pb-4 pt-16 text-center sm:px-6 sm:pt-24">
-        <p className="mx-auto mb-5 w-fit rounded-full border border-line bg-soft px-3.5 py-1 text-[13px] font-medium text-muted">Open source · MIT · v0.5.0</p>
+        <p className="mx-auto mb-5 w-fit rounded-full border border-line bg-soft px-3.5 py-1 text-[13px] font-medium text-muted">Open source · MIT · v0.6.0</p>
         <h1 className="mx-auto max-w-[17ch] text-[clamp(38px,6.4vw,68px)] font-extrabold leading-[1.04] tracking-[-0.035em]">
           The document editor you <span className="bg-gradient-to-r from-brand to-accent bg-clip-text text-transparent">build into your app</span>
         </h1>

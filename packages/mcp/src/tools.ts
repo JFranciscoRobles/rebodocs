@@ -8,6 +8,7 @@
 // place inside a paragraph goes by its text: what to find, and which time.
 
 import {
+  cellOfTable,
   type Doc,
   type StoryPart,
   storyKind,
@@ -28,6 +29,7 @@ import {
   canSplitCell,
   deleteColumn,
   deleteRow,
+  deleteTable,
   imageExtension,
   insertColumn,
   insertImage,
@@ -717,13 +719,13 @@ export const TOOLS: Tool[] = [
         fail('A table the header or the footer of the file came with cannot be given another shape here: change the text of its cells, or make a new table.');
       }
       const other = whole(args, 'to_paragraph') === undefined ? para : paragraphIndex(doc, args, 'to_paragraph');
-      if (doc.paragraphs[other].cell?.table !== at.tableIndex) fail(`Paragraph ${other + 1} is not in the same table.`);
+      if (!cellOfTable(doc.tables, doc.paragraphs[other].cell, at.tableIndex)) fail(`Paragraph ${other + 1} is not in the same table.`);
       const action = text(args, 'action');
-      /** The paragraphs of the table, which are one after another. */
+      /** The paragraphs of the table, which are one after another, those of the tables in its cells among them. */
       const span = (now: Doc, table: number) => {
-        const from = now.paragraphs.findIndex((p) => p.cell?.table === table);
+        const from = now.paragraphs.findIndex((p) => cellOfTable(now.tables, p.cell, table));
         let to = from;
-        while (now.paragraphs[to + 1]?.cell?.table === table) to++;
+        while (cellOfTable(now.tables, now.paragraphs[to + 1]?.cell, table)) to++;
         return { from, to };
       };
       const all = span(doc, at.tableIndex);
@@ -777,10 +779,8 @@ export const TOOLS: Tool[] = [
           next = setCellProps(doc, all.from, all.to, { borders: action === 'show_borders' });
           break;
         case 'delete_table': {
-          // Row by row: the table goes with its last one.
-          next = doc;
-          for (let row = at.table.rows.length; row > 0; row--) next = deleteRow(next, all.from).doc;
-          return { text: 'Table deleted. The paragraphs after it moved up.', doc: next, reveal: { para: Math.min(all.from, next.paragraphs.length - 1), offset: 0 } };
+          const gone = deleteTable(doc, para);
+          return { text: 'Table deleted. The paragraphs after it moved up.', doc: gone.doc, reveal: gone.pos };
         }
         default:
           return fail(`There is no action "${action}".`);

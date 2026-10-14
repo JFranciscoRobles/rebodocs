@@ -35,6 +35,7 @@ import {
   deleteColumn,
   deleteRange,
   deleteRow,
+  deleteTable,
   docImage,
   docEnd,
   docStart,
@@ -119,6 +120,10 @@ import {
   replaceRange,
   sectionAt,
   resizeColumn,
+  resizeRow,
+  setRowHeight,
+  resizeTable,
+  MIN_ROW_HEIGHT,
   resizePicture,
   resolveParagraph,
   resolveRun,
@@ -146,6 +151,17 @@ import {
   xAtOffset,
   removeLetterhead,
   setLetterhead,
+  type Border,
+  type CellPatch,
+  cellOfTable,
+  type LayoutPage,
+  type Columns,
+  ONE_COLUMN,
+  boxLines,
+  columnsAt,
+  insertColumnBreak,
+  setColumns,
+  setHeaderRow,
 } from '@rebodocs/core';
 import { onLocaleChange, t } from './i18n';
 import { fontFile, onFontsChange } from './fonts';
@@ -224,6 +240,8 @@ const WHEEL_ZOOM = 300;
 const MAX_FIND_MARKS = 400;
 /** How near the edge of a column, in pixels, the pointer takes hold of it. */
 const COLUMN_GRIP = 3;
+/** How near the bottom right corner of a table, in pixels, it can be taken to make the whole table larger or smaller. */
+const TABLE_GRIP = 6;
 /** The smallest a picture is dragged to, in points, and how far a press must move to become a drag. */
 const MIN_PICTURE = 8;
 const DRAG_START = 4;
@@ -269,6 +287,7 @@ const CSS = `
 .dx-cell{position:absolute;box-sizing:border-box;pointer-events:none}
 .dx-cell-lines{outline:.5pt solid #000;outline-offset:-.25pt}
 .dx-cell-guide{outline:.5pt dashed #a9c3ee;outline-offset:-.25pt}
+.dx-rule{position:absolute;border-left:.5pt solid #000;pointer-events:none}
 .dx-band{position:absolute;left:0;top:0}
 .dx-editing .dx-band{opacity:.4}
 .dx-editing-header .dx-band-header,.dx-editing-footer .dx-band-footer{opacity:1}
@@ -300,6 +319,10 @@ const CSS = `
 .dx-objh-ne{left:100%;top:0;cursor:nesw-resize}.dx-objh-sw{left:0;top:100%;cursor:nesw-resize}
 .dx-col-resize .dx-page{cursor:col-resize}
 .dx-guide{position:absolute;width:0;border-left:1px dashed #0b57d0;pointer-events:none;z-index:3}
+.dx-guide-row{position:absolute;height:0;border-top:1px dashed #0b57d0;pointer-events:none;z-index:3}
+.dx-guide-box{position:absolute;border:1px dashed #0b57d0;pointer-events:none;z-index:3}
+.dx-row-resize .dx-page{cursor:row-resize}
+.dx-table-resize .dx-page{cursor:nwse-resize}
 .dx-print{display:none}
 @media print{
 body>:not(.dx-print){display:none!important}
@@ -365,6 +388,10 @@ export class Editor {
   private found: Range[] = [];
   /** A drag under way that is not a selection: the edge of a column, the corner of a picture, or a picture. */
   private columnDrag: { table: number; boundary: number; startX: number; scale: number; guide: HTMLElement } | undefined;
+  /** The bottom edge of a table row being dragged: the row, how tall it is drawn, and the line that shows where it goes. */
+  private rowDrag: { table: number; row: number; height: number; startY: number; scale: number; guide: HTMLElement } | undefined;
+  /** The corner of a table being dragged: the table, where it is on the page in pixels, and the box that shows its new size. */
+  private tableDrag: { table: number; startX: number; startY: number; width: number; height: number; guide: HTMLElement } | undefined;
   private pictureResize: { pos: Position; corner: string; startX: number; box: Rect; frame: HTMLElement; width: number; height: number; max: number; floating: boolean } | undefined;
   /** A floating picture being dragged to another place on its page. */
   private floatDrag: { pos: Position; x: number; y: number; active: boolean; box: Rect } | undefined;
@@ -391,7 +418,7 @@ export class Editor {
   private resizeObserver: ResizeObserver;
   private selLayers: HTMLElement[] = [];
   /** What each page element currently shows: the line boxes and where they sit, and the table cells. */
-  private painted: { lines: { raw: object; y: number }[]; cells: CellBox[]; floats: number }[] = [];
+  private painted: { lines: { raw: object; y: number }[]; cells: CellBox[]; floats: number; rules: string }[] = [];
   /** Object URLs of the pictures of the loaded document, by the part they are in and their XML. */
   private imageUrls = new Map<string, string | null>();
   /** Fonts the loaded document carries with it, registered with the page while it is open. */
@@ -1816,6 +1843,13 @@ export class Editor {
     if (result.doc !== this.text) this.commit(result.doc, { anchor: result.pos, focus: result.pos });
   }
 
+  /** Removes the whole table the caret is in, the innermost for a table in a cell. */
+  deleteTable(): void {
+    if (!this.canEditTables) return;
+    const result = deleteTable(this.text, this.selection.focus.para);
+    if (result.doc !== this.text) this.commit(result.doc, { anchor: result.pos, focus: result.pos });
+  }
+
   /** True when the selection covers several cells of a table, which can be made one. */
   get canMergeCells(): boolean {
     return this.canEditTables && canMergeCells(this.text, this.selection.anchor.para, this.selection.focus.para);
@@ -1837,14 +1871,19 @@ export class Editor {
     if (this.canSplitCell) this.reshapeTable(splitCell(this.text, this.selection.focus.para));
   }
 
-  /** The borders and the shading of the caret's cell; undefined outside a table. */
-  activeCellProps(): { borders: boolean; shade: string } | undefined {
-    const cell = locateCell(this.text, this.selection.focus.para)?.cell;
-    return cell && { borders: cell.borders, shade: cell.shade ?? '' };
+  /** The borders, the line, the shading and the place of the text of the caret's cell, and whether its row is a heading; undefined outside a table. */
+  activeCellProps(): { borders: boolean; shade: string; valign: 'top' | 'center' | 'bottom'; line?: Border; header: boolean; height: number; exact: boolean } | undefined {
+    const loc = locateCell(this.text, this.selection.focus.para);
+    if (!loc) return undefined;
+    const { cell, row } = loc;
+    const sides = cell.lines;
+    // The line the cell is drawn with, when all its sides have the same one.
+    const line = sides?.top && (['right', 'bottom', 'left'] as const).every((k) => JSON.stringify(sides[k]) === JSON.stringify(sides.top)) ? sides.top : undefined;
+    return { borders: cell.borders, shade: cell.shade ?? '', valign: cell.valign ?? 'top', line, header: !!row.header, height: row.height, exact: !!row.exact };
   }
 
-  /** Sets the borders or the shading ('' for none) of the cells the selection covers. */
-  setTableCellProps(patch: { borders?: boolean; shade?: string }): void {
+  /** Sets the borders, their line, the shading ('' for none) or the place of the text of the cells the selection covers. */
+  setTableCellProps(patch: CellPatch): void {
     if (!this.canEditTables) return;
     const doc = setCellProps(this.text, this.selection.anchor.para, this.selection.focus.para, patch);
     if (doc !== this.text) this.commit(doc, this.selection);
@@ -1854,10 +1893,11 @@ export class Editor {
   private tableSpan(): { from: number; to: number } | undefined {
     const table = this.text.paragraphs[this.selection.focus.para].cell?.table;
     if (table === undefined) return undefined;
-    // The paragraphs of a table are consecutive.
-    const from = this.text.paragraphs.findIndex((p) => p.cell?.table === table);
+    // The paragraphs of a table are consecutive, those of the tables in its cells among them.
+    const { paragraphs, tables } = this.text;
+    const from = paragraphs.findIndex((p) => cellOfTable(tables, p.cell, table));
     let to = from;
-    while (this.text.paragraphs[to + 1]?.cell?.table === table) to++;
+    while (cellOfTable(tables, paragraphs[to + 1]?.cell, table)) to++;
     return { from, to };
   }
 
@@ -1872,6 +1912,20 @@ export class Editor {
     const span = this.tableSpan();
     if (!span || !this.canEditTables) return;
     const doc = setCellProps(this.text, span.from, span.to, { borders: on });
+    if (doc !== this.text) this.commit(doc, this.selection);
+  }
+
+  /** Makes the caret's row, and those above it, heading rows shown again on every page the table goes on to; or makes it an ordinary row again. */
+  /** Sets the height of the caret's row, in points: the least it is given or, `exact`, the one it has whatever it holds; 0 for as tall as what it holds. */
+  setTableRowHeight(height: number, exact = false): void {
+    if (!this.canEditTables) return;
+    const doc = setRowHeight(this.text, this.selection.focus.para, height, exact);
+    if (doc !== this.text) this.commit(doc, this.selection);
+  }
+
+  setHeaderRow(on: boolean): void {
+    if (!this.canEditTables) return;
+    const doc = setHeaderRow(this.text, this.selection.focus.para, on);
     if (doc !== this.text) this.commit(doc, this.selection);
   }
 
@@ -1918,6 +1972,30 @@ export class Editor {
   /** Starts a new page at the caret. */
   insertPageBreak(): void {
     this.insertText('\f');
+  }
+
+  /** The columns of the section the caret is in; one outside the body of the document. */
+  get columns(): Columns {
+    return this.area === 'body' ? columnsAt(this.doc, this.selection.focus.para) : ONE_COLUMN;
+  }
+
+  /**
+   * Sets the text in columns: the whole section the caret is in or, with a
+   * selection, the selected paragraphs alone, as a section of their own on
+   * the same page as what is around them.
+   */
+  setColumns(columns: Columns): void {
+    if (this.area !== 'body') return;
+    const doc = setColumns(this.doc, this.range, columns);
+    if (doc !== this.doc) this.commitDoc(doc, this.selection);
+  }
+
+  /** Goes on in the next column from the caret: what follows starts at the top of it. */
+  insertColumnBreak(): void {
+    if (this.area !== 'body' || this.inTable) return;
+    const doc = this.collapsed ? this.doc : deleteRange(this.doc, this.range);
+    const result = insertColumnBreak(doc, this.range.from);
+    if (result.doc !== doc) this.commitDoc(result.doc, { anchor: result.pos, focus: result.pos });
   }
 
   /** Changes the size or the margins of the page. */
@@ -2076,12 +2154,13 @@ export class Editor {
         lines.every((l, k) => l.raw === before.lines[k].raw && l.y === before.lines[k].y) &&
         cells.every((c, k) => {
           const was = before.cells[k];
-          return c.y === was.y && c.height === was.height && c.x === was.x && c.width === was.width && c.borders === was.borders && c.shade === was.shade;
-        })
+          return c.y === was.y && c.height === was.height && c.x === was.x && c.width === was.width && c.borders === was.borders && c.shade === was.shade && c.lines === was.lines;
+        }) &&
+        JSON.stringify(layoutPage.rules ?? []) === before.rules
       ) {
         return;
       }
-      this.painted[i] = { lines: lines.map((l) => ({ raw: l.raw, y: l.y })), cells, floats: floats.length };
+      this.painted[i] = { lines: lines.map((l) => ({ raw: l.raw, y: l.y })), cells, floats: floats.length, rules: JSON.stringify(layoutPage.rules ?? []) };
 
       const sheet = document.createDocumentFragment();
       // Each part in a box of its own, so the ones not being edited can be dimmed.
@@ -2093,14 +2172,26 @@ export class Editor {
         for (const float of band.floats) if (float.behind) content.appendChild(this.pictureElement(float.xml, float, float.part));
         for (const cell of band.cells) {
           const box = document.createElement('div');
+          const sides = boxLines(cell);
+          const whole = !!(sides.top && sides.right && sides.bottom && sides.left);
           // A cell without borders shows where it is with a faint line, which is not part of the document.
-          box.className = cell.borders ? 'dx-cell dx-cell-lines' : 'dx-cell dx-cell-guide';
+          box.className = !cell.lines && cell.borders ? 'dx-cell dx-cell-lines' : whole ? 'dx-cell' : 'dx-cell dx-cell-guide';
           if (cell.shade) box.style.background = `#${cell.shade}`;
           box.style.left = `${cell.x}pt`;
           box.style.top = `${cell.y}pt`;
           box.style.width = `${cell.width}pt`;
           box.style.height = `${cell.height}pt`;
           content.appendChild(box);
+          if (cell.lines) content.appendChild(this.cellLinesElement(cell));
+        }
+        // The lines down between the columns of a section.
+        for (const rule of (band as LayoutPage).rules ?? []) {
+          const line = document.createElement('div');
+          line.className = 'dx-rule';
+          line.style.left = `${rule.x - 0.25}pt`;
+          line.style.top = `${rule.top}pt`;
+          line.style.height = `${rule.bottom - rule.top}pt`;
+          content.appendChild(line);
         }
         for (const line of band.lines) {
           if (line.label) content.appendChild(this.textElement(line.label, line));
@@ -2124,6 +2215,25 @@ export class Editor {
       sheet.appendChild(this.selLayers[i]);
       this.sheetEls[i].replaceChildren(sheet);
     });
+  }
+
+  /** The lines of a cell that has its own, each side with its line, centred on the edge of the cell. */
+  private cellLinesElement(cell: CellBox): HTMLElement {
+    const sides = boxLines(cell);
+    const room = (line: Border | undefined) => (!line ? 0 : line.style === 'double' ? line.width * 3 : line.width);
+    const [top, right, bottom, left] = [sides.top, sides.right, sides.bottom, sides.left].map(room);
+    const node = document.createElement('div');
+    node.className = 'dx-cell';
+    const s = node.style;
+    s.left = `${cell.x - left / 2}pt`;
+    s.top = `${cell.y - top / 2}pt`;
+    s.width = `${cell.width + (left + right) / 2}pt`;
+    s.height = `${cell.height + (top + bottom) / 2}pt`;
+    for (const [side, line] of Object.entries(sides) as [string, Border][]) {
+      // CSS draws a double line as two in a border three times as thick as each.
+      s.setProperty(`border-${side}`, `${Math.max(0.5, room(line))}pt ${line.style === 'single' ? 'solid' : line.style} #${line.color}`);
+    }
+    return node;
   }
 
   private textElement(f: Fragment, line: Line): HTMLElement {
@@ -2563,6 +2673,68 @@ export class Editor {
     return undefined;
   }
 
+  /** The bottom edge of a table row under the point: dragging it makes the row taller or shorter. */
+  private rowEdgeAt(clientX: number, clientY: number): { table: number; row: number; height: number; scale: number } | undefined {
+    if (this.area !== 'body') return undefined;
+    const index = this.pageAt(clientY);
+    const rect = this.pageEls[index].getBoundingClientRect();
+    const scale = this.layout.page.width / rect.width;
+    const x = (clientX - rect.left) * scale;
+    const y = (clientY - rect.top) * scale;
+    const cells = this.layout.pages[index].cells;
+    // The last of them: of a table in a cell and the cell, the inner one.
+    let edge: { table: number; bottom: number } | undefined;
+    for (const cell of cells) {
+      if (x < cell.x || x > cell.x + cell.width || Math.abs(y - (cell.y + cell.height)) > COLUMN_GRIP * scale) continue;
+      edge = { table: cell.table, bottom: cell.y + cell.height };
+    }
+    if (!edge) return undefined;
+    const { table, bottom } = edge;
+    // A cell merged down ends with the last row it covers: the row is the lowest of those ending at the edge.
+    const ending = cells.filter((c) => c.table === table && Math.abs(c.y + c.height - bottom) < 0.5);
+    const row = Math.max(...ending.map((c) => c.row));
+    if (!this.doc.tables?.[table]?.rows[row]) return undefined;
+    // As tall as its cells that cover it alone; a cell merged down is taller.
+    const height = Math.min(...cells.filter((c) => c.table === table && c.row === row).map((c) => c.height));
+    return { table, row, height, scale };
+  }
+
+  /** The bottom right corner of a table under the point: dragging it makes the whole table larger or smaller. */
+  private tableCornerAt(clientX: number, clientY: number): { table: number; scale: number } | undefined {
+    if (this.area !== 'body') return undefined;
+    const index = this.pageAt(clientY);
+    const rect = this.pageEls[index].getBoundingClientRect();
+    const scale = this.layout.page.width / rect.width;
+    const x = (clientX - rect.left) * scale;
+    const y = (clientY - rect.top) * scale;
+    const corners = new Map<number, { right: number; bottom: number }>();
+    for (const cell of this.layout.pages[index].cells) {
+      const at = corners.get(cell.table) ?? { right: -Infinity, bottom: -Infinity };
+      corners.set(cell.table, { right: Math.max(at.right, cell.x + cell.width), bottom: Math.max(at.bottom, cell.y + cell.height) });
+    }
+    const grip = TABLE_GRIP * scale;
+    let found: number | undefined;
+    for (const [table, { right, bottom }] of corners) {
+      // The table's last page: the corner is where the table ends.
+      if (this.layout.pages.slice(index + 1).some((p) => p.cells.some((c) => c.table === table))) continue;
+      if (x >= right - grip && x <= right + grip && y >= bottom - grip && y <= bottom + grip) found = table;
+    }
+    return found === undefined ? undefined : { table: found, scale };
+  }
+
+  /** How tall each row of a table is drawn, over all the pages it is on. */
+  private rowHeights(tableIndex: number): number[] {
+    const table = this.doc.tables?.[tableIndex];
+    if (!table) return [];
+    const heights = table.rows.map(() => 0);
+    for (const page of this.layout.pages) {
+      const least = new Map<number, number>();
+      for (const c of page.cells) if (c.table === tableIndex) least.set(c.row, Math.min(least.get(c.row) ?? Infinity, c.height));
+      for (const [row, height] of least) heights[row] += height;
+    }
+    return heights;
+  }
+
   private scrollCaretIntoView(): void {
     const { top, height, left } = this.caretBox();
     const bottom = top + height;
@@ -2633,6 +2805,36 @@ export class Editor {
       // A floating picture can be as wide as the page; one in the line, as its column.
       const max = picked.floating ? this.layout.page.width : column.right - column.left;
       this.pictureResize = { pos: picked.pos, corner: corner.dataset.corner ?? 'se', startX: e.clientX, box: picked.box, frame, width: picked.box.width, height: picked.box.height, max, floating: picked.floating };
+      return;
+    }
+    // The corner of a table: dragging it makes the whole table larger or smaller.
+    const grip = e.detail === 1 && this.view !== 'flow' ? this.tableCornerAt(e.clientX, e.clientY) : undefined;
+    if (grip) {
+      const boxes = this.layout.pages[this.pageAt(e.clientY)].cells.filter((c) => c.table === grip.table);
+      const pageEl = this.pageEls[this.pageAt(e.clientY)];
+      const px = 1 / grip.scale;
+      const left = Math.min(...boxes.map((c) => c.x));
+      const top = Math.min(...boxes.map((c) => c.y));
+      const width = (Math.max(...boxes.map((c) => c.x + c.width)) - left) * px;
+      const height = (Math.max(...boxes.map((c) => c.y + c.height)) - top) * px;
+      const guide = document.createElement('div');
+      guide.className = 'dx-guide-box';
+      Object.assign(guide.style, { left: `${pageEl.offsetLeft + left * px}px`, top: `${pageEl.offsetTop + top * px}px`, width: `${width}px`, height: `${height}px` });
+      this.pagesEl.appendChild(guide);
+      this.tableDrag = { table: grip.table, startX: e.clientX, startY: e.clientY, width, height, guide };
+      return;
+    }
+    // The bottom edge of a table row: dragging it makes the row taller or shorter.
+    const rowEdge = e.detail === 1 && this.view !== 'flow' ? this.rowEdgeAt(e.clientX, e.clientY) : undefined;
+    if (rowEdge) {
+      const guide = document.createElement('div');
+      guide.className = 'dx-guide-row';
+      const pageEl = this.pageEls[this.pageAt(e.clientY)];
+      guide.style.left = `${pageEl.offsetLeft}px`;
+      guide.style.width = `${pageEl.offsetWidth}px`;
+      guide.style.top = `${e.clientY - this.pagesEl.getBoundingClientRect().top}px`;
+      this.pagesEl.appendChild(guide);
+      this.rowDrag = { ...rowEdge, startY: e.clientY, guide };
       return;
     }
     // The edge of a table column: dragging it moves the edge.
@@ -2815,6 +3017,19 @@ export class Editor {
       this.columnDrag.guide.style.left = `${e.clientX - this.pagesEl.getBoundingClientRect().left}px`;
       return;
     }
+    if (this.rowDrag) {
+      const drag = this.rowDrag;
+      // Not above the least a row can be.
+      const lowest = drag.startY - (drag.height - MIN_ROW_HEIGHT) / drag.scale;
+      drag.guide.style.top = `${Math.max(lowest, e.clientY) - this.pagesEl.getBoundingClientRect().top}px`;
+      return;
+    }
+    if (this.tableDrag) {
+      const drag = this.tableDrag;
+      drag.guide.style.width = `${Math.max(8, drag.width + e.clientX - drag.startX)}px`;
+      drag.guide.style.height = `${Math.max(8, drag.height + e.clientY - drag.startY)}px`;
+      return;
+    }
     if (this.pictureResize) {
       // The corner follows the pointer sideways; the picture keeps its proportions, and the corner across stays put.
       const drag = this.pictureResize;
@@ -2851,8 +3066,12 @@ export class Editor {
     }
     if (!this.dragging) {
       // Over the edge of a column the pointer says it can be dragged.
-      const over = this.view !== 'flow' && this.pagesEl.contains(e.target as Node) && !!this.columnEdgeAt(e.clientX, e.clientY);
-      this.pagesEl.classList.toggle('dx-col-resize', over);
+      const on = this.view !== 'flow' && this.pagesEl.contains(e.target as Node);
+      const corner = on && !!this.tableCornerAt(e.clientX, e.clientY);
+      const row = on && !corner && !!this.rowEdgeAt(e.clientX, e.clientY);
+      this.pagesEl.classList.toggle('dx-table-resize', corner);
+      this.pagesEl.classList.toggle('dx-row-resize', row);
+      this.pagesEl.classList.toggle('dx-col-resize', on && !corner && !row && !!this.columnEdgeAt(e.clientX, e.clientY));
       return;
     }
     const pos = this.positionFromPoint(e.clientX, e.clientY);
@@ -2868,6 +3087,28 @@ export class Editor {
     // With the command key held, a click on a link opens what it goes to.
     const out = this.collapsed && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.button === 0 ? this.linkUnder(e) : undefined;
     if (out !== undefined) this.openLink(out);
+    if (this.rowDrag) {
+      const { table, row, height, startY, scale, guide } = this.rowDrag;
+      this.rowDrag = undefined;
+      guide.remove();
+      const doc = resizeRow(this.doc, table, row, height + (e.clientY - startY) * scale);
+      if (doc !== this.doc) this.commitDoc(doc, this.selection);
+      return;
+    }
+    if (this.tableDrag) {
+      const { table, startX, startY, width, height, guide } = this.tableDrag;
+      this.tableDrag = undefined;
+      guide.remove();
+      const laidOut = this.doc.tables?.[table];
+      if (!laidOut) return;
+      const { width: pageWidth, marginLeft, marginRight } = this.doc.page;
+      const columns = tableGeometry(laidOut, pageWidth - marginLeft - marginRight).columns;
+      const scaleX = Math.max(8, width + e.clientX - startX) / width;
+      const scaleY = Math.max(8, height + e.clientY - startY) / height;
+      const doc = resizeTable(this.doc, table, columns, scaleX, this.rowHeights(table), scaleY);
+      if (doc !== this.doc) this.commitDoc(doc, this.selection);
+      return;
+    }
     if (this.columnDrag) {
       const { table, boundary, startX, scale, guide } = this.columnDrag;
       this.columnDrag = undefined;

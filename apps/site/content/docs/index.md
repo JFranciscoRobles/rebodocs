@@ -6,7 +6,7 @@ It was built to live inside another application: a CRM that fills contract and r
 
 ## What you get
 
-- **A word processor.** Formatting, styles, lists, tables, pictures, headers and footers, page numbers, links, comments, table of contents, find and replace.
+- **A word processor.** Formatting, styles, lists, tables, columns, pictures, headers and footers, page numbers, links, comments, table of contents, find and replace.
 - **Compatibility with Word.** It reads and writes DOCX, and breaks lines and pages by the same rules, so a document looks the same in both.
 - **A file that survives.** What the editor does not understand stays in the DOCX untouched.
 - **Templates.** `{{client}}` in any document is a variable to fill.

@@ -25,3 +25,4 @@ export * from './toc';
 export * from './links';
 export * from './stories';
 export * from './letterhead';
+export * from './sections';

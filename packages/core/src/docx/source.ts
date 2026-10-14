@@ -1,7 +1,7 @@
 // The DOCX package a document was read from, kept so export can reuse it.
 
 import { strFromU8 } from 'fflate';
-import type { Note, PageSetup, Paragraph, ParagraphProps, RunProps, Story, Table } from '../model';
+import type { Border, Columns, Note, PageSetup, SectionStart, Paragraph, ParagraphProps, RunProps, Story, Table } from '../model';
 import type { Numbering } from '../numbering';
 import { type XmlNode, child, childrenOf, parseXml } from './xml';
 
@@ -12,17 +12,29 @@ export interface Style {
   basedOn?: string;
   pPr: ParagraphProps;
   rPr: RunProps;
-  /** Table styles only: whether the style draws borders, how thick, and its cell margins. */
-  borders?: boolean;
-  borderWidths?: BorderWidths;
+  /** Table styles only: the borders it draws, its cell margins, the colour behind its cells and how its parts look. */
+  borders?: BorderSet;
   padding?: CellPadding;
+  shade?: string;
+  /** The look of the parts of a table, by the name Word gives each: 'firstRow', 'band1Horz'... */
+  parts?: Record<string, TablePart>;
 }
 
-/** Thickness, in points, of the horizontal borders a table gives its cells; 0 for none. */
-export interface BorderWidths {
-  top: number;
-  bottom: number;
-  inside: number;
+/**
+ * The lines of a table or a cell, side by side and between its cells: a
+ * border, null for one switched off, or nothing when not said.
+ */
+export type BorderSet = Partial<Record<'top' | 'bottom' | 'left' | 'right' | 'insideH' | 'insideV', Border | null>>;
+
+/** How a part of a table looks that a table style sets apart: the heading row, the banded rows... */
+export interface TablePart {
+  pPr: ParagraphProps;
+  rPr: RunProps;
+  shade?: string;
+  /** The cell borders it gives, and the table borders around its cells. */
+  cellBorders?: BorderSet;
+  borders?: BorderSet;
+  valign?: 'center' | 'bottom';
 }
 
 export type CellPadding = Partial<Record<'padTop' | 'padRight' | 'padBottom' | 'padLeft', number>>;
@@ -65,6 +77,9 @@ export interface DocxSource {
   sheet: StyleSheet;
   /** The page as it was read; export rewrites the section's page settings when it is no longer the same. */
   page?: PageSetup;
+  /** The columns of the last section as read, to tell whether they changed. */
+  columns?: Columns;
+  sectionStart?: SectionStart;
   /** Whether the last section gives the first page a header and a footer of its own. */
   titlePage?: boolean;
   /**

@@ -22,7 +22,7 @@ tested with plain data.
 | Area | Files | What it does |
 | --- | --- | --- |
 | Model | `model.ts`, `styles.ts`, `stories.ts` | An immutable `Doc`: paragraphs of runs, tables, header and footer, page setup, numbering, styles, notes, media. |
-| Operations | `ops.ts`, `tables.ts`, `images.ts`, `links.ts`, `notes.ts`, `toc.ts`, `numbering.ts`, `pageNumbers.ts`, `letterhead.ts` | Pure functions: `(doc, …) => doc`. Insert and delete text, split and join paragraphs, format, lists, tables, pictures, links, comments, table of contents, page numbers, letterhead. |
+| Operations | `ops.ts`, `tables.ts`, `sections.ts`, `images.ts`, `links.ts`, `notes.ts`, `toc.ts`, `numbering.ts`, `pageNumbers.ts`, `letterhead.ts` | Pure functions: `(doc, …) => doc`. Insert and delete text, split and join paragraphs, format, lists, tables, pictures, links, comments, table of contents, page numbers, letterhead. |
 | DOCX | `docx/import.ts`, `docx/export.ts`, `docx/source.ts`, `docx/xml.ts` | Reads a DOCX into a `Doc` and writes it back. The original XML is kept, and only what changed is rewritten. |
 | Layout | `layout.ts`, `reflow.ts` | Breaks paragraphs into lines and lines into pages, with a `TextMeasurer` given from outside. Hit testing, caret and selection rectangles. `layoutReflow` sets the same document to the width of a screen. |
 | Output | `pdf.ts`, `render.ts`, `fonts.ts`, `png.ts`, `markdown.ts` | PDF with embedded and subsetted TrueType fonts, measuring from font files where there is no browser, Markdown. |
@@ -69,13 +69,13 @@ undo, layout caching and change detection cheap.
 
 ## Where it can improve
 
-- **Coverage of the format.** No sections with their own page setup, no
-  columns, footnotes, text boxes or tracked changes. They survive a round
-  trip but are not laid out. Sections and footnotes are the ones real
-  documents miss most.
-- **Tables.** Row heights cannot be edited, header rows do not repeat on the
-  next page, borders are all-or-nothing per cell, and a split row does not
-  apply widow control inside its cells.
+- **Coverage of the format.** Sections are laid out with their own margins
+  and columns, but not their own page size or header. No footnotes, text
+  boxes, tab stops or tracked changes: they survive a round trip but are not
+  laid out. Footnotes are what real documents miss most now.
+- **Tables.** A table inside a cell is not split across pages, vertical text
+  is shown horizontally, and a split row does not apply widow control inside its
+  cells.
 - **Fidelity is measured on few documents.** The pagination rules were
   derived from two real files in Arial with Word for Mac. A larger corpus,
   with other fonts and versions of Word, would find where they do not hold.

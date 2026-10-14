@@ -133,7 +133,9 @@ export function splitParagraph(doc: Doc, pos: Position): { doc: Doc; pos: Positi
   const p = doc.paragraphs[pos.para];
   const fallback = propsAt(doc, pos);
   const len = paragraphLength(p);
-  const left: Paragraph = { ...p, runs: normalizeRuns(sliceRuns(p.runs, 0, pos.offset), fallback) };
+  // The mark that ends a section is the one at the end of the paragraph, which goes with the second half.
+  const { section: _, ...head } = p;
+  const left: Paragraph = { ...head, runs: normalizeRuns(sliceRuns(p.runs, 0, pos.offset), fallback) };
   const right: Paragraph = {
     ...p,
     props: defined({ ...p.props, pageBreakBefore: undefined }),
@@ -184,7 +186,9 @@ function deleteWithin(doc: Doc, range: Range): Doc {
     [...sliceRuns(first.runs, 0, from.offset), ...sliceRuns(last.runs, to.offset, paragraphLength(last))],
     fallback,
   );
-  return replaceParagraphs(doc, from.para, to.para - from.para + 1, [{ ...first, runs }]);
+  // What is left ends with the mark of the last paragraph, and so with the section that one ended, if any.
+  const { section: _, ...head } = first;
+  return replaceParagraphs(doc, from.para, to.para - from.para + 1, [defined<Paragraph>({ ...head, runs, section: last.section })]);
 }
 
 export function applyRunProps(doc: Doc, range: Range, patch: RunProps): Doc {

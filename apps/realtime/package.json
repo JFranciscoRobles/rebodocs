@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/realtime-demo",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "description": "Several people on one document at once: the collaboration server, a backend that keeps the documents and says who may come in, and the page.",
   "license": "MIT",
   "private": true,

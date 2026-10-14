@@ -8,6 +8,9 @@
 
 import { strFromU8, strToU8, zipSync } from 'fflate';
 import {
+  type Border,
+  type CellLines,
+  type Columns,
   type Doc,
   type Note,
   type Paragraph,
@@ -20,6 +23,9 @@ import {
   type ResolvedRunProps,
   type Run,
   type RunProps,
+  type Section,
+  type SectionStart,
+  DEFAULT_BORDER,
   WRAP_SEPARATOR,
   resolveParagraph,
   resolveRun,
@@ -31,6 +37,7 @@ import { paragraphStyles } from '../styles';
 import { imageExtension, mediaKey } from '../images';
 import { noteKey, noteMark, pruneNotes } from '../notes';
 import { isFieldMark } from '../toc';
+import { isColumnBreak } from '../layout';
 import { CUSTOM_PROPERTIES_PATH, HIGHLIGHTS, NOTE_COLORS_PROPERTY, parseRunProps, resolveStyle, val } from './import';
 import type { DocxSource, SourceSlot, StorySource } from './source';
 import { type XmlNode, child, childrenOf, createNode, escapeXml, parseElement, serializeXml } from './xml';
@@ -551,7 +558,7 @@ function runPropsXml(props: RunProps): string {
 function runXml(run: Run): string {
   // Objects only make sense inside the package they came from, but for what was put in here: pictures, notes and the marks of a table of contents.
   if (run.props.object) {
-    const ours = mediaKey(run.props.object) !== undefined || !!noteMark(run.props.object) || isFieldMark(run.props.object);
+    const ours = mediaKey(run.props.object) !== undefined || !!noteMark(run.props.object) || isFieldMark(run.props.object) || isColumnBreak(run.props.object);
     return ours ? run.props.object.repeat(run.text.length) : '';
   }
   if (!run.text) return '';
@@ -595,6 +602,7 @@ function paragraphXml(para: Paragraph): string {
     `<w:jc w:val="${jc}"/>` +
     // The paragraph mark carries the formatting of an empty paragraph.
     (isEmpty ? runPropsXml(para.runs[0].props) : '') +
+    (para.section ? sectionXml(para.section) : '') +
     '</w:pPr>' +
     wrappedRunsXml(para.runs) +
     '</w:p>'
@@ -633,22 +641,58 @@ const TBLPR_ORDER = [
 
 const cellKey = (table: number, row: number, cell: number) => `${table}:${row}:${cell}`;
 
-/** The paragraphs of every table cell of the document, by table, row id and cell id. */
+/** The paragraphs of every table cell of the document, by table, row id and cell id: those of a table in a cell among the cell's. */
 function paragraphsByCell(doc: Doc): Map<string, Paragraph[]> {
   const map = new Map<string, Paragraph[]>();
   for (const para of doc.paragraphs) {
-    if (!para.cell) continue;
-    const key = cellKey(para.cell.table, para.cell.row, para.cell.cell);
-    const list = map.get(key);
-    if (list) list.push(para);
-    else map.set(key, [para]);
+    for (let at = para.cell, depth = 0; at && depth < 32; at = doc.tables?.[at.table]?.parent, depth++) {
+      const key = cellKey(at.table, at.row, at.cell);
+      const list = map.get(key);
+      if (list) list.push(para);
+      else map.set(key, [para]);
+    }
   }
   return map;
+}
+
+/** The table, inside table `table`, that a paragraph of one of its cells is in at the first level down; undefined for the cell's own paragraphs. */
+function nestedIn(doc: Doc, para: Paragraph, table: number): number | undefined {
+  for (let at = para.cell, depth = 0; at && depth < 32; depth++) {
+    const parent = doc.tables?.[at.table]?.parent;
+    if (!parent) return undefined;
+    if (parent.table === table) return at.table;
+    at = parent;
+  }
+  return undefined;
 }
 
 function border(side: string): string {
   return `<w:${side} w:val="single" w:sz="4" w:space="0" w:color="auto"/>`;
 }
+
+/** One side of a cell as `w:tcBorders` has it: its line, or none. */
+function sideXml(side: string, line: Border | undefined): string {
+  if (!line) return `<w:${side} w:val="nil"/>`;
+  return `<w:${side} w:val="${line.style}" w:sz="${Math.max(2, Math.round(line.width * 8))}" w:space="0" w:color="${line.color}"/>`;
+}
+
+/** The lines of a cell: its own, the plain ones of a cell with borders, or none. */
+function cellLines(cell: TableCell): CellLines {
+  return cell.lines ?? (cell.borders ? { top: DEFAULT_BORDER, left: DEFAULT_BORDER, bottom: DEFAULT_BORDER, right: DEFAULT_BORDER } : {});
+}
+
+/** What a cell's borders are, to tell whether they changed. */
+const bordersKey = (cell: TableCell) => JSON.stringify(cellLines(cell));
+
+/** `w:trPr` with what the model says of a row on top of what the file had: its height, and whether it is a heading or must not be split. */
+function patchRow(trPr: XmlNode, row: TableRow): void {
+  trPr.children = trPr.children.filter((c) => c.name !== 'w:trHeight' && c.name !== 'w:cantSplit' && c.name !== 'w:tblHeader');
+  if (row.cantSplit) insertOrdered(trPr, TRPR_ORDER, createNode('w:cantSplit'));
+  if (row.height) insertOrdered(trPr, TRPR_ORDER, createNode('w:trHeight', row.exact ? { 'w:val': String(twips(row.height)), 'w:hRule': 'exact' } : { 'w:val': String(twips(row.height)) }));
+  if (row.header) insertOrdered(trPr, TRPR_ORDER, createNode('w:tblHeader'));
+}
+
+const TRPR_ORDER = ['w:cnfStyle', 'w:divId', 'w:gridBefore', 'w:gridAfter', 'w:wBefore', 'w:wAfter', 'w:cantSplit', 'w:trHeight', 'w:tblHeader', 'w:tblCellSpacing', 'w:jc', 'w:hidden'];
 
 /**
  * A table written from the model. When it was read from a file (`from`), the
@@ -700,15 +744,24 @@ function tableXml(
     const own = rowNodes[row.id];
     model = own ?? model;
     out += own ? from!.xml.slice(own.start, own.openEnd) : '<w:tr>';
-    out += model
-      ? model.children.filter((c) => c.name === 'w:tblPrEx' || c.name === 'w:trPr').map(slice).join('')
-      : row.before || row.height || row.cantSplit
-        ? '<w:trPr>' +
-          (row.before ? `<w:gridBefore w:val="${row.before}"/>` : '') +
-          (row.cantSplit ? '<w:cantSplit/>' : '') +
-          (row.height ? `<w:trHeight w:val="${twips(row.height)}"/>` : '') +
-          '</w:trPr>'
-        : '';
+    const wasRow = from?.original?.rows.find((r) => r.id === row.id);
+    const rowKey = (r: TableRow) => `${r.height}:${!!r.exact}:${!!r.cantSplit}:${!!r.header}`;
+    if (model) {
+      out += model.children.filter((c) => c.name === 'w:tblPrEx').map(slice).join('');
+      const kept = child(model, 'w:trPr');
+      // The row's properties as the file had them, unless the ones the model has changed.
+      if (own && wasRow && rowKey(wasRow) === rowKey(row)) out += kept ? slice(kept) : '';
+      else {
+        const trPr = (kept && parseElement(slice(kept))) ?? createNode('w:trPr');
+        patchRow(trPr, row);
+        if (trPr.children.length) out += serializeXml(trPr);
+      }
+    } else if (row.before || row.height || row.cantSplit || row.header) {
+      const trPr = createNode('w:trPr');
+      if (row.before) insertOrdered(trPr, TRPR_ORDER, createNode('w:gridBefore', { 'w:val': String(row.before) }));
+      patchRow(trPr, row);
+      out += serializeXml(trPr);
+    }
     const cellNodes = model ? childrenOf(model, 'w:tc') : [];
     let column = row.before;
     row.cells.forEach((cell, i) => {
@@ -723,11 +776,16 @@ function tableXml(
       if (cell.merge) insertOrdered(tcPr, TCPR_ORDER, createNode('w:vMerge', cell.merge === 'start' ? { 'w:val': 'restart' } : {}));
       // The cell as the file had it, to write only the borders and the shading that changed.
       const was = from?.original?.rows.find((r) => r.id === row.id)?.cells.find((c) => c.id === cell.id);
-      const sides = ['top', 'left', 'bottom', 'right'];
-      if (from ? was && was.borders !== cell.borders : anyBorders && !cell.borders) {
+      if (from ? was && bordersKey(was) !== bordersKey(cell) : (anyBorders && !cell.borders) || cell.lines) {
         tcPr.children = tcPr.children.filter((c) => c.name !== 'w:tcBorders');
-        const lines = cell.borders ? sides.map(border) : sides.map((side) => `<w:${side} w:val="nil"/>`);
-        insertOrdered(tcPr, TCPR_ORDER, parseElement(`<w:tcBorders>${lines.join('')}</w:tcBorders>`)!);
+        const lines = cellLines(cell);
+        const sides = (['top', 'left', 'bottom', 'right'] as const).map((side) => sideXml(side, lines[side]));
+        insertOrdered(tcPr, TCPR_ORDER, parseElement(`<w:tcBorders>${sides.join('')}</w:tcBorders>`)!);
+      }
+      if (from ? was && was.valign !== cell.valign : cell.valign) {
+        tcPr.children = tcPr.children.filter((c) => c.name !== 'w:vAlign');
+        if (cell.valign) insertOrdered(tcPr, TCPR_ORDER, createNode('w:vAlign', { 'w:val': cell.valign }));
+        else if (was?.valign) insertOrdered(tcPr, TCPR_ORDER, createNode('w:vAlign', { 'w:val': 'top' }));
       }
       if (from ? was && was.shade !== cell.shade : cell.shade) {
         tcPr.children = tcPr.children.filter((c) => c.name !== 'w:shd');
@@ -753,8 +811,21 @@ const SECTPR_ORDER = [
  * else `original` says, and referring to the header and footer in `refs`.
  * `declare` adds the namespace of the reference ids, for a document that lacks it.
  */
-function pageSectPr(page: Doc['page'], original?: string, refs: StoryRefs = {}, declare = false, ownFirst?: boolean): string {
+function pageSectPr(
+  page: Doc['page'],
+  original?: string,
+  refs: StoryRefs = {},
+  declare = false,
+  ownFirst?: boolean,
+  layout?: { columns?: Columns; start?: SectionStart },
+): string {
   const sectPr = (original ? parseElement(original) : undefined) ?? createNode('w:sectPr');
+  if (layout) {
+    // Where the section starts and its columns, as the model has them.
+    sectPr.children = sectPr.children.filter((c) => c.name !== 'w:type' && c.name !== 'w:cols');
+    if (layout.start && layout.start !== 'nextPage') insertOrdered(sectPr, SECTPR_ORDER, createNode('w:type', { 'w:val': layout.start }));
+    insertOrdered(sectPr, SECTPR_ORDER, parseElement(colsXml(layout.columns))!);
+  }
   // Whether the first page has a header and a footer of its own is said by the section, parts or no parts.
   if (ownFirst !== undefined) {
     sectPr.children = sectPr.children.filter((c) => c.name !== 'w:titlePg');
@@ -800,9 +871,31 @@ function newDocumentXml(doc: Doc, refs: StoryRefs = {}): string {
     XML_HEADER +
     `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}"><w:body>` +
     blocks +
-    pageSectPr(pg, undefined, refs, false, doc.firstPage ? true : undefined) +
+    pageSectPr(pg, undefined, refs, false, doc.firstPage ? true : undefined, { columns: doc.columns, start: doc.sectionStart }) +
     '</w:body></w:document>'
   );
+}
+
+/** `w:cols` for the columns of a section; one, as wide as the text, when it has none. */
+function colsXml(columns: Columns | undefined): string {
+  if (!columns || columns.count < 2) return '<w:cols w:space="720"/>';
+  const sep = columns.separator ? ' w:sep="1"' : '';
+  if (!columns.widths?.length) return `<w:cols w:num="${columns.count}" w:space="${twips(columns.space)}"${sep}/>`;
+  const each = columns.widths.map((col, i) => `<w:col w:w="${twips(col.width)}"${i < columns.widths!.length - 1 ? ` w:space="${twips(col.space)}"` : ''}/>`).join('');
+  return `<w:cols w:num="${columns.widths.length}" w:space="${twips(columns.space)}"${sep} w:equalWidth="0">${each}</w:cols>`;
+}
+
+/** The properties of a section that is not the last: what it had in the file, with what the model says of its page, its columns and its start. */
+function sectionXml(section: Section): string {
+  return pageSectPr(section.page, section.xml, {}, false, undefined, { columns: section.columns, start: section.start });
+}
+
+const sameColumns = (a: Columns | undefined, b: Columns | undefined) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/** Whether two sections are set out the same, whatever their objects. */
+function sameSection(a: Section, b: Section): boolean {
+  const page = (Object.keys({ ...a.page, ...b.page }) as (keyof Doc['page'])[]).every((key) => a.page[key] === b.page[key]);
+  return page && sameColumns(a.columns, b.columns) && (a.start ?? 'nextPage') === (b.start ?? 'nextPage');
 }
 
 // --- Documents read from a DOCX ---------------------------------------------
@@ -969,8 +1062,15 @@ function patchedParagraphProps(
     patchChild(pPr, PPR_ORDER, 'w:jc', { 'w:val': now.align === 'justify' ? 'both' : now.align });
   }
 
-  // A section break belongs to the last paragraph that came out of the original one.
-  if (!keepSection) pPr.children = pPr.children.filter((c) => c.name !== 'w:sectPr');
+  // A section break is the one the paragraph has now: the one it had in the file when it is the same and
+  // the paragraph is the last that came out of the original one, or one written from the model.
+  const sectPr = child(pPr, 'w:sectPr');
+  pPr.children = pPr.children.filter((c) => c.name !== 'w:sectPr');
+  const had = slot.paragraph.section;
+  if (para.section) {
+    const same = keepSection && sectPr && had && sameSection(had, para.section);
+    insertOrdered(pPr, PPR_ORDER, same ? sectPr : parseElement(sectionXml(para.section))!);
+  }
 
   // The paragraph mark carries the formatting of an empty paragraph.
   if (para.runs.every((r) => !r.text)) {
@@ -1041,10 +1141,13 @@ function sourcedDocumentXml(doc: Doc, source: DocxSource, refs: StoryRefs = {}):
   const was = source.page;
   // Said again only when it is not what the file says.
   const ownFirst = !!doc.firstPage === !!source.titlePage ? undefined : !!doc.firstPage;
+  const layoutChanged = !sameColumns(doc.columns, source.columns) || (doc.sectionStart ?? 'nextPage') !== (source.sectionStart ?? 'nextPage');
   const pageChanged =
+    layoutChanged ||
     Object.keys(refs).length > 0 ||
     ownFirst !== undefined ||
     (!!was && (Object.keys({ ...was, ...doc.page }) as (keyof Doc['page'])[]).some((key) => was[key] !== doc.page[key]));
+  const lastLayout = layoutChanged ? { columns: doc.columns, start: doc.sectionStart } : undefined;
   // The ids of the references need their namespace, which nearly every document declares at the top.
   const declare = !/\sxmlns:r=/.test(xml.slice(0, source.body.start));
   let sectionWritten = false;
@@ -1089,13 +1192,25 @@ function sourcedDocumentXml(doc: Doc, source: DocxSource, refs: StoryRefs = {}):
   doc.paragraphs.forEach((para, i) => placeOf.set(para, i));
 
   /** XML of a run of paragraphs; `slotFor` says which source paragraph each one is rebuilt on. */
-  const emitList = (list: Paragraph[], slotFor: (para: Paragraph) => SourceSlot | undefined, inCell: boolean) => {
+  /** XML of a run of paragraphs; `within` is the table whose cell they are in, when they are. */
+  const emitList = (list: Paragraph[], slotFor: (para: Paragraph) => SourceSlot | undefined, inCell: boolean, within?: number) => {
     let out = '';
     let count = 0;
     const tables = new Set<number>();
     /** The table a paragraph stands for here: one created since, seen from outside its cells. */
     const newTable = (para: Paragraph) => (!inCell && para.cell && added(para.cell.table) ? para.cell.table : undefined);
     list.forEach((para, i) => {
+      // A table in the cell is written where its first paragraph is: as the file had it, or from the model when its shape changed.
+      const inner = within === undefined ? undefined : nestedIn(doc, para, within);
+      if (inner !== undefined) {
+        if (!tables.has(inner) && doc.tables?.[inner]?.rows.length) {
+          tables.add(inner);
+          count++;
+          const node = source.tableNodes?.[inner];
+          out += node && !reshaped(inner) ? emitTable(node) : tableXml(doc, inner, (row, cell) => cellXml(inner, row, cell), node && { xml, node, original: sourceTables[inner] });
+        }
+        return;
+      }
       const table = newTable(para);
       if (table !== undefined) {
         if (!tables.has(table) && doc.tables?.[table]) {
@@ -1120,7 +1235,7 @@ function sourcedDocumentXml(doc: Doc, source: DocxSource, refs: StoryRefs = {}):
   };
 
   const cellXml = (table: number, row: TableRow, cell: TableCell): string =>
-    emitList(cells.get(cellKey(table, row.id, cell.id)) ?? [], (para) => (para.origin === undefined ? undefined : slots[para.origin]), true).xml;
+    emitList(cells.get(cellKey(table, row.id, cell.id)) ?? [], (para) => (para.origin === undefined ? undefined : slots[para.origin]), true, table).xml;
 
   const emitSlot = (index: number) =>
     emitList(groups.get(index) ?? [], (para) => (para.origin === undefined ? undefined : slots[index]), false);
@@ -1159,7 +1274,7 @@ function sourcedDocumentXml(doc: Doc, source: DocxSource, refs: StoryRefs = {}):
       } else if (c.name === 'w:sectPr' && container === source.body) {
         // The properties of the section close the body, wherever its blocks went.
         const section = xml.slice(c.start, c.end);
-        replace(c, pageChanged ? pageSectPr(doc.page, section, refs, declare, ownFirst) : section, Infinity);
+        replace(c, pageChanged ? pageSectPr(doc.page, section, refs, declare, ownFirst, lastLayout) : section, Infinity);
         sectionWritten ||= pageChanged;
       } else if (c.name === 'w:sdt') {
         const content = child(c, 'w:sdtContent');
@@ -1207,7 +1322,7 @@ function sourcedDocumentXml(doc: Doc, source: DocxSource, refs: StoryRefs = {}):
     inner = at < 0 ? inner + tail : inner.slice(0, at) + tail + inner.slice(at);
   }
   // A body that had no section properties gets them when the page was changed.
-  if (pageChanged && !sectionWritten) inner += pageSectPr(doc.page, undefined, refs, declare, ownFirst);
+  if (pageChanged && !sectionWritten) inner += pageSectPr(doc.page, undefined, refs, declare, ownFirst, lastLayout);
   return xml.slice(0, body.openEnd) + inner + xml.slice(body.closeStart);
 }
 

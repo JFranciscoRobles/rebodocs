@@ -53,12 +53,26 @@ In a header or footer, positions are those of its own text: `editor.area` says w
 | --- | --- |
 | `insertTable(rows, columns)` | |
 | `insertTableRow(below)`, `insertTableColumn(right)`, `deleteTableRow()`, `deleteTableColumn()` | |
-| `mergeTableCells()`, `splitTableCell()`, `setTableCellProps({ borders, shade })`, `setTableBorders(on)` | |
+| `deleteTable()` | Removes the whole table the caret is in; for a table inside a cell, only that one. |
+| `mergeTableCells()`, `splitTableCell()`, `setTableBorders(on)` | |
+| `setTableCellProps({ borders, line, shade, valign })` | The cells the selection covers: their borders, the line they are drawn with (single, double, dashed, dotted), the colour behind them, and where the text sits. |
+| `setTableRowHeight(points, exact)`, `setHeaderRow(on)` | The caret's row: its least height, or an exact one (0 for as tall as it holds), and whether it repeats at the top of each page. |
+| `activeCellProps()` | The cell at the caret: `borders`, `shade`, `valign`, `line`, `header`, `height`, `exact`. |
 | `insertImageFile(file)`, `insertImageGrid(files, columns)` | |
 | `setPictureWrap(wrap)`, `fitSelectedPicture(fraction)` | |
 | `setLink(address)`, `removeLink()`, `activeLink` | |
 | `addNote(text)`, `setNoteText(id, text)`, `removeNote(id)`, `notes` | Comments, as Word has them. |
 | `insertToc()`, `updateToc()`, `outline`, `goToHeading(para)` | |
+
+Dragging works too: the edge between two columns moves it, the bottom edge of a row makes it taller or shorter, and the bottom right corner of a table makes the whole table larger or smaller.
+
+## Columns
+
+| Member | What it does |
+| --- | --- |
+| `columns` | The columns of the section the caret is in: `count`, `space`, `widths` when they are not all as wide, `separator`. |
+| `setColumns(columns)` | With a caret, the section it is in; with a selection, the selected text alone, as a section of its own on the same page. |
+| `insertColumnBreak()` | What follows the caret starts at the top of the next column. |
 
 ## Templates
 

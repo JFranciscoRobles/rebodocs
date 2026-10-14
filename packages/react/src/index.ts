@@ -30,5 +30,5 @@ export { type Docs, type DocsCommands, type DocsCoreOptions, type DocsHeadlessOp
 export { addFont, addFonts, addLocale, fontFamilies, getLocale, locales, messages, onLocaleChange, setLocale, t } from '@rebodocs/editor';
 export type { Bubble, Editor, FontSource, MessageKey, Messages, NoteView } from '@rebodocs/editor';
 export { NOTE_COLORS } from '@rebodocs/core';
-export type { ActiveFormat, FindOptions, FormatId, OutlineItem, PageNumbering, PageSetup } from '@rebodocs/core';
+export type { ActiveFormat, Border, CellPatch, Columns, FindOptions, FormatId, OutlineItem, PageNumbering, PageSetup } from '@rebodocs/core';
 export type { CollabState, Peer, Session } from '@rebodocs/collab/browser';

@@ -9,7 +9,8 @@
 // the reader draws them with.
 
 import { zlibSync } from 'fflate';
-import type { Band, FontSpec, Fragment, Layout, Line, TextMeasurer } from './layout';
+import { type Band, type FontSpec, type Fragment, type Layout, type LayoutPage, type Line, type TextMeasurer, boxLines } from './layout';
+import { type Border, DEFAULT_BORDER } from './model';
 import { linkHref } from './links';
 import type { StoryPart } from './docx/source';
 
@@ -400,6 +401,9 @@ function jpegChannels(bytes: Uint8Array): number {
 
 // --- The document ---------------------------------------------------------------
 
+/** The line drawn down between two columns. */
+const COLUMN_RULE: Border = DEFAULT_BORDER;
+
 const rgb = (color: string) => [0, 2, 4].map((i) => num(parseInt(color.slice(i, i + 2), 16) / 255 || 0)).join(' ');
 
 /** An address as a PDF string: only the characters every reader takes, the rest in the way addresses write them. */
@@ -516,6 +520,16 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
       const image = imageFor(xml, part);
       if (image) ops += `q ${num(w)} 0 0 ${num(h)} ${num(x)} ${num(height - y - h)} cm /${image.name} Do Q\n`;
     };
+    /** A border from one point to another, centred on the line between them. */
+    const stroke = (border: Border, x1: number, y1: number, x2: number, y2: number): string => {
+      const w = border.width;
+      const dash = border.style === 'dashed' ? `[${num(Math.max(3, w * 3))} ${num(Math.max(2, w * 2))}] 0 d` : border.style === 'dotted' ? `1 J [0 ${num(Math.max(1, w * 2))}] 0 d` : '';
+      const segment = (dx: number, dy: number) => `${num(x1 + dx)} ${num(height - y1 - dy)} m ${num(x2 + dx)} ${num(height - y2 - dy)} l S`;
+      // A double line is two, as far apart as each is thick, either side of where a single one would be.
+      const across = x1 === x2 ? [w, 0] : [0, w];
+      const body = border.style === 'double' ? `${segment(-across[0], -across[1])} ${segment(across[0], across[1])}` : segment(0, 0);
+      return `q ${rgb(border.color)} RG ${num(Math.max(0.25, w))} w ${dash} ${body} Q\n`;
+    };
     const text = (f: Fragment, line: Line) => {
       const size = f.font.size;
       if (f.props.highlight) ops += `${rgb(f.props.highlight)} rg ${rect(f.x, line.baseline - f.ascent, f.width, f.ascent + f.descent)} f\n`;
@@ -541,8 +555,14 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
         if (cell.shade) ops += `${rgb(cell.shade)} rg ${rect(cell.x, cell.y, cell.width, cell.height)} f\n`;
       }
       for (const cell of band.cells) {
-        if (cell.borders) ops += `0 0 0 RG 0.5 w ${rect(cell.x, cell.y, cell.width, cell.height)} S\n`;
+        const lines = boxLines(cell);
+        const { x, y, width: w, height: h } = cell;
+        if (lines.top) ops += stroke(lines.top, x, y, x + w, y);
+        if (lines.bottom) ops += stroke(lines.bottom, x, y + h, x + w, y + h);
+        if (lines.left) ops += stroke(lines.left, x, y, x, y + h);
+        if (lines.right) ops += stroke(lines.right, x + w, y, x + w, y + h);
       }
+      for (const rule of (band as LayoutPage).rules ?? []) ops += stroke(COLUMN_RULE, rule.x, rule.top, rule.x, rule.bottom);
       for (const line of band.lines) {
         if (line.label) text(line.label, line);
         for (const f of line.fragments) {

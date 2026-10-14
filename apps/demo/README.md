@@ -19,7 +19,7 @@ It is also on the site, at [rebodocs.com/demo](https://rebodocs.com/demo/):
 
 `/#headless` opens on the second tab. It starts with a sample contract that
 `scripts/sample.ts` writes with the engine: headings, variables with a type,
-a table, places to sign. `Abrir .docx` opens a file of the disk in both tabs.
+text in two columns, a table with a heading row, places to sign. `Abrir .docx` opens a file of the disk in both tabs.
 Saving hands the DOCX back as a download: there is no backend.
 
 It opens in Spanish, the language the editor speaks unless told otherwise. The

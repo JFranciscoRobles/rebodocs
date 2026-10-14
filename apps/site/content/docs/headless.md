@@ -60,11 +60,12 @@ const { state, commands, editor, docs, ready } = useDocs();
 | History | `undo`, `redo` |
 | Text | `toggleMark`, `setRunProps`, `insertText`, `selectAll`, `copy`, `cut`, `paste` |
 | Paragraph | `setParagraphProps`, `setParagraphStyle`, `toggleList`, `shiftListLevel`, `shiftIndent`, `insertPageBreak` |
-| Tables | `insertTable`, `insertTableRow`, `insertTableColumn`, `deleteTableRow`, `deleteTableColumn`, `mergeTableCells`, `splitTableCell`, `setTableCellProps`, `setTableBorders` |
+| Tables | `insertTable`, `insertTableRow`, `insertTableColumn`, `deleteTableRow`, `deleteTableColumn`, `deleteTable`, `mergeTableCells`, `splitTableCell`, `setTableCellProps`, `setTableBorders`, `setTableRowHeight`, `setHeaderRow` |
 | Pictures | `insertImageFile`, `insertImageGrid`, `setPictureWrap`, `fitSelectedPicture` |
 | Templates | `insertVariable`, `fillVariables`, `insertSignatures` |
 | Links and comments | `setLink`, `removeLink`, `addNote`, `setNoteText`, `setNoteColor`, `removeNote`, `selectNote` |
 | Structure | `insertToc`, `updateToc`, `goToHeading`, `moveSection` |
+| Columns | `setColumns`, `insertColumnBreak` |
 | Page | `setPage`, `setPageNumbering`, `setFirstPageDifferent`, `setArea`, `setLetterhead`, `setLetterheadFile`, `fitLetterheadMargins`, `removeLetterhead` |
 | Search | `find`, `findStep`, `replaceFound`, `replaceAllFound` |
 | View | `setZoom`, `setFit`, `setView`, `setShowNotes`, `print` |
@@ -135,7 +136,7 @@ Without React they are options of `createDocs`, and `docs.setKeys({ onLinkKey, o
 
 ## The bar beside the selection
 
-`<DocsProvider bubble>` gives the document the small bar that comes up beside what is selected, the same one the included interface has: copy, cut and paste on a screen that is touched, a variable made of the words selected, a link, a note, and what can be done to a picture or to the cells of a table. A tap on ⌘ shows it and hides it, and with it ⌘K asks for a link there unless you gave an `onLinkKey`.
+`<DocsProvider bubble>` gives the document the small bar that comes up beside what is selected, the same one the included interface has: copy, cut and paste on a screen that is touched, a variable made of the words selected, a link, a note, and what can be done to a picture or to a table, deleting it among it. A tap on ⌘ shows it and hides it, and with it ⌘K asks for a link there unless you gave an `onLinkKey`.
 
 It is off unless asked for, and read when the document is made. It is the one piece here that comes with a look: restyle it through its classes (`dx-bb`, `dx-bb-open`, `dx-bb-sep`…).
 

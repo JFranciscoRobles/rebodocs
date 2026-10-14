@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import {
+  type Columns,
   type FormatId,
   NOTE_COLORS,
   type OutlineItem,
   type PageNumbering,
+  type PageSetup,
   useDocs,
   useDocsBubble,
   useDocsNotes,
@@ -45,6 +47,35 @@ const MARKS: [FormatId, Text, Text][] = [
   ['italic', 'K', 'Cursiva'],
   ['underline', 'S', 'Subrayado'],
 ]
+
+const ONE: Columns = { count: 1, space: 36 }
+const COLUMN_KINDS: [string, Text][] = [
+  ['one', 'Una'],
+  ['two', 'Dos'],
+  ['three', 'Tres'],
+  ['left', 'Angosta a la izquierda'],
+  ['right', 'Angosta a la derecha'],
+]
+
+/** Which of the usual ways of setting columns `c` is. */
+function columnKind(c: Columns): string {
+  if (c.count < 2) return 'one'
+  const [a, b] = c.widths ?? []
+  if (c.count === 2 && a && b && Math.abs(a.width - b.width) > 1) return a.width < b.width ? 'left' : 'right'
+  return c.count === 3 ? 'three' : 'two'
+}
+
+/** The columns of one of the usual ways, keeping the line between them; a narrow column is a third of the text's width. */
+function columnPreset(kind: string, page: PageSetup | undefined, now: Columns): Columns {
+  const space = 36
+  const separator = now.separator
+  if (kind === 'one' || !page) return ONE
+  if (kind === 'two' || kind === 'three') return { count: kind === 'two' ? 2 : 3, space, separator }
+  const room = page.width - page.marginLeft - page.marginRight - space
+  const narrow = Math.round(room / 3)
+  const widths = kind === 'left' ? [narrow, room - narrow] : [room - narrow, narrow]
+  return { count: 2, space, separator, widths: [{ width: widths[0], space }, { width: widths[1], space: 0 }] }
+}
 
 const MARGINS = [
   { key: 'marginTop', label: 'Superior' },
@@ -156,9 +187,37 @@ function Format() {
             <button onClick={() => commands.deleteTableRow()}>{tr('Eliminar fila')}</button>
             <button onClick={() => commands.deleteTableColumn()}>{tr('Eliminar columna')}</button>
           </div>
+          <button className="hd-danger" onClick={() => commands.deleteTable()}>{tr('Eliminar tabla')}</button>
           <Check on={!!tableBorders} onChange={(on) => commands.setTableBorders(on)}>{tr('Bordes de la tabla')}</Check>
           {cell && (
             <>
+              <Check on={cell.header} onChange={(on) => commands.setHeaderRow(on)}>{tr('Repetir como fila de encabezado')}</Check>
+              <div className="hd-grid">
+                <label className="hd-field">
+                  {tr('Alto de fila')} (cm)
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder={tr('Auto')}
+                    key={`${cell.height}`}
+                    defaultValue={cell.height ? Number((cell.height / PT_PER_CM).toFixed(2)) : ''}
+                    onBlur={(e) => {
+                      const cm = e.target.valueAsNumber
+                      commands.setTableRowHeight(Number.isFinite(cm) && cm > 0 ? cm * PT_PER_CM : 0, cell.exact)
+                    }}
+                  />
+                </label>
+                <Check on={cell.exact} disabled={!cell.height} onChange={(exact) => commands.setTableRowHeight(cell.height, exact)}>{tr('Exacto')}</Check>
+              </div>
+              <label className="hd-field">
+                {tr('Texto en la celda')}
+                <select value={cell.valign} onChange={(e) => commands.setTableCellProps({ valign: e.target.value as 'top' | 'center' | 'bottom' })}>
+                  <option value="top">{tr('Arriba')}</option>
+                  <option value="center">{tr('En medio')}</option>
+                  <option value="bottom">{tr('Abajo')}</option>
+                </select>
+              </label>
               <Check on={cell.borders} onChange={(borders) => commands.setTableCellProps({ borders })}>{tr('Bordes de la celda')}</Check>
               <div className="hd-field">
                 {tr('Sombreado')}
@@ -183,6 +242,7 @@ function Page() {
   const long = setup ? Math.max(setup.width, setup.height) : 0
   const paper = PAPERS.find((p) => Math.abs(p.width - short) < 1 && Math.abs(p.height - long) < 1)
   const numbering = page.numbering
+  const columns = useDocsValue((e) => e.columns, ONE)
   const base: PageNumbering = numbering ?? { place: 'footer', align: 'center', format: 'number' }
   const formats: [PageNumbering['format'], string][] = [
     ['number', `${state.page}`],
@@ -244,6 +304,21 @@ function Page() {
           </label>
         ))}
       </div>
+
+      <h3>{tr('Columnas')}</h3>
+      <div className="hd-grid">
+        <label className="hd-field">
+          {tr('Columnas')}
+          <select value={columnKind(columns)} disabled={state.area !== 'body'} onChange={(e) => commands.setColumns(columnPreset(e.target.value, setup, columns))}>
+            {COLUMN_KINDS.map(([id, name]) => (
+              <option key={id} value={id}>{tr(name)}</option>
+            ))}
+          </select>
+        </label>
+        <button disabled={state.area !== 'body' || state.inTable} onClick={() => commands.insertColumnBreak()}>{tr('Salto de columna')}</button>
+      </div>
+      <Check on={!!columns.separator} disabled={columns.count < 2} onChange={(separator) => commands.setColumns({ ...columns, separator })}>{tr('Línea entre columnas')}</Check>
+      <p className="hd-empty">{tr('Con una selección, solo el texto seleccionado va en columnas.')}</p>
 
       <h3>{tr('Membrete')}</h3>
       <label className="hd-outline">

@@ -243,6 +243,16 @@
   background: transparent;
 }
 
+.hd .hd-panel-body button.hd-danger {
+  width: 100%;
+  margin: 6px 0;
+  color: #b3261e;
+}
+
+.hd .hd-panel-body button.hd-danger:hover {
+  background: #fce8e6;
+}
+
 .hd-find-count {
   min-width: 96px;
   color: var(--hd-muted);

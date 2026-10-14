@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/editor",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A DOCX editor for the browser: pages, caret and selection, toolbar, menu, side panel and status bar. No framework.",
   "license": "MIT",
   "private": true,
