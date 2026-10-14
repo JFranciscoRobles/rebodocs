@@ -97,7 +97,7 @@ The column the pages are in is `display: flex; flex-direction: column; min-width
 
 **A narrow window.** Under 900 px of window, the bars become one row each that slides, the insert rail lies down, the panels open over the document from a button, and the ruler goes. That is decided with a media query, because the layout itself changes how wide the pages are; `useDocsResponsive` then fits the pages to what they are left and says how much the keyboard covers.
 
-**Language.** The selector calls `setLocale`, which changes what the library writes: the bubble, the ruler, the names of the styles. The demo's own labels stay as written; an application with its own translations would switch them on the same `onLocaleChange`.
+**Language.** The selector calls `setLocale`, which changes what the library writes: the bubble, the ruler, the names of the styles. The demo's own labels are its own to translate: `headless/texts.ts` has them in both languages, and `useTexts` draws a component again on the same `onLocaleChange`.
 
 ## Using it for a demonstration
 

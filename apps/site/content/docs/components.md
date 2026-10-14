@@ -384,7 +384,7 @@ The paragraph styles of the document: Normal, Title, Heading 1…
 
 | | |
 | --- | --- |
-| `styles` | Each `{ id, name }`, the default first. |
+| `styles` | Each `{ id, name }`, the default first. The standard ones are named in the language of the interface. |
 | `active` | The id of the style of the selection; undefined when it covers several. |
 | `set(id)` | Gives the paragraphs of the selection a style. |
 

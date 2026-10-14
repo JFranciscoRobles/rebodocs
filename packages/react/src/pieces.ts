@@ -4,9 +4,9 @@
 // that gives what there is to show and what there is to do, for whoever draws
 // them their own way. All of them go inside a `DocsProvider`.
 
-import { type CSSProperties, type ReactNode, createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, createElement, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { type ActiveFormat, type FindOptions, type FormatId, type OutlineItem, type PageNumbering, type PageSetup, docText, formatText, formatValue } from '@rebodocs/core';
-import { type Bubble, type NoteView, type ZoomFit, createRuler, keyboardInset, onKeyboard } from '@rebodocs/editor';
+import { type Bubble, type NoteView, type ZoomFit, createRuler, getLocale, keyboardInset, onKeyboard, onLocaleChange, styleName } from '@rebodocs/editor';
 import { useDocs, useDocsValue } from './headless';
 
 export interface DocsFind {
@@ -199,6 +199,7 @@ export function useDocsVariables(): DocsVariables {
 }
 
 export interface DocsStyles {
+  /** Each with its name in the language of the interface; a style of the document's own keeps the name it has. */
   styles: { id: string; name: string }[];
   /** The style of the selection; undefined when it covers several. */
   active: string | undefined;
@@ -207,7 +208,9 @@ export interface DocsStyles {
 
 export function useDocsStyles(): DocsStyles {
   const { state, commands } = useDocs();
-  const styles = useDocsValue((e) => e.styles.map(({ id, name }) => ({ id, name })), []);
+  // Read again when the language changes: the standard styles are called another way.
+  useSyncExternalStore(onLocaleChange, getLocale, getLocale);
+  const styles = useDocsValue((e) => e.styles.map((style) => ({ id: style.id, name: styleName(style) })), []);
   return useMemo(() => ({ styles, active: state.styleId, set: (id) => commands.setParagraphStyle(id) }), [commands, styles, state.styleId]);
 }
 

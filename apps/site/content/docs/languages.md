@@ -67,7 +67,33 @@ addLocale('en', { 'menu.save': 'Save to cloud' });
 - **The interface:** everything.
 - **The document:** nothing. It is the person's.
 - **What the editor writes into the document** is in the language of the interface at the time: "Page 1 of 3" in a page number, the titles of a signature block.
-- **Standard styles** are shown translated (Heading 1 / Título 1); a document's own keep their names.
+- **Standard styles** are shown translated (Heading 1 / Título 1); a document's own keep their names. `useDocsStyles` gives them that way too, and again when the language changes.
+
+## Your own interface
+
+An interface built on the [headless hooks](/docs/headless/) has labels of its own, which the library knows nothing of. To have them follow the same language, keep them in a table and read the language of the editor where they are drawn:
+
+```tsx
+import { useSyncExternalStore } from 'react';
+import { getLocale, onLocaleChange } from '@rebodocs/react';
+
+const EN = { Guardar: 'Save', Imprimir: 'Print' } as const;
+
+/** A component that calls this is drawn again when the language changes. */
+export function useTexts() {
+  const locale = useSyncExternalStore(onLocaleChange, getLocale);
+  return (text: keyof typeof EN) => (locale === 'es' ? text : EN[text]);
+}
+
+function Save() {
+  const tr = useTexts();
+  return <button>{tr('Guardar')}</button>;
+}
+```
+
+Where the library already has the word, `t('menu.save')` gives it; it needs the same hook around it, to be drawn again. A selector of your own is `setLocale('en')`.
+
+[The demo](/docs/demos/#the-react-package) does this for every label it has, in `apps/demo/src/headless/texts.ts`.
 
 ## From code
 

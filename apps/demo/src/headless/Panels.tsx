@@ -10,12 +10,14 @@ import {
   useDocsOutline,
   useDocsPage,
   useDocsValue,
+  getLocale,
   useDocsVariables,
 } from '@rebodocs/react'
+import { type Text, useTexts } from './texts'
 import { CELL_SHADES, FONT_SIZES, HIGHLIGHTS, LINE_HEIGHTS, hex, withCurrent } from './options'
 
 // Page sizes in points (1/72 in), as the editor keeps them, upright.
-const PAPERS = [
+const PAPERS: { id: string; name: Text; width: number; height: number }[] = [
   { id: 'letter', name: 'Carta', width: 612, height: 792 },
   { id: 'a4', name: 'A4', width: 595.3, height: 841.9 },
   { id: 'legal', name: 'Oficio', width: 612, height: 1008 },
@@ -24,7 +26,7 @@ const PT_PER_CM = 72 / 2.54
 const SPACE_BEFORE = 12
 const SPACE_AFTER = 8
 
-const TYPES: [FormatId | '', string][] = [
+const TYPES: [FormatId | '', Text][] = [
   ['', 'Texto'],
   ['date', 'Fecha corta'],
   ['dateLong', 'Fecha larga'],
@@ -32,13 +34,13 @@ const TYPES: [FormatId | '', string][] = [
   ['number', 'Número'],
   ['currency', 'Moneda'],
 ]
-const CASES: [FormatId | '', string][] = [
+const CASES: [FormatId | '', Text][] = [
   ['', 'Como se escriba'],
   ['upper', 'MAYÚSCULAS'],
   ['lower', 'minúsculas'],
   ['capital', 'Cada Palabra'],
 ]
-const MARKS: [FormatId, string, string][] = [
+const MARKS: [FormatId, Text, Text][] = [
   ['bold', 'N', 'Negrita'],
   ['italic', 'K', 'Cursiva'],
   ['underline', 'S', 'Subrayado'],
@@ -78,6 +80,7 @@ function Check({ on, disabled, onChange, children }: { on: boolean; disabled?: b
 }
 
 function Format() {
+  const tr = useTexts()
   const { state, commands } = useDocs()
   const paragraph = useDocsValue((e) => {
     const props = e.activeParagraphProps()
@@ -90,10 +93,10 @@ function Format() {
 
   return (
     <div className="hd-panel-body">
-      <h3>Carácter</h3>
+      <h3>{tr('Carácter')}</h3>
       <div className="hd-grid">
         <label className="hd-field">
-          Tamaño
+          {tr('Tamaño')}
           <select value={state.fontSize} onChange={(e) => commands.setRunProps({ fontSize: Number(e.target.value) })}>
             {withCurrent(FONT_SIZES, state.fontSize).map((size) => (
               <option key={size} value={size}>{size} pt</option>
@@ -101,66 +104,66 @@ function Format() {
           </select>
         </label>
         <label className="hd-field">
-          Color
+          {tr('Color')}
           <input type="color" value={hex(state.color, '#000000')} onChange={(e) => commands.setRunProps({ color: e.target.value.slice(1) })} />
         </label>
       </div>
       <div className="hd-field">
-        Resaltado
-        <Swatches colors={HIGHLIGHTS} active={state.highlight} label="Resaltado" onPick={(highlight) => commands.setRunProps({ highlight })} />
-        <button disabled={!state.highlight} onClick={() => commands.setRunProps({ highlight: '' })}>Sin resaltado</button>
+        {tr('Resaltado')}
+        <Swatches colors={HIGHLIGHTS} active={state.highlight} label={tr('Resaltado')} onPick={(highlight) => commands.setRunProps({ highlight })} />
+        <button disabled={!state.highlight} onClick={() => commands.setRunProps({ highlight: '' })}>{tr('Sin resaltado')}</button>
       </div>
 
-      <h3>Párrafo</h3>
+      <h3>{tr('Párrafo')}</h3>
       <label className="hd-field">
-        Interlineado
+        {tr('Interlineado')}
         <select value={state.lineHeight} onChange={(e) => commands.setParagraphProps({ lineHeight: Number(e.target.value) })}>
           {withCurrent(LINE_HEIGHTS, Number(state.lineHeight.toFixed(2))).map((value) => (
-            <option key={value} value={value}>{value.toLocaleString('es', { minimumFractionDigits: 1 })}</option>
+            <option key={value} value={value}>{value.toLocaleString(getLocale(), { minimumFractionDigits: 1 })}</option>
           ))}
         </select>
       </label>
-      <Check on={!!paragraph?.before} onChange={(on) => commands.setParagraphProps({ spacingBefore: on ? SPACE_BEFORE : 0 })}>Espacio antes del párrafo</Check>
-      <Check on={!!paragraph?.after} onChange={(on) => commands.setParagraphProps({ spacingAfter: on ? SPACE_AFTER : 0 })}>Espacio después del párrafo</Check>
-      <Check on={!!paragraph?.keepNext} onChange={(keepNext) => commands.setParagraphProps({ keepNext })}>Mantener con el siguiente</Check>
+      <Check on={!!paragraph?.before} onChange={(on) => commands.setParagraphProps({ spacingBefore: on ? SPACE_BEFORE : 0 })}>{tr('Espacio antes del párrafo')}</Check>
+      <Check on={!!paragraph?.after} onChange={(on) => commands.setParagraphProps({ spacingAfter: on ? SPACE_AFTER : 0 })}>{tr('Espacio después del párrafo')}</Check>
+      <Check on={!!paragraph?.keepNext} onChange={(keepNext) => commands.setParagraphProps({ keepNext })}>{tr('Mantener con el siguiente')}</Check>
 
-      <h3>Tabla</h3>
+      <h3>{tr('Tabla')}</h3>
       {!table && (
         <>
           <div className="hd-grid">
             <label className="hd-field">
-              Filas
+              {tr('Filas')}
               <input type="number" min="1" max="50" value={size.rows} onChange={(e) => setSize({ ...size, rows: e.target.valueAsNumber || 1 })} />
             </label>
             <label className="hd-field">
-              Columnas
+              {tr('Columnas')}
               <input type="number" min="1" max="12" value={size.columns} onChange={(e) => setSize({ ...size, columns: e.target.valueAsNumber || 1 })} />
             </label>
           </div>
-          <button disabled={!state.canEditTables || state.inTable} onClick={() => commands.insertTable(size.rows, size.columns)}>Insertar tabla</button>
-          <p className="hd-empty">Con el cursor en una tabla, aquí aparecen sus filas, columnas y celdas.</p>
+          <button disabled={!state.canEditTables || state.inTable} onClick={() => commands.insertTable(size.rows, size.columns)}>{tr('Insertar tabla')}</button>
+          <p className="hd-empty">{tr('Con el cursor en una tabla, aquí aparecen sus filas, columnas y celdas.')}</p>
         </>
       )}
       {table && (
         <>
           <div className="hd-grid">
-            <button disabled={!state.canMergeCells} onClick={() => commands.mergeTableCells()}>Combinar celdas</button>
-            <button disabled={!state.canSplitCell} onClick={() => commands.splitTableCell()}>Dividir celda</button>
-            <button onClick={() => commands.insertTableRow(false)}>Fila arriba</button>
-            <button onClick={() => commands.insertTableRow(true)}>Fila abajo</button>
-            <button onClick={() => commands.insertTableColumn(false)}>Columna izquierda</button>
-            <button onClick={() => commands.insertTableColumn(true)}>Columna derecha</button>
-            <button onClick={() => commands.deleteTableRow()}>Eliminar fila</button>
-            <button onClick={() => commands.deleteTableColumn()}>Eliminar columna</button>
+            <button disabled={!state.canMergeCells} onClick={() => commands.mergeTableCells()}>{tr('Combinar celdas')}</button>
+            <button disabled={!state.canSplitCell} onClick={() => commands.splitTableCell()}>{tr('Dividir celda')}</button>
+            <button onClick={() => commands.insertTableRow(false)}>{tr('Fila arriba')}</button>
+            <button onClick={() => commands.insertTableRow(true)}>{tr('Fila abajo')}</button>
+            <button onClick={() => commands.insertTableColumn(false)}>{tr('Columna izquierda')}</button>
+            <button onClick={() => commands.insertTableColumn(true)}>{tr('Columna derecha')}</button>
+            <button onClick={() => commands.deleteTableRow()}>{tr('Eliminar fila')}</button>
+            <button onClick={() => commands.deleteTableColumn()}>{tr('Eliminar columna')}</button>
           </div>
-          <Check on={!!tableBorders} onChange={(on) => commands.setTableBorders(on)}>Bordes de la tabla</Check>
+          <Check on={!!tableBorders} onChange={(on) => commands.setTableBorders(on)}>{tr('Bordes de la tabla')}</Check>
           {cell && (
             <>
-              <Check on={cell.borders} onChange={(borders) => commands.setTableCellProps({ borders })}>Bordes de la celda</Check>
+              <Check on={cell.borders} onChange={(borders) => commands.setTableCellProps({ borders })}>{tr('Bordes de la celda')}</Check>
               <div className="hd-field">
-                Sombreado
-                <Swatches colors={CELL_SHADES} active={cell.shade} label="Sombreado" onPick={(shade) => commands.setTableCellProps({ shade })} />
-                <button disabled={!cell.shade} onClick={() => commands.setTableCellProps({ shade: '' })}>Sin sombreado</button>
+                {tr('Sombreado')}
+                <Swatches colors={CELL_SHADES} active={cell.shade} label={tr('Sombreado')} onPick={(shade) => commands.setTableCellProps({ shade })} />
+                <button disabled={!cell.shade} onClick={() => commands.setTableCellProps({ shade: '' })}>{tr('Sin sombreado')}</button>
               </div>
             </>
           )}
@@ -171,6 +174,7 @@ function Format() {
 }
 
 function Page() {
+  const tr = useTexts()
   const { state, commands } = useDocs()
   const page = useDocsPage()
   const setup = page.page
@@ -183,16 +187,16 @@ function Page() {
   const formats: [PageNumbering['format'], string][] = [
     ['number', `${state.page}`],
     ['numberOfTotal', `${state.page} / ${state.pageCount}`],
-    ['page', `Página ${state.page}`],
-    ['pageOfTotal', `Página ${state.page} de ${state.pageCount}`],
+    ['page', tr('Página {page}', { page: state.page })],
+    ['pageOfTotal', tr('Página {page} de {pages}', { page: state.page, pages: state.pageCount })],
   ]
 
   return (
     <div className="hd-panel-body">
-      <h3>Hoja</h3>
+      <h3>{tr('Hoja')}</h3>
       <div className="hd-grid">
         <label className="hd-field">
-          Tamaño
+          {tr('Tamaño')}
           <select
             value={paper?.id ?? ''}
             disabled={!setup}
@@ -201,14 +205,14 @@ function Page() {
               if (next) page.set(landscape ? { width: next.height, height: next.width } : { width: next.width, height: next.height })
             }}
           >
-            {!paper && <option value="">Personalizado</option>}
+            {!paper && <option value="">{tr('Personalizado')}</option>}
             {PAPERS.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+              <option key={p.id} value={p.id}>{tr(p.name)}</option>
             ))}
           </select>
         </label>
         <label className="hd-field">
-          Orientación
+          {tr('Orientación')}
           <select
             value={landscape ? 'landscape' : 'portrait'}
             disabled={!setup}
@@ -216,15 +220,15 @@ function Page() {
               if ((e.target.value === 'landscape') !== landscape) page.set({ width: setup!.height, height: setup!.width })
             }}
           >
-            <option value="portrait">Vertical</option>
-            <option value="landscape">Horizontal</option>
+            <option value="portrait">{tr('Vertical')}</option>
+            <option value="landscape">{tr('Horizontal')}</option>
           </select>
         </label>
       </div>
       <div className="hd-grid">
         {MARGINS.map(({ key, label }) => (
           <label key={key} className="hd-field">
-            {label} (cm)
+            {tr(label)} (cm)
             <input
               type="number"
               min="0"
@@ -241,9 +245,9 @@ function Page() {
         ))}
       </div>
 
-      <h3>Membrete</h3>
+      <h3>{tr('Membrete')}</h3>
       <label className="hd-outline">
-        {page.letterhead ? 'Cambiar membrete…' : 'Añadir membrete…'}
+        {page.letterhead ? tr('Cambiar membrete…') : tr('Añadir membrete…')}
         <input
           type="file"
           accept="image/png,image/jpeg"
@@ -257,46 +261,46 @@ function Page() {
       </label>
       {page.letterhead && (
         <div className="hd-grid">
-          <button onClick={() => void page.fitLetterheadMargins()}>Ajustar márgenes</button>
-          <button onClick={() => page.removeLetterhead()}>Quitar</button>
+          <button onClick={() => void page.fitLetterheadMargins()}>{tr('Ajustar márgenes')}</button>
+          <button onClick={() => page.removeLetterhead()}>{tr('Quitar')}</button>
         </div>
       )}
 
-      <h3>Encabezado y pie</h3>
+      <h3>{tr('Encabezado y pie')}</h3>
       <div className="hd-grid">
         <button className={state.area === 'header' ? 'on' : ''} onClick={() => commands.setArea(state.area === 'header' ? 'body' : 'header')}>
-          Editar encabezado
+          {tr('Editar encabezado')}
         </button>
         <button className={state.area === 'footer' ? 'on' : ''} onClick={() => commands.setArea(state.area === 'footer' ? 'body' : 'footer')}>
-          Editar pie
+          {tr('Editar pie')}
         </button>
       </div>
-      <Check on={page.firstPageDifferent} onChange={(on) => page.setFirstPageDifferent(on)}>Primera página diferente</Check>
+      <Check on={page.firstPageDifferent} onChange={(on) => page.setFirstPageDifferent(on)}>{tr('Primera página diferente')}</Check>
 
-      <h3>Número de página</h3>
+      <h3>{tr('Número de página')}</h3>
       <div className="hd-grid">
         <label className="hd-field">
-          Lugar
+          {tr('Lugar')}
           <select
             value={numbering?.place ?? ''}
             onChange={(e) => page.setNumbering(e.target.value ? { ...base, place: e.target.value as PageNumbering['place'] } : undefined)}
           >
-            <option value="">Ninguno</option>
-            <option value="header">Encabezado</option>
-            <option value="footer">Pie</option>
+            <option value="">{tr('Ninguno')}</option>
+            <option value="header">{tr('Encabezado')}</option>
+            <option value="footer">{tr('Pie')}</option>
           </select>
         </label>
         <label className="hd-field">
-          Posición
+          {tr('Posición')}
           <select value={base.align} disabled={!numbering} onChange={(e) => page.setNumbering({ ...base, align: e.target.value as PageNumbering['align'] })}>
-            <option value="left">Izquierda</option>
-            <option value="center">Centro</option>
-            <option value="right">Derecha</option>
+            <option value="left">{tr('Izquierda')}</option>
+            <option value="center">{tr('Centro')}</option>
+            <option value="right">{tr('Derecha')}</option>
           </select>
         </label>
       </div>
       <label className="hd-field">
-        Formato
+        {tr('Formato')}
         <select value={base.format} disabled={!numbering} onChange={(e) => page.setNumbering({ ...base, format: e.target.value as PageNumbering['format'] })}>
           {formats.map(([format, example]) => (
             <option key={format} value={format}>{example}</option>
@@ -308,6 +312,7 @@ function Page() {
 }
 
 function Outline() {
+  const tr = useTexts()
   const outline = useDocsOutline()
   const [dragged, setDragged] = useState<OutlineItem>()
   const [over, setOver] = useState<number>()
@@ -319,14 +324,14 @@ function Outline() {
   }
 
   return (
-    <nav className="hd-outline-list" aria-label="Esquema" onDragEnd={() => drop(dragged)}>
-      {outline.items.length === 0 && <p className="hd-empty">Sin encabezados.</p>}
+    <nav className="hd-outline-list" aria-label={tr('Esquema')} onDragEnd={() => drop(dragged)}>
+      {outline.items.length === 0 && <p className="hd-empty">{tr('Sin encabezados.')}</p>}
       {outline.items.map((item, index) => (
         <button
           key={item.para}
           className={`${index === outline.active ? 'on' : ''} ${over === index ? 'over' : ''}`}
           style={{ paddingLeft: 10 + Math.max(item.level - 1, 0) * 12, fontWeight: item.level === 0 ? 600 : undefined }}
-          title={item.level > 0 ? 'Arrastra para mover la sección' : undefined}
+          title={item.level > 0 ? tr('Arrastra para mover la sección') : undefined}
           draggable={item.level > 0}
           onDragStart={(e) => {
             e.dataTransfer.effectAllowed = 'move'
@@ -360,7 +365,7 @@ function Outline() {
             drop(undefined)
           }}
         >
-          Soltar aquí para llevarla al final
+          {tr('Soltar aquí para llevarla al final')}
         </div>
       )}
     </nav>
@@ -368,6 +373,7 @@ function Outline() {
 }
 
 function Variables() {
+  const tr = useTexts()
   const variables = useDocsVariables()
   const [values, setValues] = useState<Record<string, string>>({})
   const filled = Object.fromEntries(variables.names.filter((name) => values[name]).map((name) => [name, values[name]]))
@@ -379,20 +385,20 @@ function Variables() {
       if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('not an object')
       setValues({ ...values, ...Object.fromEntries(Object.entries(data).map(([name, value]) => [name, String(value ?? '')])) })
     } catch {
-      window.alert('Ese archivo no es un JSON con un valor por variable.')
+      window.alert(tr('Ese archivo no es un JSON con un valor por variable.'))
     }
   }
 
   return (
     <div className="hd-panel-body">
-      <h3>Variables</h3>
-      {variables.names.length === 0 && <p className="hd-empty">El documento no tiene variables.</p>}
+      <h3>{tr('Variables')}</h3>
+      {variables.names.length === 0 && <p className="hd-empty">{tr('El documento no tiene variables.')}</p>}
       {variables.names.map((name) => {
         const formats = variables.formats[name] ?? []
         const has = (id: FormatId) => formats.some((format) => format.id === id)
-        const chosen = (options: [FormatId | '', string][]) => options.find(([id]) => id && has(id))?.[0] ?? ''
+        const chosen = (options: [FormatId | '', Text][]) => options.find(([id]) => id && has(id))?.[0] ?? ''
         // One of a kind takes the place of another; none takes away the one there is.
-        const choose = (options: [FormatId | '', string][], next: string) => {
+        const choose = (options: [FormatId | '', Text][], next: string) => {
           const current = chosen(options)
           if (next) variables.setFormat(name, next as FormatId, true)
           else if (current) variables.setFormat(name, current, false)
@@ -402,30 +408,30 @@ function Variables() {
         const uses = variables.uses[name] ?? 1
         return (
           <div key={name} className={`hd-var ${name === variables.active ? 'on' : ''}`}>
-            <button className="hd-var-name" title="Ir a la variable" onClick={() => variables.select(name)}>
+            <button className="hd-var-name" title={tr('Ir a la variable')} onClick={() => variables.select(name)}>
               {name}
-              {uses > 1 && <small> · {uses} usos</small>}
+              {uses > 1 && <small> · {tr('{n} usos', { n: uses })}</small>}
             </button>
-            <input aria-label={`Valor de ${name}`} placeholder="Valor" value={value} onChange={(e) => setValues({ ...values, [name]: e.target.value })} />
+            <input aria-label={tr('Valor de {name}', { name })} placeholder={tr('Valor')} value={value} onChange={(e) => setValues({ ...values, [name]: e.target.value })} />
             <div className="hd-var-formats">
-              <select aria-label={`Tipo de ${name}`} value={chosen(TYPES)} onChange={(e) => choose(TYPES, e.target.value)}>
+              <select aria-label={tr('Tipo de {name}', { name })} value={chosen(TYPES)} onChange={(e) => choose(TYPES, e.target.value)}>
                 {TYPES.map(([id, label]) => (
-                  <option key={id} value={id}>{label}</option>
+                  <option key={id} value={id}>{tr(label)}</option>
                 ))}
               </select>
-              <select aria-label={`Mayúsculas de ${name}`} value={chosen(CASES)} onChange={(e) => choose(CASES, e.target.value)}>
+              <select aria-label={tr('Mayúsculas de {name}', { name })} value={chosen(CASES)} onChange={(e) => choose(CASES, e.target.value)}>
                 {CASES.map(([id, label]) => (
-                  <option key={id} value={id}>{label}</option>
+                  <option key={id} value={id}>{tr(label)}</option>
                 ))}
               </select>
               {MARKS.map(([id, letter, label]) => (
-                <button key={id} className={`hd-mark-${id} ${has(id) ? 'on' : ''}`} aria-pressed={has(id)} aria-label={label} title={label} onClick={() => variables.setFormat(name, id, !has(id))}>
-                  {letter}
+                <button key={id} className={`hd-mark-${id} ${has(id) ? 'on' : ''}`} aria-pressed={has(id)} aria-label={tr(label)} title={tr(label)} onClick={() => variables.setFormat(name, id, !has(id))}>
+                  {tr(letter)}
                 </button>
               ))}
             </div>
             {preview.bad ? (
-              <small className="hd-var-bad">{has('number') || has('currency') ? 'No es un número' : 'No es una fecha'}</small>
+              <small className="hd-var-bad">{has('number') || has('currency') ? tr('No es un número') : tr('No es una fecha')}</small>
             ) : (
               value !== '' && preview.text !== value && <small>→ {preview.text}</small>
             )}
@@ -435,7 +441,7 @@ function Variables() {
       {variables.names.length > 0 && (
         <div className="hd-grid">
           <label className="hd-outline">
-            Cargar JSON…
+            {tr('Cargar JSON…')}
             <input
               type="file"
               accept="application/json,.json"
@@ -447,7 +453,7 @@ function Variables() {
             />
           </label>
           <button className="hd-solid" disabled={Object.keys(filled).length === 0} onClick={() => variables.fill(filled)}>
-            Rellenar
+            {tr('Rellenar')}
           </button>
         </div>
       )}
@@ -456,17 +462,18 @@ function Variables() {
 }
 
 function Content() {
+  const tr = useTexts()
   const { state, commands } = useDocs()
   const hasToc = useDocsValue((e) => e.hasToc, false)
 
   return (
     <>
       <div className="hd-panel-body">
-        <h3>Esquema</h3>
+        <h3>{tr('Esquema')}</h3>
         {hasToc ? (
-          <button onClick={() => commands.updateToc()}>Actualizar índice</button>
+          <button onClick={() => commands.updateToc()}>{tr('Actualizar índice')}</button>
         ) : (
-          <button disabled={state.area !== 'body' || state.inTable} onClick={() => commands.insertToc()}>Insertar índice</button>
+          <button disabled={state.area !== 'body' || state.inTable} onClick={() => commands.insertToc()}>{tr('Insertar índice')}</button>
         )}
       </div>
       <Outline />
@@ -476,6 +483,7 @@ function Content() {
 }
 
 function Notes() {
+  const tr = useTexts()
   const { state, commands, docs } = useDocs()
   const bubble = useDocsBubble()
   const notes = useDocsNotes()
@@ -484,21 +492,21 @@ function Notes() {
   return (
     <div className="hd-panel-body">
       <label className="hd-field">
-        Tu nombre, con el que se firman las notas
+        {tr('Tu nombre, con el que se firman las notas')}
         <input value={state.me.name} onChange={(e) => docs?.setAuthor(e.target.value)} />
       </label>
-      <button className="hd-outline" onClick={() => bubble?.ask('note')}>Añadir nota a la selección</button>
-      <Check on={shown} onChange={(on) => commands.setShowNotes(on)}>Mostrar notas junto a la página</Check>
-      {notes.notes.length === 0 && <p className="hd-empty">El documento no tiene notas.</p>}
+      <button className="hd-outline" onClick={() => bubble?.ask('note')}>{tr('Añadir nota a la selección')}</button>
+      <Check on={shown} onChange={(on) => commands.setShowNotes(on)}>{tr('Mostrar notas junto a la página')}</Check>
+      {notes.notes.length === 0 && <p className="hd-empty">{tr('El documento no tiene notas.')}</p>}
       {notes.notes.map((note) => (
         <article key={note.id} className={`hd-note ${note.id === notes.active ? 'on' : ''}`} style={{ borderLeftColor: `#${note.color}` }}>
-          <button className="hd-note-excerpt" title="Ir al texto" onClick={() => notes.select(note.id)}>
+          <button className="hd-note-excerpt" title={tr('Ir al texto')} onClick={() => notes.select(note.id)}>
             «{note.excerpt}»
           </button>
-          <textarea aria-label={`Nota de ${note.author}`} rows={2} value={note.text} onChange={(e) => notes.setText(note.id, e.target.value)} />
+          <textarea aria-label={tr('Nota de {author}', { author: note.author })} rows={2} value={note.text} onChange={(e) => notes.setText(note.id, e.target.value)} />
           <footer>
             <span>{note.author}</span>
-            <span className="hd-dots" role="group" aria-label="Color de la nota">
+            <span className="hd-dots" role="group" aria-label={tr('Color de la nota')}>
               {NOTE_COLORS.map((color) => (
                 <button
                   key={color}
@@ -509,7 +517,7 @@ function Notes() {
                 />
               ))}
             </span>
-            <button onClick={() => notes.remove(note.id)}>Eliminar</button>
+            <button onClick={() => notes.remove(note.id)}>{tr('Eliminar')}</button>
           </footer>
         </article>
       ))}
@@ -525,19 +533,20 @@ const TABS = [
 ] as const
 
 export function Panels({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const tr = useTexts()
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('format')
   const Panel = TABS.find((t) => t.id === tab)!.panel
 
   return (
-    <aside className={`hd-panels ${open ? 'open' : ''}`} aria-label="Paneles">
+    <aside className={`hd-panels ${open ? 'open' : ''}`} aria-label={tr('Paneles')}>
       <div className="hd-tabs" role="tablist">
         {TABS.map(({ id, label }) => (
           <button key={id} role="tab" aria-selected={id === tab} className={id === tab ? 'on' : ''} onClick={() => setTab(id)}>
-            {label}
+            {tr(label)}
           </button>
         ))}
         {/* Only where the panels lie over the document: beside it they are always there. */}
-        <button className="hd-panels-close" aria-label="Cerrar paneles" onClick={onClose}>✕</button>
+        <button className="hd-panels-close" aria-label={tr('Cerrar paneles')} onClick={onClose}>✕</button>
       </div>
       <Panel />
     </aside>

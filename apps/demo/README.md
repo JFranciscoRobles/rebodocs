@@ -22,9 +22,9 @@ It is also on the site, at [rebodocs.com/demo](https://rebodocs.com/demo/):
 a table, places to sign. `Abrir .docx` opens a file of the disk in both tabs.
 Saving hands the DOCX back as a download: there is no backend.
 
-Its labels are in Spanish, the language the editor speaks unless told
-otherwise; the selector in the status bar changes what the library itself
-writes.
+It opens in Spanish, the language the editor speaks unless told otherwise. The
+selector in the status bar changes it for what the library writes and for the
+labels of the demo, which are in `src/headless/texts.ts`.
 
 ## Purpose
 
@@ -45,14 +45,12 @@ project that installs `@rebodocs/react` from npm, it works without the alias.
 | `src/FullEditor.tsx` | `DocsEditor`. |
 | `src/HeadlessEditor.tsx` | The provider and the layout: bars, find, ruler, pages. |
 | `src/headless/Panels.tsx` | The side panel: format, page, contents, notes. |
+| `src/headless/texts.ts` | Its labels in Spanish and English, and the hook that follows the language. |
 | `src/HeadlessEditor.css` | Its look, all under `.hd`. |
 | `scripts/sample.ts` | Writes `public/sample.docx`. |
 
 ## Where it can improve
 
-- **One language.** Its own labels are written in Spanish in the components.
-  A table of texts that follows `onLocaleChange` would show how an
-  application translates itself along with the editor.
 - **Tests.** None: it was checked by eye, in Chrome, at a wide and a narrow
   window. It is the natural place for component tests of the hooks.
 - **No dialogs of its own.** A link, a variable and a note are asked for by

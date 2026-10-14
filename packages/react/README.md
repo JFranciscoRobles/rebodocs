@@ -85,7 +85,7 @@ document after each one.
 | `useDocsFind()` | Find and replace. |
 | `useDocsLink()`, `useDocsNotes()`, `useDocsOutline()` | Links, comments, the outline of headings. |
 | `useDocsVariables()` | Template variables: list, insert, fill; and how each writes its value (a date, an amount, capitals). |
-| `useDocsStyles()`, `useDocsPage()` | Paragraph styles; page setup, numbering and letterhead. |
+| `useDocsStyles()`, `useDocsPage()` | Paragraph styles, the standard ones named in the language of the interface; page setup, numbering and letterhead. |
 | `useDocsSelectionBox()` | Where the selection is on screen, to place a panel beside it. |
 | `useDocsResponsive()` | Fits pages to a narrow window; reports the on-screen keyboard. |
 | `useDocsCount()` | Words and characters, of the document and of the selection. |
