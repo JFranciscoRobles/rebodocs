@@ -1,0 +1,25 @@
+{
+  "name": "@rebodocs/storage-demo",
+  "version": "0.5.4",
+  "description": "Documents kept in an S3 bucket (Cloudflare R2, AWS S3, MinIO): list, open, save, and a PDF made on the server.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "cors": "vite-node scripts/cors.ts",
+    "seed": "node -e \"fs.mkdirSync('.seed', { recursive: true })\" && vite-node ../demo/scripts/sample.ts .seed/contract.docx && vite-node scripts/seed.ts .seed/contract.docx",
+    "build": "tsc --noEmit && vite build"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1151.0",
+    "@aws-sdk/s3-request-presigner": "^3.1151.0",
+    "@rebodocs/core": "*",
+    "@rebodocs/react": "*",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.1"
+  }
+}

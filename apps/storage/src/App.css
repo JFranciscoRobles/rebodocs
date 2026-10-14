@@ -1,0 +1,211 @@
+:root {
+  font: 14px/1.45 system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: #1f2328;
+  background: #fff;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+  padding: 5px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+}
+button:hover:not(:disabled) {
+  border-color: #0b57d0;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+button.primary {
+  border-color: #0b57d0;
+  background: #0b57d0;
+  color: #fff;
+}
+code {
+  font: 0.92em ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.quiet {
+  color: #656d76;
+}
+.bad {
+  color: #b42318;
+}
+.good {
+  color: #1a7f37;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  height: 100%;
+}
+.files {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid #d0d7de;
+  background: #f6f8fa;
+}
+.files header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #d0d7de;
+}
+.files header strong {
+  flex: 1;
+}
+.files > p {
+  margin: 12px;
+}
+.files ul {
+  flex: 1;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+.files li button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  width: 100%;
+  padding: 8px;
+  border-color: transparent;
+  background: none;
+  text-align: left;
+}
+.files li button.on {
+  border-color: #0b57d0;
+  background: #fff;
+}
+.files .kind {
+  grid-row: span 2;
+  align-self: center;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+}
+.files .kind.docx {
+  background: #0b57d0;
+}
+.files .kind.pdf {
+  background: #b42318;
+}
+.files .name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.files small {
+  color: #656d76;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #d0d7de;
+}
+.bar span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.editor {
+  flex: 1;
+  min-height: 0;
+}
+.fill {
+  height: 100%;
+}
+.empty {
+  display: grid;
+  height: 100%;
+  margin: 0;
+  place-items: center;
+  color: #656d76;
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(15 23 42 / 0.4);
+}
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(460px, 100%);
+  max-height: 100%;
+  padding: 20px;
+  overflow-y: auto;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 20px 50px rgb(15 23 42 / 0.3);
+}
+.dialog h2,
+.dialog p {
+  margin: 0;
+}
+.dialog h2 {
+  font-size: 17px;
+}
+.dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-weight: 600;
+}
+.dialog input {
+  padding: 6px 8px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  font-weight: 400;
+}
+.dialog .row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+@media (max-width: 760px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 32%) minmax(0, 1fr);
+  }
+  .files {
+    border-right: 0;
+    border-bottom: 1px solid #d0d7de;
+  }
+}

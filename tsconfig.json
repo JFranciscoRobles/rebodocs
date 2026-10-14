@@ -14,5 +14,5 @@
     "noEmit": true
   },
   "include": ["packages/*/src", "packages/*/test", "apps/*/src"],
-  "exclude": ["apps/demo"]
+  "exclude": ["apps/demo", "apps/storage", "apps/realtime"]
 }

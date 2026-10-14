@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["node", "vite/client"],
+    "paths": {
+      "@rebodocs/react": ["../../packages/react/src/index.ts"]
+    }
+  },
+  "include": ["src", "server", "scripts", "test", "vite.config.ts"],
+  "exclude": []
+}
