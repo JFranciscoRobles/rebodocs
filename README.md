@@ -17,7 +17,8 @@ of its own.
 It was built to live inside another application (a CRM that fills contract
 and receipt templates), so it comes as a set of packages: an engine that runs
 without a browser, an editor, a React component, a collaboration server and
-an MCP server for AI assistants.
+an MCP server for AI assistants, which also puts Claude in a chat beside the
+document.
 
 ```bash
 npm install
@@ -25,6 +26,7 @@ npm run dev        # playground at http://localhost:5173
 npm run demo       # the React package, two ways, at http://localhost:5175
 npm run storage    # documents in an S3 bucket, at http://localhost:5176 (needs apps/storage/.env)
 npm run realtime   # several people on one document, at http://localhost:5177
+npm run assistant  # Claude in a shared document, at http://localhost:5179 (needs an API key)
 npm test           # 275 tests
 npm run typecheck
 ```
@@ -59,7 +61,7 @@ npm run typecheck
   seeing the others' carets, with per-person undo.
 - **Works on a phone.** Pages fit the width of the screen and are zoomed with
   two fingers; taps, selection handles and on-screen keyboards are handled.
-- **AI assistants** can read and change documents through an MCP server.
+- **AI assistants** can read and change documents, keeping their look: through an MCP server, or as a chat with Claude in your application.
 - **Any language, any font.** The interface ships in Spanish and English and
   takes more as JSON; an application can register its own typefaces.
 
@@ -71,11 +73,12 @@ npm run typecheck
 | [`@rebodocs/editor`](packages/editor) | The editor: pages, caret and selection, toolbar, menu, side panel, status bar. No framework. | Browser |
 | [`@rebodocs/react`](packages/react) ([npm](https://www.npmjs.com/package/@rebodocs/react)) | The editor as a React component, and as headless hooks for an interface of your own. | Browser (SSR-safe) |
 | [`@rebodocs/collab`](packages/collab) | Collaboration: the change format, the room server and its browser client. | Node, browser |
-| [`@rebodocs/mcp`](packages/mcp) | A Model Context Protocol server: tools for an assistant to read and edit documents. | Node |
+| [`@rebodocs/mcp`](packages/mcp) | A Model Context Protocol server: tools for an assistant to read and edit documents; and the route that takes a chat in the page to the Claude API. | Node |
 | [`apps/playground`](apps/playground) | The test application every package is tried in. | Browser |
 | [`apps/demo`](apps/demo) | The React package as an application uses it: the whole editor, and an interface of one's own built on the hooks. | Browser |
 | [`apps/storage`](apps/storage) | Documents kept in an S3 bucket (Cloudflare R2, AWS S3, MinIO): open, save, and a PDF made on the server. | Browser and Node |
 | [`apps/realtime`](apps/realtime) | Several people on one document at once: the collaboration server, a backend with its three routes and signed tickets, and the page. | Browser and Node |
+| [`apps/assistant`](apps/assistant) | Claude in the editor: a chat beside a shared document that reads and changes it, keeping its look; the key stays on the server. | Browser and Node |
 | [`apps/site`](apps/site) | [rebodocs.com](https://rebodocs.com): the landing page and the developer documentation. | Static |
 
 Each package has a README saying what it is for, how it is used, and where it
@@ -146,6 +149,7 @@ npm run collab -- --backend https://my-app.example/api/docs   # key in REBODOCS_
 | `npm run generate -- template.docx data.json -o out.pdf` | Fills a template without a browser; DOCX, PDF or Markdown by extension. |
 | `npm run storage` | The demo of documents in an S3 bucket; needs `apps/storage/.env`. |
 | `npm run realtime` | The demo of several people on one document at once. |
+| `npm run assistant` | The demo of Claude in a shared document; needs `apps/assistant/.env`. |
 | `npm run collab` | The collaboration server. |
 | `npm run mcp` | The MCP server, over standard input and output. |
 | `npm run locale -- fr texts/fr.json` | Starts a translation of the interface, or brings one up to date. |
@@ -163,6 +167,7 @@ each.
 | [`apps/demo`](apps/demo) | `npm run demo`, or [online](https://rebodocs.com/demo/) | The editor as it comes, and an interface built from nothing on the hooks, in Spanish and English. No backend. |
 | [`apps/storage`](apps/storage) | `npm run storage` | Documents in Cloudflare R2, AWS S3 or MinIO. The browser opens and saves with addresses signed for a few minutes and never has a key; the server fills a template and stores the PDF. |
 | [`apps/realtime`](apps/realtime) | `npm run realtime` | Every document is a room, there only while someone is in it. The collaboration server keeps nothing: a backend gives it the document, takes it back, and lets each person in with a signed ticket. |
+| [`apps/assistant`](apps/assistant) | `npm run assistant` | The real-time demo with Claude beside the document. The page holds the conversation and runs the tools on the editor; the server takes it to the Claude API with its key. |
 | [`apps/playground`](apps/playground) | `npm run dev` | Everything wired together without a framework. |
 
 ## Status

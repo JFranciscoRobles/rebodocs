@@ -7,9 +7,11 @@
   "type": "module",
   "exports": {
     ".": "./src/tools.ts",
-    "./browser": "./src/browser.ts"
+    "./browser": "./src/browser.ts",
+    "./claude": "./src/claude.ts"
   },
   "dependencies": {
-    "@rebodocs/core": "*"
+    "@rebodocs/core": "*",
+    "@anthropic-ai/sdk": "^0.133.0"
   }
 }

@@ -54,9 +54,9 @@ Take it when several people must edit at once. See [Real-time collaboration](/do
 
 ## @rebodocs/mcp
 
-A Model Context Protocol server whose tools are the editor's operations, over files or over the document open in a browser.
+A Model Context Protocol server whose tools are the editor's operations, over files or over the document open in a browser. It also has the route of a backend that takes a chat in the page to the Claude API (`@rebodocs/mcp/claude`); the chat itself is in `@rebodocs/react`.
 
-Take it to let an assistant work on documents. See [AI assistants](/docs/assistants/).
+Take it to let an assistant work on documents, from a client such as Claude Desktop or inside your application. See [AI assistants](/docs/assistants/).
 
 ## The applications
 

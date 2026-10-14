@@ -1,6 +1,6 @@
 # Demos to run
 
-Four applications in the repository use the packages the way yours would. Each is small, and is there to be read and copied from.
+Five applications in the repository use the packages the way yours would. Each is small, and is there to be read and copied from.
 
 ```bash
 git clone https://github.com/JFranciscoRobles/rebodocs && cd rebodocs && npm install
@@ -11,6 +11,7 @@ git clone https://github.com/JFranciscoRobles/rebodocs && cd rebodocs && npm ins
 | [The React package](#the-react-package) | `npm run demo`, or [online](/demo/) | The editor as it comes, and an interface built from nothing on the hooks. |
 | [An S3 bucket](#an-s3-bucket) | `npm run storage` | Documents kept in Cloudflare R2, AWS S3 or MinIO: open, save, and a PDF made on the server. |
 | [Real time](#real-time) | `npm run realtime` | Several people on one document at once, through a backend of your own. |
+| [Claude in the editor](#claude-in-the-editor) | `npm run assistant` | A chat beside a shared document that reads and changes it, keeping its look. |
 | [The playground](#the-playground) | `npm run dev` | Everything wired together without a framework. |
 
 ## The React package
@@ -43,6 +44,16 @@ Nothing to set up, and no backend: saving hands the file back as a download. [A 
 - **The collaboration server keeps nothing.** A backend gives it the document, takes it back, and says who may come in, with a signed ticket for each person.
 
 Open a document, press **Copy link** and open the link in another window. [Real-time collaboration](/docs/collaboration/#a-demo-to-run) explains each part.
+
+## Claude in the editor
+
+`apps/assistant`, at `http://localhost:5179`. The real-time demo with a chat beside the document. It needs a key of the Claude API in `apps/assistant/.env`; the documents are kept in a folder, or in a bucket as in the storage demo.
+
+- **Ask for something to be done**: "translate it into English keeping the format", "put the obligations in two columns", "make the table repeat its heading row". Claude reads the document, does it with the same tools the MCP server has, and says what it did.
+- **What it does is yours**: each change is a step to undo and, in a room, the others see it happen.
+- **The key stays on the server.** The page sends the conversation to its backend, which takes it to the Claude API; the tools run in the page.
+
+[AI assistants](/docs/assistants/#in-your-own-application) has the code to put it in an application.
 
 ## The playground
 

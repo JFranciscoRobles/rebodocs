@@ -27,6 +27,7 @@ Touch input was also tried on a real phone.
 - **The demos in a browser.** The storage and real-time demos were checked through their backends and their tests, not by clicking through their pages.
 - **Many documents.** The pagination rules were derived from a few files in Arial with Word for Mac. Other fonts and versions of Word may differ.
 - **Many phones.** One real device. Keyboards differ.
+- **Claude in the editor with a real key.** The chat and its route were tested against a Claude of the tests' own and the page was opened without a key; a conversation with the real API has not been tried in the repository.
 - **Production.** Nobody has depended on it yet.
 
 ## Known limits

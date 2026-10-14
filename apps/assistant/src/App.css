@@ -1,0 +1,115 @@
+/* The realtime demo's page, with the chat as a third column. */
+
+.app.with-chat {
+  grid-template-columns: 250px minmax(0, 1fr) 340px;
+}
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid #d0d7de;
+  background: #f6f8fa;
+}
+.chat header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #d0d7de;
+}
+.chat header strong {
+  flex: 1;
+}
+.chat .entries {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
+}
+.chat .entries > p {
+  margin: 0;
+}
+.chat .entry {
+  max-width: 92%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chat .entry.person {
+  align-self: flex-end;
+  background: #0b57d0;
+  color: #fff;
+}
+.chat .entry.assistant {
+  align-self: flex-start;
+  border: 1px solid #d0d7de;
+  background: #fff;
+}
+.chat .entry.notice,
+.chat .entry.thinking {
+  align-self: center;
+  padding: 2px 0;
+  font-size: 13px;
+}
+.chat .tool {
+  align-self: flex-start;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #eaeef2;
+  color: #57606a;
+  font-size: 12px;
+}
+.chat .tool.ok {
+  background: #dafbe1;
+  color: #1a7f37;
+}
+.chat .tool.bad {
+  background: #ffebe9;
+  color: #b42318;
+}
+.chat .ideas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chat .ideas p {
+  margin: 0 0 4px;
+}
+.chat .ideas button {
+  text-align: left;
+}
+.chat form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid #d0d7de;
+}
+.chat textarea {
+  padding: 8px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  font: inherit;
+  resize: vertical;
+}
+.chat form button {
+  align-self: flex-end;
+}
+
+/* Narrow: the chat goes under the document. */
+@media (max-width: 1100px) {
+  .app.with-chat {
+    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 320px;
+  }
+  .chat {
+    grid-column: 1 / -1;
+    border-top: 1px solid #d0d7de;
+    border-left: 0;
+  }
+}

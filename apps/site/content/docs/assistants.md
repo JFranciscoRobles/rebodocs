@@ -67,6 +67,35 @@ An assistant sees the text by default, not how it looks. `read_formatting` tells
 
 `edit_table` also sets the height of a row, the heading rows that repeat on each page, where the text sits in its cells and the lines around them, and deletes a whole table.
 
+## In your own application
+
+The button above reaches a server on the person's machine. To have Claude in your application, for anyone who uses it, the page talks to your backend instead, and the backend to the Claude API: `npm run assistant` runs it ([the demo](/docs/demos/#claude-in-the-editor)).
+
+On the server, a route that takes the conversation to Claude, with your key:
+
+```ts
+import { assistantRoute } from '@rebodocs/mcp/claude';
+
+// ANTHROPIC_API_KEY in the environment. Answers POST /api/assistant.
+const assistant = assistantRoute({ allow: (request) => isSignedIn(request) });
+http.createServer(async (request, response) => {
+  if (await assistant(request, response)) return;
+  // …the rest of your server
+});
+```
+
+In the page, the conversation, on the editor:
+
+```tsx
+import { createAssistantChat } from '@rebodocs/react';
+
+const chat = createAssistantChat(handle.editor, { onChange: redraw });
+await chat.send('Translate the document into English, keeping its format.');
+chat.entries; // what to show: the person, Claude, each tool it used
+```
+
+The answer comes as Claude writes it: the route sends a line of JSON for each piece of text and each tool it asks for, and the whole answer at the end, so the chat shows the words as they come. The page holds the conversation and runs the tools Claude asks for on the document it has open, so each change is a step to undo, and in a room the others see it. The server keeps nothing. It gives each address 40 steps a minute (`perMinute`), and asks Claude Opus 5.5 at medium effort unless given another `model` or `effort`.
+
 ## What to know
 
 - Paragraph numbers shift after an insertion, so an assistant works best one edit at a time.

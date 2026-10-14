@@ -22,7 +22,7 @@ It was built to live inside another application: a CRM that fills contract and r
 | `@rebodocs/editor` | You want the editor in a page with no framework, or to build on its pieces. |
 | `@rebodocs/core` | You generate or transform documents in code: fill a template, make a PDF. |
 | `@rebodocs/collab` | Several people must work on the same document at once. |
-| `@rebodocs/mcp` | An AI assistant should read and edit documents. |
+| `@rebodocs/mcp` | An AI assistant should read and edit documents: Claude Desktop and other MCP clients, or Claude in a chat of your application. |
 
 [Packages](/docs/packages/) says what each one holds and how they depend on each other.
 

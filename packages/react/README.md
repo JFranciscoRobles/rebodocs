@@ -104,6 +104,11 @@ cut and paste on a touch screen, a variable made of the words selected, a
 link, a note. It is the one headless piece with a look of its own (classes
 `dx-bb…`); with it, ⌘K asks for a link there unless there is an `onLinkKey`.
 
+`createAssistantChat(editor, { endpoint })` is a conversation with Claude
+about the document open: the page holds it and runs on the editor the tools
+Claude asks for, and your backend takes it to the Claude API with your key
+(`assistantRoute` of `@rebodocs/mcp/claude`, in `apps/assistant`).
+
 `mountDocs(element, options)` (also at `@rebodocs/react/mount`) is the whole
 editor without React, for any other framework.
 

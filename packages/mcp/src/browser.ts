@@ -19,6 +19,20 @@ export interface AssistantHost {
 }
 
 
+/** Runs a tool on the document open in the editor: what it changes is one step to undo. */
+export function runOnEditor(host: AssistantHost, tool: string, args: Record<string, unknown>): { ok: boolean; text: string } {
+  try {
+    const result = runTool(host.doc, tool, args, { pageOf: (doc) => host.pagesOf(doc), author: host.author || undefined });
+    if (result.doc && result.doc !== host.doc) host.edit(() => result.doc!, result.reveal);
+    return { ok: true, text: result.text };
+  } catch (error) {
+    if (error instanceof ToolError) return { ok: false, text: error.message };
+    return { ok: false, text: `The editor could not do it: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
+export { type AssistantChat, type AssistantChatOptions, type ChatEntry, createAssistantChat } from './chat';
+
 export type AssistantState = 'off' | 'connecting' | 'on';
 
 export interface AssistantLink {
@@ -69,17 +83,8 @@ export function connectAssistant(host: AssistantHost, options: AssistantOptions 
     options.onChange?.();
   };
 
-  const run = (tool: string, args: Record<string, unknown>): { ok: boolean; text: string; data?: string } => {
-    if (tool === EXPORT_TOOL) return { ok: true, text: '', data: base64(host.exportDocx()) };
-    try {
-      const result = runTool(host.doc, tool, args, { pageOf: (doc) => host.pagesOf(doc), author: host.author || undefined });
-      if (result.doc && result.doc !== host.doc) host.edit(() => result.doc!, result.reveal);
-      return { ok: true, text: result.text };
-    } catch (error) {
-      if (error instanceof ToolError) return { ok: false, text: error.message };
-      return { ok: false, text: `The editor could not do it: ${error instanceof Error ? error.message : String(error)}` };
-    }
-  };
+  const run = (tool: string, args: Record<string, unknown>): { ok: boolean; text: string; data?: string } =>
+    tool === EXPORT_TOOL ? { ok: true, text: '', data: base64(host.exportDocx()) } : runOnEditor(host, tool, args);
 
   const disconnect = () => {
     source?.close();

@@ -13,7 +13,7 @@ tools, so that "fill this contract", "add a clause after the third one" or
 "turn these into a table" are done on the real document, with its layout and
 formatting intact, instead of on a copy of its text.
 
-## Two kinds of document, the same tools
+## Three ways in, the same tools
 
 - **Files.** `open_document` reads a `.docx` into memory; the tools change it
   there; nothing is written until `save_document`, which saves DOCX, PDF or
@@ -24,6 +24,14 @@ formatting intact, instead of on a copy of its text.
   document the person is looking at. Each thing it does is one step to undo,
   and the view jumps to where it changed. The person switches it on; it does
   not connect by itself or remember between reloads.
+- **Claude in your application.** No server on the person's machine: a chat
+  in the page talks to your backend, and your backend to the Claude API with
+  your key. `assistantRoute` (`@rebodocs/mcp/claude`, `src/claude.ts`) is the
+  route of the backend: it takes the conversation to Claude and sends the
+  answer back as it is written, a line of JSON at a time. `createAssistantChat`
+  (`src/chat.ts`, also in `@rebodocs/react`) is the conversation in the page:
+  it runs the tools Claude asks for on the editor and sends back the results.
+  `apps/assistant` is the demo.
 
 ## Tools
 
@@ -96,6 +104,12 @@ after each step.
   let a hosted assistant use it.
 - **Remote editors** are possible (`--host`, `--token`) but were only tried
   on one machine.
-- **Not connected to collaboration.** An assistant cannot join a shared room
-  as a participant; it edits one person's tab.
-- **Tests** cover the tools; the bridge to the browser was checked by hand.
+- **In a shared room, through one person.** An assistant does not join a
+  room by itself: it works in the editor of the person who asked, and the
+  others see its changes as that person's. They do not see the conversation.
+- **Tests** cover the tools and the chat against a Claude of their own; the
+  bridge to the browser was checked by hand, and the chat has not been run
+  against the real API in the repository's tests.
+- **Not on npm.** `assistantRoute` is taken from this repository; an
+  application outside it copies `src/claude.ts` until the package is
+  published.

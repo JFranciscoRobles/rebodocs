@@ -32,3 +32,4 @@ export type { Bubble, Editor, FontSource, MessageKey, Messages, NoteView } from 
 export { NOTE_COLORS } from '@rebodocs/core';
 export type { ActiveFormat, Border, CellPatch, Columns, FindOptions, FormatId, OutlineItem, PageNumbering, PageSetup } from '@rebodocs/core';
 export type { CollabState, Peer, Session } from '@rebodocs/collab/browser';
+export { type AssistantChat, type AssistantChatOptions, type ChatEntry, createAssistantChat } from '@rebodocs/mcp/browser';
