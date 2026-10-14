@@ -59,6 +59,32 @@ its own making) and the editor passes it on:
 
 No storage credentials ever reach the browser or the collaboration server.
 
+[`apps/realtime`](../../apps/realtime) is a backend like that to run and to
+copy from: the three routes over a folder or an S3 bucket, tickets signed
+with a secret, and the page. `npm run realtime`.
+
+### From code
+
+`main.ts` is a thin wrapper. A Node process of your own starts the same
+server:
+
+```ts
+import { createCollabServer } from './src/server';
+import { backendStorage } from './src/storage';
+
+const server = createCollabServer({
+  port: 7420,
+  storage: backendStorage({ url: 'https://my-app.example/api/docs', key: process.env.BACKEND_KEY }),
+  saveEvery: 30_000,   // how often a room people are in is given to the backend
+  idle: 30_000,        // how long a room nobody is in waits before it is given back and let go of
+});
+await server.ready;
+
+server.rooms();        // [{ id: 'contract-17', people: ['Ana', 'Luis'] }]: the rooms it holds now
+await server.flush();  // give the backend what it does not have yet, before leaving
+server.close();
+```
+
 ## How it works
 
 - **Paragraphs have ids.** A change says "in paragraph `k3`, at offset 12,
@@ -75,8 +101,9 @@ No storage credentials ever reach the browser or the collaboration server.
 ## Where it can improve
 
 - **It has only run on one machine.** Two tabs, and two browsers on a LAN.
-  Different networks, HTTPS behind a proxy, and a real backend with real
-  storage are untried.
+  A backend with its three routes has tests with two people typing through
+  it, and one over Cloudflare R2 was joined by hand. Different networks,
+  HTTPS behind a proxy, and two browsers over a real bucket are untried.
 - **One process per room.** Rooms live in the memory of one server. Running
   several needs a shared log (Redis, a database) or routing by room.
 - **Permissions are checked on joining only.** Someone whose access is

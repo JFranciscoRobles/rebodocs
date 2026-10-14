@@ -1,0 +1,23 @@
+{
+  "name": "@rebodocs/realtime-demo",
+  "version": "0.5.4",
+  "description": "Several people on one document at once: the collaboration server, a backend that keeps the documents and says who may come in, and the page.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sample": "node -e \"fs.mkdirSync('.seed', { recursive: true })\" && vite-node ../demo/scripts/sample.ts .seed/contract.docx",
+    "dev": "npm run sample && vite",
+    "build": "tsc --noEmit && vite build"
+  },
+  "dependencies": {
+    "@rebodocs/core": "*",
+    "@rebodocs/react": "*",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@rebodocs/collab": "*",
+    "@vitejs/plugin-react": "^6.1.1"
+  }
+}

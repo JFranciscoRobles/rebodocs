@@ -11,6 +11,30 @@ The collaboration server only coordinates. It keeps a room in memory while peopl
                                                     your backend ──► S3, R2, a disk…
 ```
 
+## A demo to run
+
+[`apps/realtime`](https://github.com/JFranciscoRobles/rebodocs/tree/main/apps/realtime) is all of this page working: the collaboration server, a backend with the three routes and signed tickets, and the page. Nothing to set up:
+
+```bash
+git clone https://github.com/JFranciscoRobles/rebodocs && cd rebodocs && npm install
+npm run realtime          # http://localhost:5177
+```
+
+Every document is a room, and there is no other way to open one. Open `contract.docx`, press **Copy link** and open the link in another window, or another browser. Give each a name in **You are**. Each sees the other's caret and what either types.
+
+A room is there only while someone is in it. It opens when the first person comes in, with the document the backend has. While someone types it gives the document back every 10 seconds. A moment after the last one leaves it gives it back once more and is let go of: nothing of the document stays in the collaboration server. The list says which rooms are open, and who is in each: the collaboration server answers that with `rooms()`.
+
+The documents are kept in `apps/realtime/documents`, a folder. With the names of a bucket in `apps/realtime/.env` (the ones [the storage demo](/docs/storage/) takes) they are kept in an S3 bucket instead, with no other change: the backend asks a store for `list`, `get` and `put`, and both are one.
+
+| What | Where |
+| --- | --- |
+| The three routes, the tickets, the name of a room | [`server/collab.ts`](https://github.com/JFranciscoRobles/rebodocs/blob/main/apps/realtime/server/collab.ts) |
+| What the page asks: the documents, a new one, a ticket | [`server/api.ts`](https://github.com/JFranciscoRobles/rebodocs/blob/main/apps/realtime/server/api.ts) |
+| Where the documents are kept | [`server/store.ts`](https://github.com/JFranciscoRobles/rebodocs/blob/main/apps/realtime/server/store.ts) |
+| The page | [`src/App.tsx`](https://github.com/JFranciscoRobles/rebodocs/blob/main/apps/realtime/src/App.tsx) |
+
+The demo starts the collaboration server in its own process, on port 7421, to have one thing to run. It reaches the backend as it would from anywhere: over HTTP, with the key. The steps below are the same thing, each part on its own.
+
 ## 1. Run the server
 
 ```bash
@@ -69,7 +93,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
 ## 3. Give each person a ticket
 
-A ticket is whatever your backend can verify: a signed, short-lived token saying who the person is and which document they may open. Make it when you render the page, and pass it on:
+A ticket is whatever your backend can verify: a signed, short-lived token saying who the person is and which document they may open. Make it when you render the page, and pass it on. The demo signs the room, the name and when it expires with a secret only the backend has, so it keeps nothing to check one:
 
 ```tsx
 <DocsEditor collab={{ url: 'https://collab.example.com', room: documentId, ticket }} />
@@ -99,8 +123,9 @@ In the playground, the "Share" button of the status bar starts a room and gives 
 
 ## What to know
 
-Collaboration has run with two tabs, and two browsers on a local network. It has not run between different networks, behind an HTTPS proxy, or against a real backend with real storage. Before relying on it:
+Collaboration has run with two tabs, and two browsers on a local network. The demo's backend has automated tests with two people typing through it, over a folder. It has not run between different networks, behind an HTTPS proxy, or with two browsers over a real bucket. Before relying on it:
 
+- **A room is named with letters, digits, `-` and `_`**, from 8 to 64 of them. The id of a document in your system will do; the demo, which has file names, uses a digest of the name.
 - **One process holds a room.** Do not run several behind a load balancer without routing each room to one of them.
 - **The ticket is checked on joining only.** Someone whose access you revoke stays until they disconnect.
 - **A hard crash loses up to `--save-every` seconds** of changes.
