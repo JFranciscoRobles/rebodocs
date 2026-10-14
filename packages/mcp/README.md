@@ -29,12 +29,20 @@ formatting intact, instead of on a copy of its text.
 
 | Group | Tools |
 | --- | --- |
-| Reading | `get_overview`, `read_document`, `find_text`, `list_links`, `list_notes`, `list_variables` |
-| Text | `replace_text`, `insert_paragraphs`, `delete_paragraphs`, `format_text`, `set_style`, `set_list`, `set_link` |
+| Reading | `get_overview`, `read_document`, `read_formatting`, `find_text`, `list_links`, `list_notes`, `list_variables` |
+| Text | `replace_text`, `rewrite_paragraph`, `insert_paragraphs`, `delete_paragraphs`, `set_style`, `set_list`, `set_link` |
+| Formatting | `format_text` (font, size, marks, colour), `format_paragraphs` (alignment, indents, spacing) |
 | Notes | `add_note`, `remove_note` |
 | Templates | `fill_variables` |
 | Tables and pictures | `insert_table`, `edit_table`, `insert_signatures`, `insert_image`, `edit_image` |
-| Pages | `set_page_number`, `insert_page_break`, `insert_table_of_contents`, `update_table_of_contents` |
+| Pages and columns | `set_page_setup`, `set_columns`, `insert_column_break`, `set_page_number`, `insert_page_break`, `insert_table_of_contents`, `update_table_of_contents` |
+
+`read_formatting` says how each paragraph and each stretch of its text looks.
+With it an assistant keeps the look of what it changes: `rewrite_paragraph`
+writes a paragraph anew (a translation, say) in the look it had, its bold
+words given as `segments`, and `insert_paragraphs` with `like_paragraph` makes
+new ones like one that is there. `edit_table` also sets row heights, heading
+rows, where the text sits in the cells and the lines around them.
 | Files | `open_document`, `save_document`, `list_documents` |
 
 ## Running it
@@ -77,9 +85,10 @@ after each step.
 - **Addressing by paragraph number is fragile.** After an insertion every
   later number shifts. Stable ids (the collaboration package already gives
   paragraphs one) would let an assistant plan several edits at once.
-- **Page setup and letterhead.** There are tools for the text, also of the
-  header and the footer, but none for the size and margins of the page or
-  for its letterhead.
+- **Letterhead and sections.** There is no tool for the letterhead, and the
+  page setup changes the last section only.
+- **Mixed formatting in a rewrite.** `rewrite_paragraph` keeps the look most
+  of the paragraph had; anything else has to be given back in `segments`.
 - **Reading long documents.** `read_document` returns text by range. A
   search by meaning, or summaries per heading, would cost an assistant fewer
   calls.

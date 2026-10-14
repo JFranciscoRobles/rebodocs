@@ -17,7 +17,9 @@ import {
   type PageNumberFormat,
   type Story,
   type ListKind,
+  type Align,
   type Paragraph,
+  type ParagraphProps,
   type Position,
   type Range,
   type RunProps,
@@ -30,6 +32,15 @@ import {
   deleteColumn,
   deleteRow,
   deleteTable,
+  columnsAt,
+  insertColumnBreak,
+  setColumns,
+  setHeaderRow,
+  setRowHeight,
+  type Border,
+  type BorderStyle,
+  type Columns,
+  type PageSetup,
   imageExtension,
   insertColumn,
   insertImage,
@@ -64,7 +75,10 @@ import {
   outline,
   paragraphLength,
   paragraphStyles,
+  paragraphText,
   propsAt,
+  resolveParagraph,
+  resolveRun,
   removeLink,
   removeNote,
   replaceRange,
@@ -261,8 +275,185 @@ function pictureSize(bytes: Uint8Array, type: string): { width: number; height: 
   return size && size.width > 0 && size.height > 0 ? size : undefined;
 }
 
+/** Paper sizes, upright, in points. */
+const PAPERS: Record<string, { width: number; height: number }> = {
+  letter: { width: 612, height: 792 },
+  a4: { width: 595.3, height: 841.9 },
+  legal: { width: 612, height: 1008 },
+};
+
 const COLOR = /^#?([0-9a-fA-F]{6})$/;
 const color = (value: string, name: string): string => COLOR.exec(value)?.[1].toUpperCase() ?? fail(`"${name}" must be a colour as six hex digits, like C0392B.`);
+
+const number = (args: Args, name: string, min: number, max: number): number | undefined => {
+  const value = args[name];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fail(`"${name}" must be a number.`);
+  return value < min || value > max ? fail(`"${name}" must be between ${min} and ${max}.`) : value;
+};
+
+// --- How text looks ---------------------------------------------------------------
+
+/** What of a run shows: what is read from a text to say how it looks, and what is copied to make another text look the same. */
+const LOOKS = ['fontFamily', 'fontSize', 'bold', 'italic', 'underline', 'strike', 'color', 'highlight'] as const;
+
+/** The look of a run, every part of it given, so that it wins over what a text had. */
+function looksOf(props: RunProps): RunProps {
+  const resolved = resolveRun(props);
+  const out: RunProps = {};
+  for (const key of LOOKS) (out as Record<string, unknown>)[key] = resolved[key];
+  return out;
+}
+
+/** The look of a run in words: its font and size, and what it has besides. */
+function sayLooks(props: RunProps): string {
+  const r = resolveRun(props);
+  const marks = [r.bold && 'bold', r.italic && 'italic', r.underline && 'underline', r.strike && 'strike', r.color !== '000000' && `color ${r.color}`, r.highlight && `highlight ${r.highlight}`].filter(Boolean);
+  return [`${r.fontFamily} ${r.fontSize} pt`, ...marks].join(', ');
+}
+
+const runsOfText = (p: Paragraph) => p.runs.filter((run) => !run.props.anchor && !run.props.object && run.text);
+
+/** The look most of the text of a paragraph has: what a text written in its place takes. */
+function mainLooks(doc: Doc, para: number): RunProps {
+  const p = doc.paragraphs[para];
+  const counts = new Map<string, { props: RunProps; size: number }>();
+  for (const run of runsOfText(p)) {
+    const key = sayLooks(run.props);
+    const now = counts.get(key) ?? { props: run.props, size: 0 };
+    now.size += run.text.length;
+    counts.set(key, now);
+  }
+  let best: RunProps | undefined;
+  let size = -1;
+  for (const entry of counts.values()) if (entry.size > size) ({ props: best, size } = entry);
+  return looksOf(best ?? propsAt(doc, { para, offset: 0 }));
+}
+
+const cm = (points: number) => `${Math.round((points / CM) * 100) / 100} cm`;
+
+/** The look of a paragraph in words: where it sits, its indents and the room around it. */
+function sayParagraph(doc: Doc, para: number): string {
+  const r = resolveParagraph(doc.paragraphs[para].props);
+  const parts = [`style ${styleIdAt(doc, para)}`, `align ${r.align}`];
+  if (r.indentLeft || r.indentRight || r.indentFirstLine) {
+    const first = r.indentFirstLine > 0 ? `, first line ${cm(r.indentFirstLine)}` : r.indentFirstLine < 0 ? `, hanging ${cm(-r.indentFirstLine)}` : '';
+    parts.push(`indent left ${cm(r.indentLeft)}, right ${cm(r.indentRight)}${first}`);
+  }
+  parts.push(`space before ${r.spacingBefore} pt, after ${r.spacingAfter} pt`, `line spacing ${Math.round(r.lineHeight * 100) / 100}`);
+  const list = listKindAt(doc, para);
+  if (list) parts.push(`${list} list, level ${r.listLevel + 1}`);
+  if (r.keepNext) parts.push('kept with the next');
+  if (r.pageBreakBefore) parts.push('starts a page');
+  return parts.join('; ');
+}
+
+/** The stretches of a paragraph that look different, each with its text and its look. */
+function sayRuns(p: Paragraph): string[] {
+  const out: { text: string; looks: string }[] = [];
+  for (const run of p.runs) {
+    if (run.props.anchor) continue;
+    const text = run.props.object ? '[image]'.repeat(run.text.length) : run.text;
+    const looks = sayLooks(run.props);
+    const last = out[out.length - 1];
+    if (last && last.looks === looks) last.text += text;
+    else out.push({ text, looks });
+  }
+  return out.map(({ text, looks }) => `  "${text.length > 80 ? `${text.slice(0, 80)}…` : text}" — ${looks}`);
+}
+
+/** The properties a tool takes for how a text looks. */
+const LOOK_PROPERTIES = {
+  bold: { type: 'boolean' },
+  italic: { type: 'boolean' },
+  underline: { type: 'boolean' },
+  strike: { type: 'boolean' },
+  color: { type: 'string', description: 'The colour of the text, as six hex digits: C0392B.' },
+  highlight: { type: 'string', description: `The colour behind the text: one of ${HIGHLIGHT_COLORS.join(', ')}; "none" to take it away.` },
+  font_family: { type: 'string', description: 'The font, by its name: Arial, Times New Roman, Calibri…' },
+  font_size: { type: 'number', description: 'The size of the text, in points: 11, 12…' },
+};
+
+/** The change of look given in `args`, with the names of LOOK_PROPERTIES. */
+function lookPatch(args: Args): RunProps {
+  const highlight = optionalText(args, 'highlight');
+  const tint = optionalText(args, 'color');
+  const family = optionalText(args, 'font_family');
+  const patch = defined<RunProps>({
+    bold: optionalFlag(args, 'bold'),
+    italic: optionalFlag(args, 'italic'),
+    underline: optionalFlag(args, 'underline'),
+    strike: optionalFlag(args, 'strike'),
+    color: tint === undefined ? undefined : color(tint, 'color'),
+    highlight: highlight === undefined ? undefined : highlight === 'none' ? '' : color(highlight, 'highlight'),
+    fontFamily: family === undefined ? undefined : family.trim() || fail('"font_family" must be the name of a font.'),
+    fontSize: number(args, 'font_size', 1, 400),
+  });
+  if (patch.highlight && !HIGHLIGHT_COLORS.includes(patch.highlight)) fail(`Word only has these highlight colours: ${HIGHLIGHT_COLORS.join(', ')}.`);
+  return patch;
+}
+
+/** A text given as plain "text" or as "segments", each with a look of its own over the one it is written in. */
+function segmentsOf(args: Args): { text: string; patch: RunProps }[] {
+  if (Array.isArray(args.segments) && args.segments.length) {
+    return (args.segments as Args[]).map((segment) => ({ text: optionalText(segment ?? {}, 'text') ?? '', patch: lookPatch(segment ?? {}) }));
+  }
+  return [{ text: optionalText(args, 'text') ?? '', patch: {} }];
+}
+
+const SEGMENTS = {
+  type: 'array',
+  description: 'Instead of "text": the text in pieces, each with what sets it apart from the rest (bold, italic, a colour…), to keep the words that were bold bold. The pieces are joined as they are: put the spaces in them.',
+  items: { type: 'object', properties: { text: { type: 'string' }, ...LOOK_PROPERTIES }, required: ['text'] },
+};
+
+/** Gives the text of paragraph `para` from `start` the look `base`, and each segment its own on top. */
+function dress(doc: Doc, para: number, start: number, base: RunProps, segments: { text: string; patch: RunProps }[]): Doc {
+  const total = segments.reduce((sum, segment) => sum + segment.text.length, 0);
+  let next = applyRunProps(doc, { from: { para, offset: start }, to: { para, offset: start + total } }, base);
+  let at = start;
+  for (const segment of segments) {
+    if (Object.keys(segment.patch).length && segment.text) next = applyRunProps(next, { from: { para, offset: at }, to: { para, offset: at + segment.text.length } }, segment.patch);
+    at += segment.text.length;
+  }
+  return next;
+}
+
+/** The stretches of paragraphs set in columns. */
+function columnsSaid(doc: Doc): string {
+  const out: string[] = [];
+  let start = -1;
+  let count = 1;
+  const close = (end: number) => {
+    if (start >= 0 && count > 1) out.push(`paragraphs ${start + 1} to ${end + 1} in ${count} columns`);
+  };
+  for (let i = 0; i < doc.paragraphs.length; i++) {
+    const n = columnsAt(doc, i).count;
+    if (n !== count) {
+      close(i - 1);
+      start = i;
+      count = n;
+    } else if (start < 0) start = i;
+  }
+  close(doc.paragraphs.length - 1);
+  return out.length ? `Columns: ${out.join('; ')}.` : '';
+}
+
+/** The fonts and sizes of the text, the most used first, with how much of the text each is. */
+function fontsOf(doc: Doc): string {
+  const counts = new Map<string, number>();
+  let total = 0;
+  for (const p of doc.paragraphs) {
+    for (const run of runsOfText(p)) {
+      const r = resolveRun(run.props);
+      const key = `${r.fontFamily} ${r.fontSize} pt`;
+      counts.set(key, (counts.get(key) ?? 0) + run.text.length);
+      total += run.text.length;
+    }
+  }
+  const sorted = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  return sorted.length ? sorted.map(([key, n]) => `${key} (${Math.round((n / total) * 100)}%)`).join(', ') : 'none';
+}
 
 export const TOOLS: Tool[] = [
   {
@@ -289,6 +480,8 @@ export const TOOLS: Tool[] = [
           headings.length ? `Headings (with their paragraph):\n${headings.join('\n')}` : 'It has no headings.',
           names.length ? `Template variables: ${names.join(', ')}` : '',
           `Paragraph styles: ${styleNames(doc)}`,
+          `Fonts: ${fontsOf(doc)}. read_formatting gives the look of each paragraph.`,
+          columnsSaid(doc),
         ]
           .filter(Boolean)
           .join('\n'),
@@ -323,6 +516,33 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'read_formatting',
+    areas: true,
+    description:
+      'How paragraphs look: for each, its style, alignment, indents, the room before and after it and its line spacing; then each stretch of its text that looks different, with its font, its size and whether it is bold, italic, underlined or coloured. Read it before rewriting or adding text that has to look like what is there.',
+    properties: {
+      from: { type: 'integer', description: 'The first paragraph. 1 when left out.' },
+      to: { type: 'integer', description: 'The last paragraph. 20 after "from" when left out.' },
+    },
+    writes: false,
+    run(doc, args) {
+      const from = paragraphIndex(doc, args, 'from', 1);
+      const to = paragraphIndex(doc, args, 'to', Math.min(from + 20, doc.paragraphs.length));
+      if (to < from) fail('"to" is before "from".');
+      const out: string[] = [];
+      let size = 0;
+      let i = from;
+      for (; i <= to; i++) {
+        const block = [`[${i + 1}] ${sayParagraph(doc, i)}`, ...sayRuns(doc.paragraphs[i])].join('\n');
+        if (out.length && size + block.length > READ_LIMIT) break;
+        out.push(block);
+        size += block.length + 1;
+      }
+      const more = i <= to ? `\n… ${to - i + 1} more paragraphs: read on with from=${i + 1}.` : '';
+      return { text: out.join('\n') + more };
+    },
+  },
+  {
     name: 'find_text',
     areas: true,
     description: 'Every place a text is found, with the paragraph it is in and the words around it.',
@@ -349,7 +569,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'replace_text',
     areas: true,
-    description: 'Puts a text in place of another, in the formatting of what was there. The text to find has to be inside one paragraph. An empty "replace" deletes it.',
+    description: 'Puts a text in place of another, in the formatting of what was there: its font, its size and its marks. The text to find has to be inside one paragraph. An empty "replace" deletes it. To write a whole paragraph anew, as in a translation, rewrite_paragraph keeps more of its look.',
     properties: { ...PLACE, replace: { type: 'string', description: 'The text to put in its place.' }, all: { type: 'boolean', description: 'Replace every match, not just one.' } },
     required: ['find', 'replace'],
     writes: true,
@@ -361,11 +581,42 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'rewrite_paragraph',
+    areas: true,
+    description:
+      'Writes the whole text of a paragraph anew, as to translate it or say it otherwise, and keeps how it looks: its style, alignment, indents and spacing, and the font, size and colour most of its text has. Words that were set apart (bold, italic…) are kept so by giving the text in "segments". A paragraph with a picture is changed with replace_text instead.',
+    properties: {
+      paragraph: { type: 'integer', description: 'The number of the paragraph.' },
+      text: { type: 'string', description: 'Its new text, all in the look most of it had.' },
+      segments: SEGMENTS,
+    },
+    required: ['paragraph'],
+    writes: true,
+    run(doc, args) {
+      const para = paragraphIndex(doc, args, 'paragraph');
+      const p = doc.paragraphs[para];
+      if (p.runs.some((run) => run.props.object && !run.props.anchor)) fail(`Paragraph ${para + 1} has a picture in it: change its words with replace_text, so that the picture stays.`);
+      const segments = segmentsOf(args);
+      const full = segments.map((segment) => segment.text).join('');
+      if (!full) fail('Give the new text, in "text" or in "segments". To empty the paragraph use replace_text.');
+      if (/[\r\n\f]/.test(full)) fail('The text of one paragraph has no line breaks: write the others with insert_paragraphs.');
+      const base = mainLooks(doc, para);
+      const length = paragraphLength(p);
+      let next = length ? replaceRange(doc, { from: { para, offset: 0 }, to: { para, offset: length } }, full).doc : insertText(doc, { para, offset: 0 }, full, base).doc;
+      // What takes no room, the marks of a note among it, may have stayed: the text is found where it is now.
+      const start = Math.max(0, paragraphText(next.paragraphs[para]).indexOf(full));
+      next = dress(next, para, start, base, segments);
+      return { text: `Paragraph ${para + 1} rewritten, in ${sayLooks(base)}.\n${lines(next, para, para)}`, doc: next, reveal: { para, offset: 0 } };
+    },
+  },
+  {
     name: 'insert_paragraphs',
     areas: true,
-    description: 'Writes new paragraphs after a paragraph. Each has its text and, when wanted, a style (a heading, for one) or a list. Text between double braces, like {{cliente}}, is a template variable.',
+    description:
+      'Writes new paragraphs after a paragraph. Each has its text and, when wanted, a style (a heading, for one) or a list. With "like_paragraph" a new one looks like a paragraph that is there: its alignment, indents, spacing, list, and the font, size and colour of most of its text. Text between double braces, like {{cliente}}, is a template variable.',
     properties: {
       after_paragraph: { type: 'integer', description: 'The number of the paragraph to insert after; 0 to insert at the start.' },
+      like_paragraph: { type: 'integer', description: 'A paragraph every new one looks like, unless it says another.' },
       paragraphs: {
         type: 'array',
         minItems: 1,
@@ -373,10 +624,11 @@ export const TOOLS: Tool[] = [
           type: 'object',
           properties: {
             text: { type: 'string' },
+            segments: SEGMENTS,
+            like_paragraph: { type: 'integer', description: 'A paragraph this one looks like.' },
             style: { type: 'string', description: 'A paragraph style of the document, such as Heading1. The normal one when left out.' },
             list: { type: 'string', enum: ['bullet', 'number'], description: 'Makes the paragraph an item of a list.' },
           },
-          required: ['text'],
         },
       },
     },
@@ -385,14 +637,31 @@ export const TOOLS: Tool[] = [
     run(doc, args) {
       const after = afterIndex(doc, args);
       const given = Array.isArray(args.paragraphs) && args.paragraphs.length ? (args.paragraphs as Args[]) : fail('"paragraphs" must be a list with at least one paragraph.');
-      const items = given.map((item) => ({ text: optionalText(item ?? {}, 'text') ?? '', style: optionalText(item ?? {}, 'style'), list: optionalText(item ?? {}, 'list') }));
+      const like = whole(args, 'like_paragraph') === undefined ? undefined : paragraphIndex(doc, args, 'like_paragraph');
+      const items = given.map((item) => {
+        const segments = segmentsOf(item ?? {});
+        const model = whole(item ?? {}, 'like_paragraph') === undefined ? like : paragraphIndex(doc, item, 'like_paragraph');
+        return { text: segments.map((segment) => segment.text).join(''), segments, like: model, style: optionalText(item ?? {}, 'style'), list: optionalText(item ?? {}, 'list') };
+      });
       // Into a document, or a header, that is one empty paragraph, they go in its place.
       const blank = doc.paragraphs.length === 1 && !paragraphLength(doc.paragraphs[0]) && !doc.paragraphs[0].cell;
       const first = blank ? 0 : after + 1;
       let next = spliced(doc, after, items.map((item) => item.text));
       if (blank) next = { ...next, paragraphs: next.paragraphs.filter((_, i) => i !== (after < 0 ? items.length : 0)) };
       items.forEach((item, i) => {
-        if (item.style) next = setParagraphStyle(next, first + i, first + i, styleId(next, item.style));
+        const at = first + i;
+        if (item.like !== undefined) {
+          // The look of the paragraph it is like; not a page break before it, which is that paragraph's alone.
+          const model = doc.paragraphs[item.like];
+          const props: ParagraphProps = defined({ ...model.props, pageBreakBefore: undefined });
+          const paragraphs = next.paragraphs.slice();
+          paragraphs[at] = { ...paragraphs[at], props };
+          next = { ...next, paragraphs };
+        }
+        if (item.style) next = setParagraphStyle(next, at, at, styleId(next, item.style));
+        if (item.like !== undefined || item.segments.some((segment) => Object.keys(segment.patch).length)) {
+          next = dress(next, at, 0, item.like !== undefined && !item.style ? mainLooks(doc, item.like) : looksOf(propsAt(next, { para: at, offset: 0 })), item.segments);
+        }
       });
       // Each stretch of items of one kind at once, so that a numbered one counts on.
       for (let i = 0; i < items.length; i++) {
@@ -401,7 +670,8 @@ export const TOOLS: Tool[] = [
         if (kind !== 'bullet' && kind !== 'number') fail('"list" must be "bullet" or "number".');
         let end = i;
         while (items[end + 1]?.list === kind) end++;
-        next = toggleList(next, first + i, first + end, kind as ListKind);
+        // Those that are of that list already, by the paragraph they are like, stay in it.
+        if (!items.slice(i, end + 1).every((_, k) => listKindAt(next, first + i + k) === kind)) next = toggleList(next, first + i, first + end, kind as ListKind);
         i = end;
       }
       const last = first + items.length - 1;
@@ -472,34 +742,73 @@ export const TOOLS: Tool[] = [
   {
     name: 'format_text',
     areas: true,
-    description: 'Changes how a text looks: bold, italic, underlined, struck through, its colour or the highlight behind it. Give only what is to change.',
+    description:
+      'Changes how a text looks: its font, its size, bold, italic, underlined, struck through, its colour or the highlight behind it. The text is one found by "find", or whole paragraphs, from "from" to "to". Give only what is to change.',
     properties: {
       ...PLACE,
       all: { type: 'boolean', description: 'Every match, not just one.' },
-      bold: { type: 'boolean' },
-      italic: { type: 'boolean' },
-      underline: { type: 'boolean' },
-      strike: { type: 'boolean' },
-      color: { type: 'string', description: 'The colour of the text, as six hex digits: C0392B.' },
-      highlight: { type: 'string', description: `The colour behind the text: one of ${HIGHLIGHT_COLORS.join(', ')}; "none" to take it away.` },
+      from: { type: 'integer', description: 'Instead of "find": the first of the paragraphs to change whole.' },
+      to: { type: 'integer', description: 'The last of them. The same as "from" when left out.' },
+      ...LOOK_PROPERTIES,
     },
-    required: ['find'],
     writes: true,
     run(doc, args) {
-      const highlight = optionalText(args, 'highlight');
-      const tint = optionalText(args, 'color');
-      const patch = defined<RunProps>({
-        bold: optionalFlag(args, 'bold'),
-        italic: optionalFlag(args, 'italic'),
-        underline: optionalFlag(args, 'underline'),
-        strike: optionalFlag(args, 'strike'),
-        color: tint === undefined ? undefined : color(tint, 'color'),
-        highlight: highlight === undefined ? undefined : highlight === 'none' ? '' : color(highlight, 'highlight'),
+      const patch = lookPatch(args);
+      if (!Object.keys(patch).length) fail('Say what to change: font_family, font_size, bold, italic, underline, strike, color or highlight.');
+      if (args.find === undefined && whole(args, 'from') === undefined) fail('Say what text to change: "find" a text, or give paragraphs with "from" and "to".');
+      let found: Range[];
+      if (args.find !== undefined) found = places(doc, args, optionalFlag(args, 'all') ?? false);
+      else {
+        const from = paragraphIndex(doc, args, 'from');
+        const to = paragraphIndex(doc, args, 'to', from + 1);
+        if (to < from) fail('"to" is before "from".');
+        found = [{ from: { para: from, offset: 0 }, to: { para: to, offset: paragraphLength(doc.paragraphs[to]) } }];
+      }
+      const where = args.find !== undefined ? said(found) : found[0].from.para === found[0].to.para ? `paragraph ${found[0].from.para + 1}` : `paragraphs ${found[0].from.para + 1} to ${found[0].to.para + 1}`;
+      return { text: `Formatted in ${where}.`, doc: each(doc, found, (now, range) => applyRunProps(now, range, patch)), reveal: found[0].from };
+    },
+  },
+  {
+    name: 'format_paragraphs',
+    areas: true,
+    description: 'Changes how paragraphs sit on the page: their alignment, indents, the room before and after them, their line spacing, and whether they keep with the next one. Give only what is to change.',
+    properties: {
+      from: { type: 'integer', description: 'The first paragraph.' },
+      to: { type: 'integer', description: 'The last one. The same as "from" when left out.' },
+      align: { type: 'string', enum: ['left', 'center', 'right', 'justify'] },
+      indent_left_cm: { type: 'number', description: 'From the left margin, in centimetres.' },
+      indent_right_cm: { type: 'number', description: 'From the right margin, in centimetres.' },
+      first_line_cm: { type: 'number', description: 'How much further in the first line starts, in centimetres; below 0 for a hanging indent.' },
+      space_before_pt: { type: 'number', description: 'Room above the paragraph, in points.' },
+      space_after_pt: { type: 'number', description: 'Room below the paragraph, in points.' },
+      line_spacing: { type: 'number', description: 'Of the lines: 1 single, 1.15, 1.5, 2 double.' },
+      keep_with_next: { type: 'boolean', description: 'Keep it on the same page as the next paragraph, as a heading.' },
+    },
+    required: ['from'],
+    writes: true,
+    run(doc, args) {
+      const from = paragraphIndex(doc, args, 'from');
+      const to = paragraphIndex(doc, args, 'to', from + 1);
+      if (to < from) fail('"to" is before "from".');
+      const align = optionalText(args, 'align');
+      if (align !== undefined && !['left', 'center', 'right', 'justify'].includes(align)) fail('"align" must be "left", "center", "right" or "justify".');
+      const length = (name: string) => {
+        const value = number(args, name, -30, 30);
+        return value === undefined ? undefined : value * CM;
+      };
+      const patch = defined<ParagraphProps>({
+        align: align as Align | undefined,
+        indentLeft: length('indent_left_cm'),
+        indentRight: length('indent_right_cm'),
+        indentFirstLine: length('first_line_cm'),
+        spacingBefore: number(args, 'space_before_pt', 0, 1000),
+        spacingAfter: number(args, 'space_after_pt', 0, 1000),
+        lineHeight: number(args, 'line_spacing', 0.5, 5),
+        keepNext: optionalFlag(args, 'keep_with_next'),
       });
-      if (!Object.keys(patch).length) fail('Say what to change: bold, italic, underline, strike, color or highlight.');
-      if (patch.highlight && !HIGHLIGHT_COLORS.includes(patch.highlight)) fail(`Word only has these highlight colours: ${HIGHLIGHT_COLORS.join(', ')}.`);
-      const found = places(doc, args, optionalFlag(args, 'all') ?? false);
-      return { text: `Formatted in ${said(found)}.`, doc: each(doc, found, (now, range) => applyRunProps(now, range, patch)), reveal: found[0].from };
+      if (!Object.keys(patch).length) fail('Say what to change: align, indent_left_cm, indent_right_cm, first_line_cm, space_before_pt, space_after_pt, line_spacing or keep_with_next.');
+      const next = setParagraphProps(doc, from, to, patch);
+      return { text: `Paragraphs ${from + 1} to ${to + 1}: ${sayParagraph(next, from)}.`, doc: next, reveal: { para: from, offset: 0 } };
     },
   },
   {
@@ -702,10 +1011,15 @@ export const TOOLS: Tool[] = [
     name: 'edit_table',
     areas: true,
     description:
-      'Changes the shape or the look of a table that is there. "paragraph" is any paragraph of the cell to act on (read_document says which cell each is in). Actions: insert_row_above, insert_row_below, insert_column_left, insert_column_right, delete_row, delete_column, merge_cells (from "paragraph" to "to_paragraph"), split_cell (undoes a merge), set_column_widths (with "widths_cm", one for each column), shade_cells (with "shade"; to "to_paragraph" for several), show_borders, hide_borders (the whole table) and delete_table. The text of a cell is changed with replace_text and insert_paragraphs.',
+      'Changes the shape or the look of a table that is there. "paragraph" is any paragraph of the cell to act on (read_document says which cell each is in). Actions: insert_row_above, insert_row_below, insert_column_left, insert_column_right, delete_row, delete_column, merge_cells (from "paragraph" to "to_paragraph"), split_cell (undoes a merge), set_column_widths (with "widths_cm", one for each column), set_row_height (with "height_cm", 0 for as tall as it holds, and "exact"), header_row_on and header_row_off (the rows down to this one repeat at the top of each page), align_cells_top, align_cells_center, align_cells_bottom, shade_cells (with "shade"), cell_lines (with "line_style", "line_width_pt" and "line_color"; "line_style" none takes them away), show_borders, hide_borders (the whole table) and delete_table. The actions on cells take "to_paragraph" for several. The text of a cell is changed with replace_text and insert_paragraphs.',
     properties: {
       paragraph: { type: 'integer', description: 'A paragraph of the cell to act on.' },
-      action: { type: 'string', enum: ['insert_row_above', 'insert_row_below', 'insert_column_left', 'insert_column_right', 'delete_row', 'delete_column', 'merge_cells', 'split_cell', 'set_column_widths', 'shade_cells', 'show_borders', 'hide_borders', 'delete_table'] },
+      action: { type: 'string', enum: ['insert_row_above', 'insert_row_below', 'insert_column_left', 'insert_column_right', 'delete_row', 'delete_column', 'merge_cells', 'split_cell', 'set_column_widths', 'set_row_height', 'header_row_on', 'header_row_off', 'align_cells_top', 'align_cells_center', 'align_cells_bottom', 'shade_cells', 'cell_lines', 'show_borders', 'hide_borders', 'delete_table'] },
+      height_cm: { type: 'number', description: 'For set_row_height: in centimetres, without the margins of the cells; 0 for as tall as what it holds.' },
+      exact: { type: 'boolean', description: 'For set_row_height: the row is that tall whatever it holds.' },
+      line_style: { type: 'string', enum: ['single', 'double', 'dashed', 'dotted', 'none'], description: 'For cell_lines: the line all round the cells.' },
+      line_width_pt: { type: 'number', description: 'For cell_lines: how thick, in points. 0.5 when left out.' },
+      line_color: { type: 'string', description: 'For cell_lines: six hex digits. Black when left out.' },
       widths_cm: { type: 'array', items: { type: 'number' }, description: 'For set_column_widths: how wide each column is, in centimetres, from the left.' },
       to_paragraph: { type: 'integer', description: 'A paragraph of the cell at the other corner, for merge_cells and shade_cells.' },
       shade: { type: 'string', description: 'For shade_cells: the colour behind the cells, as six hex digits (E8EEF9); "none" to take it away.' },
@@ -715,7 +1029,7 @@ export const TOOLS: Tool[] = [
     run(doc, args, context) {
       const para = paragraphIndex(doc, args, 'paragraph');
       const at = locateCell(doc, para) ?? fail(`Paragraph ${para + 1} is not in a table.`);
-      if (at.tableIndex < (context.fixedTables ?? 0) && !['shade_cells', 'show_borders', 'hide_borders'].includes(String(args.action))) {
+      if (at.tableIndex < (context.fixedTables ?? 0) && !['shade_cells', 'cell_lines', 'align_cells_top', 'align_cells_center', 'align_cells_bottom', 'show_borders', 'hide_borders'].includes(String(args.action))) {
         fail('A table the header or the footer of the file came with cannot be given another shape here: change the text of its cells, or make a new table.');
       }
       const other = whole(args, 'to_paragraph') === undefined ? para : paragraphIndex(doc, args, 'to_paragraph');
@@ -772,6 +1086,28 @@ export const TOOLS: Tool[] = [
         case 'shade_cells': {
           const shade = text(args, 'shade');
           next = setCellProps(doc, para, other, { shade: shade === 'none' ? '' : color(shade, 'shade') });
+          break;
+        }
+        case 'set_row_height': {
+          const height = number(args, 'height_cm', 0, 50) ?? fail('set_row_height needs "height_cm": the height in centimetres, or 0 for as tall as what the row holds.');
+          next = setRowHeight(doc, para, height * CM, optionalFlag(args, 'exact') ?? false);
+          break;
+        }
+        case 'header_row_on':
+        case 'header_row_off':
+          next = setHeaderRow(doc, para, action === 'header_row_on');
+          break;
+        case 'align_cells_top':
+        case 'align_cells_center':
+        case 'align_cells_bottom':
+          next = setCellProps(doc, para, other, { valign: action.slice('align_cells_'.length) as 'top' | 'center' | 'bottom' });
+          break;
+        case 'cell_lines': {
+          const style = text(args, 'line_style');
+          if (!['single', 'double', 'dashed', 'dotted', 'none'].includes(style)) fail('"line_style" must be "single", "double", "dashed", "dotted" or "none".');
+          const tint = optionalText(args, 'line_color');
+          const line: Border = { width: number(args, 'line_width_pt', 0.25, 6) ?? 0.5, color: tint === undefined ? '000000' : color(tint, 'line_color'), style: (style === 'none' ? 'single' : style) as BorderStyle };
+          next = setCellProps(doc, para, other, style === 'none' ? { borders: false } : { line });
           break;
         }
         case 'show_borders':
@@ -888,6 +1224,102 @@ export const TOOLS: Tool[] = [
         default:
           return fail(`There is no action "${action}".`);
       }
+    },
+  },
+  {
+    name: 'set_columns',
+    description:
+      'Sets text in columns, as a newsletter: one column, two, three, with a line between them or not. With "from" and "to" only those paragraphs go in columns, in a section of their own on the same page; with "paragraph" alone, the whole section that paragraph is in.',
+    properties: {
+      paragraph: { type: 'integer', description: 'A paragraph of the section to set in columns.' },
+      from: { type: 'integer', description: 'Instead of "paragraph": the first of the paragraphs to set in columns by themselves.' },
+      to: { type: 'integer', description: 'The last of them.' },
+      count: { type: 'integer', description: 'How many columns: 1 to take them away, up to 6.' },
+      space_cm: { type: 'number', description: 'Room between two columns, in centimetres. 1.27 when left out.' },
+      separator: { type: 'boolean', description: 'A line down between the columns.' },
+      widths_cm: { type: 'array', items: { type: 'number' }, description: 'When they are not all as wide: the width of each column, in centimetres.' },
+    },
+    required: ['count'],
+    writes: true,
+    run(doc, args) {
+      const count = whole(args, 'count') ?? fail('"count" is needed: how many columns.');
+      if (count < 1 || count > 6) fail('"count" must be between 1 and 6.');
+      const space = (number(args, 'space_cm', 0, 10) ?? 1.27) * CM;
+      const given = args.widths_cm;
+      let columns: Columns = { count, space, separator: optionalFlag(args, 'separator') || undefined };
+      if (given !== undefined) {
+        if (!Array.isArray(given) || given.length !== count) fail(`"widths_cm" must have ${count} widths, one for each column.`);
+        const widths = (given as unknown[]).map((value) => (typeof value === 'number' && value > 0 ? value * CM : fail('Each width must be a number above 0.')));
+        columns = { ...columns, widths: widths.map((width, i) => ({ width, space: i < count - 1 ? space : 0 })) };
+      }
+      let range: Range;
+      if (whole(args, 'from') !== undefined) {
+        const from = paragraphIndex(doc, args, 'from');
+        const to = paragraphIndex(doc, args, 'to', from + 1);
+        if (to < from) fail('"to" is before "from".');
+        if (inTable(doc, from, from) || inTable(doc, to, to)) fail('Columns start and end outside a table.');
+        range = { from: { para: from, offset: 0 }, to: { para: to, offset: paragraphLength(doc.paragraphs[to]) } };
+      } else {
+        const para = paragraphIndex(doc, args, 'paragraph', 1);
+        range = { from: { para, offset: 0 }, to: { para, offset: 0 } };
+      }
+      const next = setColumns(doc, range, columns);
+      if (next === doc) return { text: 'Nothing changed: the text was already in those columns.' };
+      return { text: `Set in ${count === 1 ? 'one column' : `${count} columns`}${columns.separator ? ' with a line between them' : ''}. Paragraphs that only end a section may have been added: read the document again before giving numbers.`, doc: next, reveal: range.from };
+    },
+  },
+  {
+    name: 'insert_column_break',
+    description: 'Makes the text from a place start at the top of the next column, in a section set in columns: before a text found with "find", or at the start of a paragraph.',
+    properties: { ...PLACE, at_paragraph: { type: 'integer', description: 'Instead of "find": the paragraph that starts the next column.' } },
+    writes: true,
+    run(doc, args) {
+      let pos: Position;
+      if (args.find !== undefined) pos = places(doc, args)[0].from;
+      else pos = { para: paragraphIndex(doc, args, 'at_paragraph'), offset: 0 };
+      if (doc.paragraphs[pos.para].cell) fail('A column break cannot go inside a table.');
+      if (columnsAt(doc, pos.para).count < 2) fail(`Paragraph ${pos.para + 1} is not in columns: set them first with set_columns.`);
+      const result = insertColumnBreak(doc, pos);
+      return { text: 'The text from there starts in the next column.', doc: result.doc, reveal: result.pos };
+    },
+  },
+  {
+    name: 'set_page_setup',
+    description: 'Changes the size of the paper, its orientation, or its margins. Give only what is to change.',
+    properties: {
+      paper: { type: 'string', enum: ['letter', 'a4', 'legal'], description: 'Letter (21.59 × 27.94 cm), A4 (21 × 29.7 cm) or legal (21.59 × 35.56 cm).' },
+      orientation: { type: 'string', enum: ['portrait', 'landscape'] },
+      margin_top_cm: { type: 'number' },
+      margin_bottom_cm: { type: 'number' },
+      margin_left_cm: { type: 'number' },
+      margin_right_cm: { type: 'number' },
+    },
+    writes: true,
+    run(doc, args) {
+      const page: PageSetup = { ...doc.page };
+      const paper = optionalText(args, 'paper');
+      const orientation = optionalText(args, 'orientation');
+      if (paper !== undefined) {
+        const size = PAPERS[paper] ?? fail('"paper" must be "letter", "a4" or "legal".');
+        const wide = page.width > page.height;
+        page.width = wide ? size.height : size.width;
+        page.height = wide ? size.width : size.height;
+      }
+      if (orientation !== undefined) {
+        if (orientation !== 'portrait' && orientation !== 'landscape') fail('"orientation" must be "portrait" or "landscape".');
+        if ((orientation === 'landscape') !== page.width > page.height) [page.width, page.height] = [page.height, page.width];
+      }
+      for (const [name, key] of [['margin_top_cm', 'marginTop'], ['margin_bottom_cm', 'marginBottom'], ['margin_left_cm', 'marginLeft'], ['margin_right_cm', 'marginRight']] as const) {
+        const value = number(args, name, 0, 10);
+        if (value !== undefined) page[key] = value * CM;
+      }
+      if (page.width - page.marginLeft - page.marginRight < 2 * CM || page.height - page.marginTop - page.marginBottom < 2 * CM) fail('Those margins leave less than 2 cm for the text.');
+      if ((Object.keys(page) as (keyof PageSetup)[]).every((key) => page[key] === doc.page[key])) return { text: 'Nothing changed: the page was already like that.' };
+      const say = (points: number) => Math.round((points / CM) * 100) / 100;
+      return {
+        text: `The page is ${say(page.width)} × ${say(page.height)} cm, with margins of ${say(page.marginTop)} cm above, ${say(page.marginBottom)} below, ${say(page.marginLeft)} left and ${say(page.marginRight)} right.`,
+        doc: { ...doc, page },
+      };
     },
   },
   {

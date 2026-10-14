@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type Doc, type Paragraph, createDoc, exportDocx, importDocx, linkHref, plainText, setParagraphStyle, tocRange } from '@rebodocs/core';
+import { type Doc, type Paragraph, columnsAt, createDoc, exportDocx, importDocx, insertTable, linkHref, plainText, setParagraphStyle, tocRange } from '@rebodocs/core';
 import { TOOLS, ToolError, runTool } from '../src/tools';
 
 const p = (text: string): Paragraph => ({ props: {}, runs: [{ text, props: {} }] });
@@ -269,5 +269,77 @@ describe('tools for an assistant', () => {
     expect(runTool(back, 'read_document').text).toBe(runTool(doc, 'read_document').text);
     expect(runTool(back, 'list_notes').text).toBe(runTool(doc, 'list_notes').text);
     expect(runTool(back, 'list_links').text).toBe(runTool(doc, 'list_links').text);
+  });
+  it('says how the text looks, and keeps it when the text is written anew', () => {
+    const fancy: Paragraph = {
+      props: { align: 'justify', indentLeft: 36, spacingAfter: 12 },
+      runs: [
+        { text: 'Del Cliente. ', props: { bold: true, fontFamily: 'Georgia', fontSize: 12 } },
+        { text: 'Pagar a tiempo.', props: { fontFamily: 'Georgia', fontSize: 12, color: '1F3864' } },
+      ],
+    };
+    const doc = createDoc([p('Uno'), fancy]);
+    const seen = runTool(doc, 'read_formatting', { from: 2 }).text;
+    expect(seen).toContain('align justify; indent left 1.27 cm');
+    expect(seen).toContain('"Del Cliente. " — Georgia 12 pt, bold');
+    expect(seen).toContain('"Pagar a tiempo." — Georgia 12 pt, color 1F3864');
+    expect(runTool(doc, 'get_overview').text).toContain('Georgia 12 pt');
+
+    // Translated: the paragraph keeps its place on the page, and its words their look.
+    const done = apply(doc, 'rewrite_paragraph', { paragraph: 2, segments: [{ text: 'Of the Client. ', bold: true }, { text: 'Pay on time.' }] });
+    expect(texts(done)[1]).toBe('Of the Client. Pay on time.');
+    expect(done.paragraphs[1].props).toMatchObject({ align: 'justify', indentLeft: 36, spacingAfter: 12 });
+    expect(done.paragraphs[1].runs.map((run) => [run.text, !!run.props.bold, run.props.fontFamily, run.props.color])).toEqual([
+      ['Of the Client. ', true, 'Georgia', '1F3864'],
+      ['Pay on time.', false, 'Georgia', '1F3864'],
+    ]);
+    expect(error(doc, 'rewrite_paragraph', { paragraph: 2, text: 'a\nb' })).toContain('no line breaks');
+
+    // New paragraphs like one that is there.
+    const added = apply(doc, 'insert_paragraphs', { after_paragraph: 2, like_paragraph: 2, paragraphs: [{ text: 'Also this.' }, { segments: [{ text: 'And ' }, { text: 'this', italic: true }] }] });
+    expect(added.paragraphs[2].props).toMatchObject({ align: 'justify', indentLeft: 36 });
+    expect(added.paragraphs[2].runs[0].props).toMatchObject({ fontFamily: 'Georgia', fontSize: 12 });
+    expect(added.paragraphs[3].runs.map((run) => [run.text, !!run.props.italic])).toEqual([['And ', false], ['this', true]]);
+  });
+
+  it('changes the font and size of a text, and how paragraphs sit', () => {
+    const doc = base();
+    const sized = apply(doc, 'format_text', { from: 5, to: 6, font_family: 'Times New Roman', font_size: 13 });
+    expect(sized.paragraphs[4].runs.every((run) => run.props.fontFamily === 'Times New Roman' && run.props.fontSize === 13)).toBe(true);
+    expect(sized.paragraphs[2].runs[0].props.fontFamily).not.toBe('Times New Roman');
+    expect(apply(doc, 'format_text', { find: 'acepta', font_size: 20 }).paragraphs[5].runs.some((run) => run.text === 'acepta' && run.props.fontSize === 20)).toBe(true);
+    expect(error(doc, 'format_text', { font_size: 12 })).toContain('Say what text');
+
+    const placed = apply(doc, 'format_paragraphs', { from: 3, align: 'center', first_line_cm: 1.27, space_after_pt: 6, line_spacing: 1.5 });
+    expect(placed.paragraphs[2].props).toMatchObject({ align: 'center', indentFirstLine: 36, spacingAfter: 6, lineHeight: 1.5 });
+    expect(error(doc, 'format_paragraphs', { from: 3 })).toContain('Say what to change');
+  });
+
+  it('sets text in columns, breaks a column, and changes the page', () => {
+    const doc = base();
+    const two = apply(doc, 'set_columns', { from: 5, to: 6, count: 2, separator: true });
+    const at = texts(two).indexOf('El cliente acepta.');
+    expect(columnsAt(two, at)).toMatchObject({ count: 2, separator: true });
+    expect(columnsAt(two, 0).count).toBe(1);
+    expect(runTool(two, 'get_overview').text).toMatch(/Columns: paragraphs \d+ to \d+ in 2 columns/);
+    const broken = apply(two, 'insert_column_break', { find: 'El cliente acepta.' });
+    expect(texts(broken).length).toBeGreaterThanOrEqual(texts(two).length);
+    expect(error(doc, 'insert_column_break', { at_paragraph: 2 })).toContain('not in columns');
+
+    const page = apply(doc, 'set_page_setup', { paper: 'a4', orientation: 'landscape', margin_left_cm: 2 });
+    expect(page.page.width).toBeCloseTo(841.9);
+    expect(page.page.marginLeft).toBeCloseTo(56.69, 1);
+    expect(error(doc, 'set_page_setup', { margin_left_cm: 10, margin_right_cm: 10 })).toContain('less than 2 cm');
+  });
+
+  it('sets the height of a row, its heading rows, and the place and lines of its cells', () => {
+    const doc = insertTable(createDoc([p('Antes')]), { para: 0, offset: 5 }, 2, 2).doc;
+    const cell = doc.paragraphs.findIndex((x) => x.cell) + 1;
+    expect(apply(doc, 'edit_table', { paragraph: cell, action: 'set_row_height', height_cm: 2, exact: true }).tables![0].rows[0]).toMatchObject({ exact: true });
+    expect(apply(doc, 'edit_table', { paragraph: cell, action: 'header_row_on' }).tables![0].rows[0].header).toBe(true);
+    expect(apply(doc, 'edit_table', { paragraph: cell, action: 'align_cells_center', to_paragraph: cell + 3 }).tables![0].rows[1].cells[1].valign).toBe('center');
+    const lined = apply(doc, 'edit_table', { paragraph: cell, action: 'cell_lines', line_style: 'dashed', line_width_pt: 1, line_color: 'C0392B' });
+    expect(lined.tables![0].rows[0].cells[0].lines?.top).toEqual({ width: 1, color: 'C0392B', style: 'dashed' });
+    expect(texts(apply(doc, 'edit_table', { paragraph: cell, action: 'delete_table' }))).toEqual(['Antes', '']);
   });
 });

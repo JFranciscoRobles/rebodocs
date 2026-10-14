@@ -25,6 +25,8 @@ In the configuration of your MCP client:
 }
 ```
 
+On a Mac with Node installed by nvm, Claude Desktop does not see the `node` of your terminal: put its whole path in `command`, as `which node` gives it. In Claude Desktop the configuration is `~/Library/Application Support/Claude/claude_desktop_config.json`; restart it after changing it.
+
 | Option | What it is |
 | --- | --- |
 | `--root DIR` | A folder files may be read from and written to. Give it: without one, anywhere on the machine. |
@@ -45,18 +47,29 @@ To have the button in your own application:
 | Group | Tools |
 | --- | --- |
 | Files | `open_document`, `save_document`, `list_documents` |
-| Reading | `get_overview`, `read_document`, `find_text`, `list_links`, `list_notes`, `list_variables` |
-| Text | `replace_text`, `insert_paragraphs`, `delete_paragraphs`, `format_text`, `set_style`, `set_list`, `set_link` |
+| Reading | `get_overview`, `read_document`, `read_formatting`, `find_text`, `list_links`, `list_notes`, `list_variables` |
+| Text | `replace_text`, `rewrite_paragraph`, `insert_paragraphs`, `delete_paragraphs`, `set_style`, `set_list`, `set_link` |
+| Formatting | `format_text` (font, size, bold, italic, underline, strike, colour, highlight), `format_paragraphs` (alignment, indents, spacing, line spacing) |
 | Comments | `add_note`, `remove_note` |
 | Templates | `fill_variables` |
 | Tables and pictures | `insert_table`, `edit_table`, `insert_signatures`, `insert_image`, `edit_image` |
-| Pages | `set_page_number`, `insert_page_break`, `insert_table_of_contents`, `update_table_of_contents` |
+| Pages and columns | `set_page_setup`, `set_columns`, `insert_column_break`, `set_page_number`, `insert_page_break`, `insert_table_of_contents`, `update_table_of_contents` |
 
 Paragraphs are addressed by number, and each tool that changes text answers with what it did, so the assistant does not have to read the document again after every step.
+
+## Keeping the look
+
+An assistant sees the text by default, not how it looks. `read_formatting` tells it, paragraph by paragraph: the style, alignment, indents, spacing and line spacing, and each stretch of text with its font, size and marks. With that:
+
+- `rewrite_paragraph` writes a paragraph anew, as in a translation, and keeps its alignment, indents and spacing and the font, size and colour most of its text had. Given in `segments`, the words that were bold or italic stay so.
+- `insert_paragraphs` with `like_paragraph` makes new paragraphs that look like one that is there.
+- `replace_text` keeps the look of the text it replaces.
+
+`edit_table` also sets the height of a row, the heading rows that repeat on each page, where the text sits in its cells and the lines around them, and deletes a whole table.
 
 ## What to know
 
 - Paragraph numbers shift after an insertion, so an assistant works best one edit at a time.
-- There are no tools for the size and margins of the page, or for the letterhead.
+- There is no tool for the letterhead. The page setup changes the last section of the document.
 - It speaks over standard input and output only.
 - An assistant edits one person's editor. It cannot join a shared room as a participant.
