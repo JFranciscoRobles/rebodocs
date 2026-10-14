@@ -23,7 +23,9 @@ an MCP server for AI assistants.
 npm install
 npm run dev        # playground at http://localhost:5173
 npm run demo       # the React package, two ways, at http://localhost:5175
-npm test           # 257 tests
+npm run storage    # documents in an S3 bucket, at http://localhost:5176 (needs apps/storage/.env)
+npm run realtime   # several people on one document, at http://localhost:5177
+npm test           # 275 tests
 npm run typecheck
 ```
 
@@ -66,6 +68,8 @@ npm run typecheck
 | [`@rebodocs/mcp`](packages/mcp) | A Model Context Protocol server: tools for an assistant to read and edit documents. | Node |
 | [`apps/playground`](apps/playground) | The test application every package is tried in. | Browser |
 | [`apps/demo`](apps/demo) | The React package as an application uses it: the whole editor, and an interface of one's own built on the hooks. | Browser |
+| [`apps/storage`](apps/storage) | Documents kept in an S3 bucket (Cloudflare R2, AWS S3, MinIO): open, save, and a PDF made on the server. | Browser and Node |
+| [`apps/realtime`](apps/realtime) | Several people on one document at once: the collaboration server, a backend with its three routes and signed tickets, and the page. | Browser and Node |
 | [`apps/site`](apps/site) | [rebodocs.com](https://rebodocs.com): the landing page and the developer documentation. | Static |
 
 Each package has a README saying what it is for, how it is used, and where it
@@ -134,11 +138,26 @@ npm run collab -- --backend https://my-app.example/api/docs   # key in REBODOCS_
 | `npm run build` | Builds the playground. |
 | `npm run build:react` | Builds `@rebodocs/react` and packs it as a tarball to install elsewhere. |
 | `npm run generate -- template.docx data.json -o out.pdf` | Fills a template without a browser; DOCX, PDF or Markdown by extension. |
+| `npm run storage` | The demo of documents in an S3 bucket; needs `apps/storage/.env`. |
+| `npm run realtime` | The demo of several people on one document at once. |
 | `npm run collab` | The collaboration server. |
 | `npm run mcp` | The MCP server, over standard input and output. |
 | `npm run locale -- fr texts/fr.json` | Starts a translation of the interface, or brings one up to date. |
 | `npm run site`, `npm run build:site` | The website, locally; and built as static files in `apps/site/out`. |
 | `npm run word-compare -- file.docx` | Compares the layout with Word's (macOS with Word, Chrome and `pdftotext`). |
+
+## Demos
+
+Small applications that use the packages the way yours would, to read and to
+copy from. [The documentation](https://rebodocs.com/docs/demos/) says more of
+each.
+
+| Demo | Run it | What it shows |
+| --- | --- | --- |
+| [`apps/demo`](apps/demo) | `npm run demo`, or [online](https://rebodocs.com/demo/) | The editor as it comes, and an interface built from nothing on the hooks, in Spanish and English. No backend. |
+| [`apps/storage`](apps/storage) | `npm run storage` | Documents in Cloudflare R2, AWS S3 or MinIO. The browser opens and saves with addresses signed for a few minutes and never has a key; the server fills a template and stores the PDF. |
+| [`apps/realtime`](apps/realtime) | `npm run realtime` | Every document is a room, there only while someone is in it. The collaboration server keeps nothing: a backend gives it the document, takes it back, and lets each person in with a signed ticket. |
+| [`apps/playground`](apps/playground) | `npm run dev` | Everything wired together without a framework. |
 
 ## Status
 
@@ -147,8 +166,12 @@ npm run collab -- --backend https://my-app.example/api/docs   # key in REBODOCS_
 This is working software that has not been used in production yet. What has
 been checked, and how:
 
-- **257 automated tests** over the engine, the change format, the
-  collaboration session and the interface texts.
+- **275 automated tests** over the engine, the change format, the
+  collaboration session, the interface texts, and the backends of the
+  storage and real-time demos.
+- **A real bucket.** The backend of the storage demo was run by hand against
+  Cloudflare R2: signed addresses, the PDF made on the server, and coming
+  into a room whose document is in the bucket.
 - **Compatibility of layout.** Real documents are compared line by line with the
   PDF Word exports; on the receipt used as reference every line is within
   0.4 pt. Other documents, fonts and versions of Word may differ, and
@@ -163,7 +186,8 @@ been checked, and how:
 Known limits:
 
 - Collaboration has not been run between machines on different networks, over
-  HTTPS, or against a real storage backend. One server process holds a room.
+  HTTPS, or with two browsers typing over a real bucket. One server process
+  holds a room.
 - No sections with different page setups, no columns, no footnotes, no text
   boxes, no tracked changes. Such content is kept in the file and shown as
   plain text where it can be.

@@ -17,6 +17,7 @@ export const NAV: { title: string; items: NavItem[] }[] = [
     items: [
       { title: 'What is Rebodocs', slug: 'index' },
       { title: 'Getting started', slug: 'getting-started' },
+      { title: 'Demos to run', slug: 'demos' },
     ],
   },
   {
@@ -35,6 +36,7 @@ export const NAV: { title: string; items: NavItem[] }[] = [
     items: [
       { title: 'Templates and variables', slug: 'templates' },
       { title: 'On a server: DOCX and PDF', slug: 'server' },
+      { title: 'Documents in an S3 bucket', slug: 'storage' },
       { title: 'Letterheads', slug: 'letterhead' },
       { title: 'Fonts', slug: 'fonts' },
       { title: 'Languages', slug: 'languages' },

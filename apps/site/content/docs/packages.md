@@ -58,6 +58,14 @@ A Model Context Protocol server whose tools are the editor's operations, over fi
 
 Take it to let an assistant work on documents. See [AI assistants](/docs/assistants/).
 
-## The playground
+## The applications
 
-`apps/playground` is the page every package is tried in: `npm run dev`. Its `src/main.ts` is the shortest example of everything wired together.
+Besides the packages, the repository has small applications that use them. See [Demos to run](/docs/demos/).
+
+| | |
+| --- | --- |
+| `apps/playground` | The page every package is tried in: `npm run dev`. Its `src/main.ts` is the shortest example of everything wired together. |
+| `apps/demo` | `@rebodocs/react` as an application uses it: the whole editor, and an interface of its own on the hooks. |
+| `apps/storage` | Documents in an S3 bucket: open, save, and a PDF made on the server. |
+| `apps/realtime` | Several people on one document, through a backend with its three routes and signed tickets. |
+| `apps/site` | This website. |

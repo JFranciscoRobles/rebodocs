@@ -75,12 +75,16 @@ See [On a server](/docs/server/).
 - [Headless](/docs/headless/): your own toolbar and panels, with Tailwind.
 - [Templates and variables](/docs/templates/): documents that fill themselves.
 - [Real-time collaboration](/docs/collaboration/): several people at once.
+- [Demos to run](/docs/demos/): the React package, an S3 bucket and real time, each as a small application.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | The playground, with hot reload. |
+| `npm run demo` | The React package, two ways. |
+| `npm run storage` | The demo of documents in an S3 bucket. |
+| `npm run realtime` | The demo of several people on one document. |
 | `npm test` | The tests. |
 | `npm run typecheck` | Types, over every package. |
 | `npm run build:react` | Builds and packs `@rebodocs/react`. |
