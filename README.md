@@ -196,10 +196,6 @@ Known limits:
 - Fonts registered by an application are not embedded in the DOCX.
 - The interface was written in Spanish first; the English texts need a review.
 
-A long, detailed description of how everything works, and of every check
-made, is in [docs/DESIGN.es.md](docs/DESIGN.es.md). It is in Spanish and has
-not been translated yet.
-
 ## Roadmap
 
 In rough order of how much each would matter:

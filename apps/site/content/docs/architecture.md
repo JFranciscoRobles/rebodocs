@@ -69,5 +69,3 @@ The server puts everyone's changes in one order, rebasing each against the ones 
 | `packages/editor/src/editor.ts` | The pages, the caret, input. |
 | `packages/editor/src/*.ts` | One file per interface piece. |
 | `packages/collab/src/changes.ts` | The change format and its transform. |
-
-The repository also holds a long design document, in Spanish, with the reasoning behind every rule and every measurement made against Word: `docs/DESIGN.es.md`.
