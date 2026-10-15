@@ -18,14 +18,14 @@ In the configuration of your MCP client:
 {
   "mcpServers": {
     "rebodocs": {
-      "command": "node",
-      "args": ["/path/to/rebodocs/packages/mcp/bin/rebodocs-mcp.mjs", "--root", "/path/to/documents"]
+      "command": "npx",
+      "args": ["-y", "@rebodocs/mcp", "--root", "/path/to/documents"]
     }
   }
 }
 ```
 
-On a Mac with Node installed by nvm, Claude Desktop does not see the `node` of your terminal: put its whole path in `command`, as `which node` gives it. In Claude Desktop the configuration is `~/Library/Application Support/Claude/claude_desktop_config.json`; restart it after changing it.
+It comes from [npm](https://www.npmjs.com/package/@rebodocs/mcp), with the engine inside: there is nothing to clone. On a Mac with Node installed by nvm, Claude Desktop does not see the `npx` of your terminal: put its whole path in `command`, as `which npx` gives it. In Claude Desktop the configuration is `~/Library/Application Support/Claude/claude_desktop_config.json`; restart it after changing it.
 
 | Option | What it is |
 | --- | --- |
@@ -71,7 +71,7 @@ An assistant sees the text by default, not how it looks. `read_formatting` tells
 
 The button above reaches a server on the person's machine. To have Claude in your application, for anyone who uses it, the page talks to your backend instead, and the backend to the Claude API: `npm run assistant` runs it ([the demo](/docs/demos/#claude-in-the-editor)).
 
-On the server, a route that takes the conversation to Claude, with your key:
+`npm install @rebodocs/mcp` on the server. There, a route that takes the conversation to Claude, with your key:
 
 ```ts
 import { assistantRoute } from '@rebodocs/mcp/claude';

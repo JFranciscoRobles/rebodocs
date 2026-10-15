@@ -1,9 +1,8 @@
 {
   "name": "@rebodocs/mcp",
   "version": "0.6.0",
-  "description": "A Model Context Protocol server with tools for an AI assistant to read and edit DOCX documents.",
+  "description": "Tools for an AI assistant to read and edit DOCX documents: an MCP server for Claude Desktop and other clients, and Claude in a chat beside the editor.",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "exports": {
     ".": "./src/tools.ts",
@@ -11,7 +10,13 @@
     "./claude": "./src/claude.ts"
   },
   "dependencies": {
-    "@rebodocs/core": "*",
     "@anthropic-ai/sdk": "^0.133.0"
-  }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "@rebodocs/core": "*"
+  },
+  "private": true
 }

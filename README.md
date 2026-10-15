@@ -27,7 +27,7 @@ npm run demo       # the React package, two ways, at http://localhost:5175
 npm run storage    # documents in an S3 bucket, at http://localhost:5176 (needs apps/storage/.env)
 npm run realtime   # several people on one document, at http://localhost:5177
 npm run assistant  # Claude in a shared document, at http://localhost:5179 (needs an API key)
-npm test           # 275 tests
+npm test           # 312 tests
 npm run typecheck
 ```
 
@@ -73,7 +73,7 @@ npm run typecheck
 | [`@rebodocs/editor`](packages/editor) | The editor: pages, caret and selection, toolbar, menu, side panel, status bar. No framework. | Browser |
 | [`@rebodocs/react`](packages/react) ([npm](https://www.npmjs.com/package/@rebodocs/react)) | The editor as a React component, and as headless hooks for an interface of your own. | Browser (SSR-safe) |
 | [`@rebodocs/collab`](packages/collab) | Collaboration: the change format, the room server and its browser client. | Node, browser |
-| [`@rebodocs/mcp`](packages/mcp) | A Model Context Protocol server: tools for an assistant to read and edit documents; and the route that takes a chat in the page to the Claude API. | Node |
+| [`@rebodocs/mcp`](packages/mcp) ([npm](https://www.npmjs.com/package/@rebodocs/mcp)) | A Model Context Protocol server: tools for an assistant to read and edit documents; and the route that takes a chat in the page to the Claude API. | Node |
 | [`apps/playground`](apps/playground) | The test application every package is tried in. | Browser |
 | [`apps/demo`](apps/demo) | The React package as an application uses it: the whole editor, and an interface of one's own built on the hooks. | Browser |
 | [`apps/storage`](apps/storage) | Documents kept in an S3 bucket (Cloudflare R2, AWS S3, MinIO): open, save, and a PDF made on the server. | Browser and Node |
@@ -118,6 +118,11 @@ createToolbar(document.querySelector('#toolbar')!, editor);
 editor.loadDocx(bytes);
 const saved = editor.exportDocx();
 ```
+
+**For an AI assistant:** `npx @rebodocs/mcp` is the MCP server for Claude
+Desktop and other clients ([npm](https://www.npmjs.com/package/@rebodocs/mcp));
+`@rebodocs/mcp/claude` puts Claude in a chat beside the editor of your
+application ([AI assistants](https://rebodocs.com/docs/assistants/)).
 
 **On a server, filling a template:**
 

@@ -30,7 +30,8 @@
     "collab": "node packages/collab/bin/rebodocs-collab.mjs",
     "site": "npm run build -w @rebodocs/react && npm run dev -w @rebodocs/site",
     "build:site": "npm run build -w @rebodocs/react && npm run build -w @rebodocs/site",
-    "build:react": "npm run build -w @rebodocs/react && npm pack -w @rebodocs/react --pack-destination packages/react"
+    "build:react": "npm run build -w @rebodocs/react && npm pack -w @rebodocs/react --pack-destination packages/react",
+    "build:mcp": "npm run build -w @rebodocs/mcp"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

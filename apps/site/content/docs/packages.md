@@ -40,7 +40,7 @@ Take it for a page without React, or to build on its pieces. See [Without a fram
 
 ## @rebodocs/react
 
-On npm: [`@rebodocs/react`](https://www.npmjs.com/package/@rebodocs/react).
+On npm: [`@rebodocs/react`](https://www.npmjs.com/package/@rebodocs/react) and [`@rebodocs/mcp`](https://www.npmjs.com/package/@rebodocs/mcp).
 
 `DocsEditor`, the whole editor as a component; `DocsProvider`, `DocsSurface` and hooks, to draw your own interface; and `mountDocs`, the whole editor with no React in it. It is the one package built as a bundle, with the others inside.
 

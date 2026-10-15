@@ -1,6 +1,6 @@
 # @rebodocs/mcp
 
-> Not on npm yet. It is run from this repository.
+[npm](https://www.npmjs.com/package/@rebodocs/mcp) · `npx @rebodocs/mcp`
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for DOCX
 documents: what an AI assistant (Claude Desktop, Claude Code, Cursor…) uses
@@ -55,8 +55,11 @@ rows, where the text sits in the cells and the lines around them.
 
 ## Running it
 
+From npm, with nothing to clone: the package has the engine inside, and its
+command is `rebodocs-mcp`.
+
 ```bash
-npm run mcp -- --root ~/Documents/contracts --fonts ~/Library/Fonts
+npx @rebodocs/mcp --root ~/Documents/contracts --fonts ~/Library/Fonts
 ```
 
 In the configuration of an MCP client:
@@ -64,10 +67,28 @@ In the configuration of an MCP client:
 ```json
 {
   "mcpServers": {
-    "rebodocs": { "command": "node", "args": ["/path/to/packages/mcp/bin/rebodocs-mcp.mjs", "--root", "/path/to/documents"] }
+    "rebodocs": { "command": "npx", "args": ["-y", "@rebodocs/mcp", "--root", "/path/to/documents"] }
   }
 }
 ```
+
+With Node installed by nvm, Claude Desktop does not see the `npx` of your
+terminal: put its whole path in `command` (`which npx`).
+
+From this repository, the same server from its sources: `npm run mcp -- …`,
+or `node packages/mcp/bin/rebodocs-mcp.mjs …` in a client's configuration.
+
+## In your application
+
+```bash
+npm install @rebodocs/mcp
+```
+
+| Import | What it is | Where it runs |
+| --- | --- | --- |
+| `@rebodocs/mcp` | The tools: `TOOLS`, `runTool(doc, name, args)`. | Anywhere |
+| `@rebodocs/mcp/claude` | `assistantRoute()`: the route of your backend that takes a chat to the Claude API with your key. | Node |
+| `@rebodocs/mcp/browser` | `createAssistantChat(editor)` and the editor's side of the MCP server. Also in `@rebodocs/react`. | Browser |
 
 | Option | What it is |
 | --- | --- |
@@ -87,6 +108,16 @@ the page runs the same function on its editor (`browser.ts`).
 Paragraphs are addressed by number, and every tool that changes text answers
 with what it did, so the assistant does not have to read the document again
 after each step.
+
+## Building and publishing
+
+```bash
+npm run build -w @rebodocs/mcp      # packages/mcp/dist is the package
+npm publish ./packages/mcp/dist
+```
+
+`dist/` has a package.json of its own: the one beside the sources stays the
+one the repository uses, which points at them.
 
 ## Where it can improve
 
@@ -110,6 +141,6 @@ after each step.
 - **Tests** cover the tools and the chat against a Claude of their own; the
   bridge to the browser was checked by hand, and the chat has not been run
   against the real API in the repository's tests.
-- **Not on npm.** `assistantRoute` is taken from this repository; an
-  application outside it copies `src/claude.ts` until the package is
-  published.
+- **A second copy of the engine.** The package has the engine inside, as
+  `@rebodocs/react` has it: an application with both carries it twice, once
+  in the page and once on the server.
