@@ -101,4 +101,4 @@ The answer comes as Claude writes it: the route sends a line of JSON for each pi
 - Paragraph numbers shift after an insertion, so an assistant works best one edit at a time.
 - There is no tool for the letterhead. The page setup changes the last section of the document.
 - It speaks over standard input and output only.
-- An assistant edits one person's editor. It cannot join a shared room as a participant.
+- In a shared room an assistant works through the editor of the person who asked: the others see its changes as that person's, but not the conversation.

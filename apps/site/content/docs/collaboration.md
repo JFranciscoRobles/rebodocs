@@ -22,6 +22,8 @@ npm run realtime          # http://localhost:5177
 
 Every document is a room, and there is no other way to open one. Open `contract.docx`, press **Copy link** and open the link in another window, or another browser. Give each a name in **You are**. Each sees the other's caret and what either types.
 
+[`apps/assistant`](/docs/demos/#claude-in-the-editor) is the same demo with Claude in a chat beside the document: what it changes, the others in the room see.
+
 A room is there only while someone is in it. It opens when the first person comes in, with the document the backend has. While someone types it gives the document back every 10 seconds. A moment after the last one leaves it gives it back once more and is let go of: nothing of the document stays in the collaboration server. The list says which rooms are open, and who is in each: the collaboration server answers that with `rooms()`.
 
 The documents are kept in `apps/realtime/documents`, a folder. With the names of a bucket in `apps/realtime/.env` (the ones [the storage demo](/docs/storage/) takes) they are kept in an S3 bucket instead, with no other change: the backend asks a store for `list`, `get` and `put`, and both are one.

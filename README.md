@@ -222,8 +222,9 @@ Known limits:
 In rough order of how much each would matter:
 
 1. Use it in a real application, and fix what that shows.
-2. Publish the other packages to npm (today only `@rebodocs/react` is, as a
-   bundle; the others are consumed as source).
+2. Publish the engine and collaboration to npm (today `@rebodocs/react` and
+   `@rebodocs/mcp` are, each a bundle with the engine inside; the others are
+   consumed as source).
 3. Collaboration: several server processes per room, permissions checked on
    every change and not only on joining, recovery after a crash.
 4. Layout: footnotes, tab stops, a page size and a header per section.

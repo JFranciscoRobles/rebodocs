@@ -38,4 +38,5 @@ who reaches the server may open and save what is in the bucket.
   where they go.
 - **Deleting and renaming.** Neither is here.
 - **Several people at once.** The last to save wins here. `apps/realtime` is
-  the demo of that, and can keep its documents in this same bucket.
+  the demo of that, and `apps/assistant` the same with Claude; both can keep
+  their documents in this same bucket.

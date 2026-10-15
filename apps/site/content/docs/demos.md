@@ -61,6 +61,6 @@ Open a document, press **Copy link** and open the link in another window. [Real-
 
 ## What they have in common
 
-- **They take the packages from their source**, so a change in a package shows at once. Copied into a project of your own that installs `@rebodocs/react` from npm, they work without the alias in `vite.config.ts`.
-- **They are made to run on your own machine.** The two with a backend check nobody: where an application decides who may do what is marked in their code.
+- **They take the packages from their source**, so a change in a package shows at once. Copied into a project of your own that installs `@rebodocs/react` from npm (and `@rebodocs/mcp`, for the one with Claude), they work without the alias in `vite.config.ts`.
+- **They are made to run on your own machine.** The three with a backend check nobody: where an application decides who may do what is marked in their code. The one with Claude spends from your API key, a few steps a minute for each address.
 - **Each has a README** that says what is where, and where it can improve.

@@ -57,4 +57,5 @@ project that installs `@rebodocs/react` from npm, it works without the alias.
   the bar beside the selection. A panel made with `useDocsSelectionBox`
   would show the other way.
 - **No collaboration.** `collab`, `share` and the people on a document are
-  not shown; `apps/playground` has them.
+  not shown; `apps/realtime` and `apps/playground` have them, and
+  `apps/assistant` has Claude in a shared document.

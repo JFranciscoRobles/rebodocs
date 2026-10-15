@@ -18,12 +18,12 @@ can take only the ones it wants, or none.
 
 | Piece | What it is |
 | --- | --- |
-| `Editor` | The pages in an element. Holds the document, the selection and the undo history; paints the layout; takes the keyboard, the mouse and touch. Everything else talks to it through public methods. |
-| `createToolbar` | One row of formatting; what does not fit folds into a "more" tray. |
+| `Editor` | The pages in an element. Holds the document, the selection and the undo history; paints the layout; takes the keyboard, the mouse and touch. The edges of a table's columns and rows, and its bottom right corner, are dragged to resize it. Everything else talks to it through public methods. |
+| `createToolbar` | One row of formatting; what does not fit folds into a "more" tray. Its table menu has rows, columns, merging, heading rows, row height, where the text sits in a cell and the lines around it, and deleting the table; its columns menu sets the text in one, two or three columns. |
 | `createSidebar` | The document menu: open, save, export, page setup, letterhead, language. |
 | `createPanel` | Side panel: outline, template variables, notes. |
 | `createStatusBar` | Page count, words, view, zoom, who is on the document. Drops what matters least as it gets narrower. |
-| `createBubble` | A small bar beside the selection with what can be done to it. |
+| `createBubble` | A small bar beside the selection with what can be done to it: to text, a link, a note, a picture, or a table (deleting it among it). A tap on ⌘ (Ctrl elsewhere) shows it. |
 | `createFindBar`, `createRuler` | Find and replace; the ruler with indents and margins. |
 | `createResponsive` | Makes do with a narrow window and an on-screen keyboard. |
 | `addLocale`, `setLocale`, `t` | The texts of the interface, by key. |
@@ -100,7 +100,7 @@ loads with CSS, `addFont({ family: 'Raleway' })` is enough.
 - **Tests.** The interface is checked with scripted runs of headless Chrome
   that are not in the repository. Bringing them in as a browser test suite
   (Playwright) is the single most useful thing to do here.
-- **`editor.ts` is one file of about 3,400 lines.** Input (keyboard, mouse,
+- **`editor.ts` is one file of about 3,650 lines.** Input (keyboard, mouse,
   touch), painting and commands should be split into modules.
 - **Accessibility.** The pages are positioned spans a screen reader cannot
   follow. It needs an accessible mirror of the text, or ARIA live

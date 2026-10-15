@@ -2,7 +2,9 @@
 
 The application every package is tried in: the editor with all its interface
 pieces, opening and saving files of the disk, sharing a document, and the
-button that lets an AI assistant in.
+button that lets an AI assistant in (the MCP server of this machine,
+`npm run mcp`). For Claude in a chat of the page instead, see
+`apps/assistant`.
 
 ```bash
 npm run dev      # http://localhost:5173

@@ -25,6 +25,9 @@ there is a sample contract in it. To keep them in an S3 bucket instead, copy
 It is made to run on your own machine. Anyone who reaches it may come into
 any document, under the name they give.
 
+`apps/assistant` is this demo with Claude in a chat beside the document: it
+takes its backend from `server/` here.
+
 ## What runs
 
 ```
