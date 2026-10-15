@@ -2,6 +2,8 @@
 
 `@rebodocs/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server: what an assistant such as Claude Desktop, Claude Code or Cursor uses to read and change Word documents.
 
+It is [on npm](https://www.npmjs.com/package/@rebodocs/mcp), with the engine inside: `npx @rebodocs/mcp` runs the server, and `npm install @rebodocs/mcp` puts the tools, or Claude in a chat, in your application.
+
 It gives the assistant the operations a person has in the editor. "Fill this contract", "add a clause after the third one" or "turn this list into a table" are done on the real document, with its layout and formatting intact, and not on a copy of its text.
 
 ## Two kinds of document
