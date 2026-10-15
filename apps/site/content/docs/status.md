@@ -4,7 +4,7 @@ Rebodocs is a word processor compatible with Word files. It is not a copy of Wor
 
 ## What is checked
 
-**275 automated tests**, over the engine, the collaboration change format and session, the texts of the interface, and the backends of the two demos that have one: a bucket kept in memory, and two people typing through the three routes.
+**312 automated tests**, over the engine, the collaboration change format and session, the texts of the interface, the tools for an assistant and its chat (against a Claude of the tests' own), and the backends of the storage and real-time demos: a bucket kept in memory, and two people typing through the three routes.
 
 **Compatibility of layout.** Real documents are compared line by line with the PDF Word exports from the same file. On the receipt used as reference, every line is within 0.4 pt of Word's. The comparison is a command, `npm run word-compare -- file.docx`, so any document can be measured.
 

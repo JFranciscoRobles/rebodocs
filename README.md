@@ -182,9 +182,9 @@ each.
 This is working software that has not been used in production yet. What has
 been checked, and how:
 
-- **275 automated tests** over the engine, the change format, the
-  collaboration session, the interface texts, and the backends of the
-  storage and real-time demos.
+- **312 automated tests** over the engine, the change format, the
+  collaboration session, the interface texts, the tools for an assistant and
+  its chat, and the backends of the storage and real-time demos.
 - **A real bucket.** The backend of the storage demo was run by hand against
   Cloudflare R2: signed addresses, the PDF made on the server, and coming
   into a room whose document is in the bucket.

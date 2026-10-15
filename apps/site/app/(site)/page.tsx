@@ -12,7 +12,7 @@ const FEATURES = [
   ['PDF without a browser', 'The same layout runs in Node. Generate a PDF with embedded fonts and selectable text on your server.'],
   ['Works on a phone', 'Pages fit the screen and zoom with two fingers. Taps, selection handles and on-screen keyboards are handled.'],
   ['Yours to style', 'Use the interface that comes with it, or build your own with headless hooks and Tailwind.'],
-  ['AI assistants', 'An MCP server gives an assistant the same operations a person has, on the real document.'],
+  ['AI assistants', 'Claude reads and changes the real document, keeping its look: from Claude Desktop through an MCP server, or in a chat beside the editor of your application.'],
 ];
 
 const PACKAGES = [
