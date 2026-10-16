@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/demo",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "The React package as an application uses it: the whole editor, and an interface of one's own built on the hooks.",
   "license": "MIT",
   "private": true,

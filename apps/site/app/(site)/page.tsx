@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { CodeTabs } from '@/components/CodeTabs';
 import { LiveDemo } from '@/components/LiveDemo';
 import { highlight } from '@/lib/docs';
-import { NPM, REPO } from '@/lib/site';
+import { NPM, NPM_ORG, REPO } from '@/lib/site';
 
 const FEATURES = [
   ['Compatible with Word files', 'It reads and writes DOCX, and lays pages out by the same rules, so a document looks the same here and there. Measured line by line on real files.'],
@@ -97,7 +97,7 @@ export default async function Home() {
   return (
     <main>
       <section className="mx-auto max-w-6xl px-4 pb-4 pt-16 text-center sm:px-6 sm:pt-24">
-        <p className="mx-auto mb-5 w-fit rounded-full border border-line bg-soft px-3.5 py-1 text-[13px] font-medium text-muted">Open source · MIT · v0.6.1</p>
+        <p className="mx-auto mb-5 w-fit rounded-full border border-line bg-soft px-3.5 py-1 text-[13px] font-medium text-muted">Open source · MIT · v0.6.2</p>
         <h1 className="mx-auto max-w-[17ch] text-[clamp(38px,6.4vw,68px)] font-extrabold leading-[1.04] tracking-[-0.035em]">
           The document editor you <span className="bg-gradient-to-r from-brand to-accent bg-clip-text text-transparent">build into your app</span>
         </h1>
@@ -184,12 +184,11 @@ export default async function Home() {
         <div className="rounded-2xl bg-soft p-6 sm:p-10">
           <Title>Where it stands</Title>
           <p className="mt-3.5 max-w-[66ch] text-[17px] leading-relaxed text-muted">
-            Rebodocs works and has 275 automated tests, and it has not been used in production yet. The editor for React is{' '}
-            <a href={NPM} className="font-semibold text-brand hover:underline">
+            Rebodocs works and has 312 automated tests, and it has not been used in production yet. Every package is{' '}
+            <a href={NPM_ORG} className="font-semibold text-brand hover:underline">
               on npm
             </a>
-            ; the other packages are used from the
-            repository for now.
+            : the editor for React, and the engine, the editor without a framework, collaboration and the tools for an assistant by themselves.
             Anyone may use it for anything. It is a word processor of its own that is compatible with Word files, not a copy of Word, and it does not try to be one.
           </p>
           <p className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">

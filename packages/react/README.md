@@ -124,8 +124,10 @@ app directory. It was tried in Next.js 16 with React 19 and Tailwind 4.
 
 ## Where it can improve
 
-- **Publishing.** It is on npm as one bundle. The other packages should be
-  built and published too, so that it can depend on them and not carry them.
+- **Publishing.** It is one bundle with the engine, the editor and the
+  collaboration client inside. They are on npm by themselves too; depending
+  on them instead would keep one copy of the engine in an application that
+  also uses `@rebodocs/core`.
 - **Headless coverage.** The ruler (`<DocsRuler />`) and the bar beside the
   selection come as they are drawn, with colours to change, or not at all:
   there is no hook that gives what they show to draw one's own. Hooks for

@@ -1,6 +1,6 @@
 # @rebodocs/core
 
-> Not on npm by itself yet. It is used from this repository, and it is inside [`@rebodocs/react`](https://www.npmjs.com/package/@rebodocs/react), which is.
+[npm](https://www.npmjs.com/package/@rebodocs/core) · `npm install @rebodocs/core`
 
 The engine. Everything about a document that does not need a screen: what it
 is, how it is read from and written to a DOCX, how it is changed, and where
@@ -9,6 +9,24 @@ every line of it falls on a page.
 It has no DOM and one dependency (`fflate`), so the same code runs in the
 browser and in Node. The editor, the collaboration server, the MCP server and
 the command-line tools are all built on it.
+
+## Using it
+
+```bash
+npm install @rebodocs/core
+```
+
+```ts
+import { importDocx, fillVariables, exportDocx, renderPdf } from '@rebodocs/core';
+
+const doc = fillVariables(importDocx(template), { client: 'Ana Pérez', amount: '2500' });
+const docx = exportDocx(doc);
+const { pdf } = renderPdf(doc, fonts); // fonts: font files, read with readFont
+```
+
+It is the engine `@rebodocs/editor`, `@rebodocs/collab` and `@rebodocs/mcp`
+use, at the same version: a `Doc` made here is the one they take.
+`@rebodocs/react` has a copy of its own inside, to be one file.
 
 ## Purpose
 

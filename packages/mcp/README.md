@@ -55,8 +55,8 @@ rows, where the text sits in the cells and the lines around them.
 
 ## Running it
 
-From npm, with nothing to clone: the package has the engine inside, and its
-command is `rebodocs-mcp`.
+From npm, with nothing to clone: its command is `rebodocs-mcp`, and npm
+brings the engine, `@rebodocs/core`, with it.
 
 ```bash
 npx @rebodocs/mcp --root ~/Documents/contracts --fonts ~/Library/Fonts
@@ -111,13 +111,17 @@ after each step.
 
 ## Building and publishing
 
+As every package but `@rebodocs/react`, from the root of the repository:
+
 ```bash
-npm run build -w @rebodocs/mcp      # packages/mcp/dist is the package
+npm run build:packages              # packages/<name>/dist is each package
+npm publish ./packages/core/dist    # the engine first: the others ask for it
 npm publish ./packages/mcp/dist
 ```
 
-`dist/` has a package.json of its own: the one beside the sources stays the
-one the repository uses, which points at them.
+`dist/` has a package.json of its own, written by `tools/package.mjs`: the
+one beside the sources stays the one the repository uses, which points at
+them.
 
 ## Where it can improve
 
@@ -141,6 +145,3 @@ one the repository uses, which points at them.
 - **Tests** cover the tools and the chat against a Claude of their own; the
   bridge to the browser was checked by hand, and the chat has not been run
   against the real API in the repository's tests.
-- **A second copy of the engine.** The package has the engine inside, as
-  `@rebodocs/react` has it: an application with both carries it twice, once
-  in the page and once on the server.

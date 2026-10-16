@@ -41,8 +41,10 @@ The demo starts the collaboration server in its own process, on port 7421, to ha
 
 ```bash
 REBODOCS_COLLAB_BACKEND_KEY=a-long-secret \
-  npm run collab -- --host 0.0.0.0 --backend https://api.example.com/docs
+  npx @rebodocs/collab --host 0.0.0.0 --backend https://api.example.com/docs
 ```
+
+It is [`@rebodocs/collab`](https://www.npmjs.com/package/@rebodocs/collab) on npm; from the repository, `npm run collab -- …` is the same server. To start it from a Node program of your own, `createCollabServer` from `@rebodocs/collab/server` takes the same options, and `backendStorage` from `@rebodocs/collab/storage` the backend.
 
 | Option | Environment | What it is |
 | --- | --- | --- |
@@ -117,8 +119,8 @@ No storage credentials reach the browser, and none reach the collaboration serve
 ## Trying it without a backend
 
 ```bash
-npm run collab                 # keeps rooms in ./salas
-npm run collab -- --memory     # keeps nothing
+npx @rebodocs/collab                 # keeps rooms in ./salas
+npx @rebodocs/collab --memory        # keeps nothing
 ```
 
 In the playground, the "Share" button of the status bar starts a room and gives a link to pass on.

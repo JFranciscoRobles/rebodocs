@@ -64,7 +64,7 @@ Touch input was also tried on a real phone.
 
 **Packaging**
 
-- `@rebodocs/react` and `@rebodocs/mcp` are on npm, each a bundle with the engine inside. The others are used as source inside the repository.
+- Every package is on npm. `@rebodocs/react` has the engine inside; an application that also installs `@rebodocs/core` carries the engine twice.
 - The English interface texts need a native review.
 
 ## Roadmap
@@ -72,13 +72,12 @@ Touch input was also tried on a real phone.
 In rough order of how much each would matter.
 
 1. **Use it in a real application**, and fix what that shows.
-2. **Publish the engine and collaboration to npm**, each built with its types, so that the engine can be installed by itself on a server.
-3. **Browser tests in the repository.** The interface checks exist as scripts outside it; they belong in a test suite, and the demos have none.
-4. **Collaboration that scales**: several server processes per room, access checked while connected, a durable log.
-5. **Templates by locale**: dates and currency in the language and currency you choose.
-6. **Layout**: a page size and a header per section, tab stops in tables, footnotes.
-7. **Accessibility**: a readable mirror of the text for screen readers, and keyboard access to every menu.
-8. **Rich paste** from Word and the web.
+2. **Browser tests in the repository.** The interface checks exist as scripts outside it; they belong in a test suite, and the demos have none.
+3. **Collaboration that scales**: several server processes per room, access checked while connected, a durable log.
+4. **Templates by locale**: dates and currency in the language and currency you choose.
+5. **Layout**: a page size and a header per section, tab stops in tables, footnotes.
+6. **Accessibility**: a readable mirror of the text for screen readers, and keyboard access to every menu.
+7. **Rich paste** from Word and the web.
 
 ## Contributing
 

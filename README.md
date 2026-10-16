@@ -1,6 +1,6 @@
 # Rebodocs
 
-[rebodocs.com](https://rebodocs.com) · [npm](https://www.npmjs.com/package/@rebodocs/react) · [documentation](https://rebodocs.com/docs/)
+[rebodocs.com](https://rebodocs.com) · [npm](https://www.npmjs.com/org/rebodocs) · [documentation](https://rebodocs.com/docs/)
 
 A word processor for the browser, compatible with Word files (DOCX), with its
 own engine. The document model,
@@ -69,10 +69,10 @@ npm run typecheck
 
 | Package | What it is | Runs in |
 | --- | --- | --- |
-| [`@rebodocs/core`](packages/core) | The engine: document model, DOCX import and export, layout, PDF, templates. No DOM. | Browser, Node |
-| [`@rebodocs/editor`](packages/editor) | The editor: pages, caret and selection, toolbar, menu, side panel, status bar. No framework. | Browser |
+| [`@rebodocs/core`](packages/core) ([npm](https://www.npmjs.com/package/@rebodocs/core)) | The engine: document model, DOCX import and export, layout, PDF, templates. No DOM. | Browser, Node |
+| [`@rebodocs/editor`](packages/editor) ([npm](https://www.npmjs.com/package/@rebodocs/editor)) | The editor: pages, caret and selection, toolbar, menu, side panel, status bar. No framework. | Browser |
 | [`@rebodocs/react`](packages/react) ([npm](https://www.npmjs.com/package/@rebodocs/react)) | The editor as a React component, and as headless hooks for an interface of your own. | Browser (SSR-safe) |
-| [`@rebodocs/collab`](packages/collab) | Collaboration: the change format, the room server and its browser client. | Node, browser |
+| [`@rebodocs/collab`](packages/collab) ([npm](https://www.npmjs.com/package/@rebodocs/collab)) | Collaboration: the change format, the room server and its browser client. | Node, browser |
 | [`@rebodocs/mcp`](packages/mcp) ([npm](https://www.npmjs.com/package/@rebodocs/mcp)) | A Model Context Protocol server: tools for an assistant to read and edit documents; and the route that takes a chat in the page to the Claude API. | Node |
 | [`apps/playground`](apps/playground) | The test application every package is tried in. | Browser |
 | [`apps/demo`](apps/demo) | The React package as an application uses it: the whole editor, and an interface of one's own built on the hooks. | Browser |
@@ -124,7 +124,7 @@ Desktop and other clients ([npm](https://www.npmjs.com/package/@rebodocs/mcp));
 `@rebodocs/mcp/claude` puts Claude in a chat beside the editor of your
 application ([AI assistants](https://rebodocs.com/docs/assistants/)).
 
-**On a server, filling a template:**
+**On a server, filling a template:** `npm install @rebodocs/core`
 
 ```ts
 import { importDocx, fillVariables, exportDocx } from '@rebodocs/core';
@@ -137,10 +137,13 @@ const docx = exportDocx(doc);
 npm run generate -- template.docx data.json -o receipt.pdf
 ```
 
+**Without a framework:** `npm install @rebodocs/editor`, the editor and the
+pieces of its interface for any page ([without a framework](https://rebodocs.com/docs/vanilla/)).
+
 **Several people at once:**
 
 ```bash
-npm run collab -- --backend https://my-app.example/api/docs   # key in REBODOCS_COLLAB_BACKEND_KEY
+npx @rebodocs/collab --backend https://my-app.example/api/docs   # key in REBODOCS_COLLAB_BACKEND_KEY
 ```
 
 ## Commands
@@ -151,12 +154,13 @@ npm run collab -- --backend https://my-app.example/api/docs   # key in REBODOCS_
 | `npm test`, `npm run typecheck` | Tests (Vitest) and types. |
 | `npm run build` | Builds the playground. |
 | `npm run build:react` | Builds `@rebodocs/react` and packs it as a tarball to install elsewhere. |
+| `npm run build:packages` | Builds core, editor, collab and mcp, each into `packages/<name>/dist`, the package to publish. |
 | `npm run generate -- template.docx data.json -o out.pdf` | Fills a template without a browser; DOCX, PDF or Markdown by extension. |
 | `npm run storage` | The demo of documents in an S3 bucket; needs `apps/storage/.env`. |
 | `npm run realtime` | The demo of several people on one document at once. |
 | `npm run assistant` | The demo of Claude in a shared document; needs `apps/assistant/.env`. |
-| `npm run collab` | The collaboration server. |
-| `npm run mcp` | The MCP server, over standard input and output. |
+| `npm run collab` | The collaboration server; `npx @rebodocs/collab` outside the repository. |
+| `npm run mcp` | The MCP server, over standard input and output; `npx @rebodocs/mcp` outside the repository. |
 | `npm run locale -- fr texts/fr.json` | Starts a translation of the interface, or brings one up to date. |
 | `npm run site`, `npm run build:site` | The website, locally; and built as static files in `apps/site/out`. |
 | `npm run word-compare -- file.docx` | Compares the layout with Word's (macOS with Word, Chrome and `pdftotext`). |
@@ -177,7 +181,7 @@ each.
 
 ## Status
 
-`@rebodocs/react` is [on npm](https://www.npmjs.com/package/@rebodocs/react).
+Every package is on npm: `@rebodocs/react`, and `core`, `editor`, `collab` and `mcp` by themselves.
 
 This is working software that has not been used in production yet. What has
 been checked, and how:
@@ -222,13 +226,10 @@ Known limits:
 In rough order of how much each would matter:
 
 1. Use it in a real application, and fix what that shows.
-2. Publish the engine and collaboration to npm (today `@rebodocs/react` and
-   `@rebodocs/mcp` are, each a bundle with the engine inside; the others are
-   consumed as source).
-3. Collaboration: several server processes per room, permissions checked on
+2. Collaboration: several server processes per room, permissions checked on
    every change and not only on joining, recovery after a crash.
-4. Layout: footnotes, tab stops, a page size and a header per section.
-5. Translate the design notes, and review the English interface.
+3. Layout: footnotes, tab stops, a page size and a header per section.
+4. Translate the design notes, and review the English interface.
 
 ## Contributing
 

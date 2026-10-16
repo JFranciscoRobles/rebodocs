@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { NPM, REPO } from '@/lib/site';
+import { NPM_ORG, REPO } from '@/lib/site';
 
 function Header() {
   return (
@@ -21,7 +21,7 @@ function Header() {
           <Link href="/docs/status/" className="hidden hover:text-ink sm:inline">
             Status
           </Link>
-          <a href={NPM} className="hidden hover:text-ink sm:inline">
+          <a href={NPM_ORG} className="hidden hover:text-ink sm:inline">
             npm
           </a>
           <a href={REPO} className="hover:text-ink">
@@ -48,7 +48,7 @@ function Footer() {
           <Link href="/docs/status/" className="hover:text-ink">
             Status and roadmap
           </Link>
-          <a href={NPM} className="hover:text-ink">
+          <a href={NPM_ORG} className="hover:text-ink">
             npm
           </a>
           <a href={REPO} className="hover:text-ink">

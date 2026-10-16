@@ -1,6 +1,6 @@
 # Packages
 
-Five packages, each for one thing, and a test application.
+Five packages, each for one thing, all [on npm](https://www.npmjs.com/org/rebodocs) at the same version.
 
 ```
 @rebodocs/core  ◄──  @rebodocs/editor  ◄──  @rebodocs/react
@@ -15,11 +15,17 @@ Five packages, each for one thing, and a test application.
 | `@rebodocs/editor` | Browser | core |
 | `@rebodocs/react` | Browser (safe to render on a server) | editor, core, collab; React 18+ as a peer |
 | `@rebodocs/collab` | Node (server), browser (client) | core |
-| `@rebodocs/mcp` | Node | core |
+| `@rebodocs/mcp` | Node (server), browser (the editor's side) | core, `@anthropic-ai/sdk` |
+
+`@rebodocs/react` is built as one file with the engine, the editor and the collaboration client inside, so it is one install. The others ask npm for `@rebodocs/core`, at the same version, and so share one copy of the engine: a `Doc` made with `core` is the one the editor, collaboration and the tools take. An application that installs `@rebodocs/react` and `@rebodocs/core` has the engine twice, once in each.
 
 Each has a README in the repository with what it is for, how it works, and a list of where it can improve.
 
 ## @rebodocs/core
+
+```bash
+npm install @rebodocs/core
+```
 
 The engine. Everything about a document that does not need a screen.
 
@@ -34,13 +40,19 @@ Take it when you generate or transform documents in code. See [On a server](/doc
 
 ## @rebodocs/editor
 
+```bash
+npm install @rebodocs/editor
+```
+
 The editor in the browser, with no framework: the `Editor` class (pages, caret, selection, history, keyboard, mouse, touch) and separate interface pieces (toolbar, menu, panel, status bar, ruler, find bar, selection bubble), plus languages and fonts.
 
 Take it for a page without React, or to build on its pieces. See [Without a framework](/docs/vanilla/).
 
 ## @rebodocs/react
 
-On npm: [`@rebodocs/react`](https://www.npmjs.com/package/@rebodocs/react) and [`@rebodocs/mcp`](https://www.npmjs.com/package/@rebodocs/mcp).
+```bash
+npm install @rebodocs/react
+```
 
 `DocsEditor`, the whole editor as a component; `DocsProvider`, `DocsSurface` and hooks, to draw your own interface; and `mountDocs`, the whole editor with no React in it. It is the one package built as a bundle, with the others inside.
 
@@ -48,11 +60,21 @@ Take it for a React or Next.js application. See [React component](/docs/react/) 
 
 ## @rebodocs/collab
 
-The change format (operations addressed by paragraph id, and how concurrent ones are reconciled), the room server, and the client the editor uses.
+```bash
+npx @rebodocs/collab --backend https://…   # the room server
+npm install @rebodocs/collab               # to start it from code, or for the client
+```
+
+The change format (operations addressed by paragraph id, and how concurrent ones are reconciled), the room server, and the client the editor uses. `@rebodocs/collab/server` and `@rebodocs/collab/storage` are the server in a Node program of your own; `@rebodocs/collab/browser` is the client, which `@rebodocs/react` already has inside.
 
 Take it when several people must edit at once. See [Real-time collaboration](/docs/collaboration/).
 
 ## @rebodocs/mcp
+
+```bash
+npx @rebodocs/mcp --root ~/Documents       # the server, for Claude Desktop and other clients
+npm install @rebodocs/mcp                  # the tools, or Claude in your application
+```
 
 A Model Context Protocol server whose tools are the editor's operations, over files or over the document open in a browser. It also has the route of a backend that takes a chat in the page to the Claude API (`@rebodocs/mcp/claude`); the chat itself is in `@rebodocs/react`.
 
@@ -68,4 +90,5 @@ Besides the packages, the repository has small applications that use them. See [
 | `apps/demo` | `@rebodocs/react` as an application uses it: the whole editor, and an interface of its own on the hooks. |
 | `apps/storage` | Documents in an S3 bucket: open, save, and a PDF made on the server. |
 | `apps/realtime` | Several people on one document, through a backend with its three routes and signed tickets. |
+| `apps/assistant` | Claude in a chat beside a shared document: the page runs the tools, the backend takes the conversation to the Claude API. |
 | `apps/site` | This website. |

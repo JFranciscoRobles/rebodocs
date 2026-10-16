@@ -32,7 +32,6 @@ It was built to live inside another application: a CRM that fills contract and r
 
 - **Not a hosted service.** There is nothing to sign up for. It is code you run.
 - **Not finished.** It works and is tested, and it has not been used in production yet. [Status and roadmap](/docs/status/) lists what is checked and what is missing, plainly.
-- **Not all on npm yet.** `@rebodocs/react` is [published](https://www.npmjs.com/package/@rebodocs/react), and has the engine and the editor inside. The other packages are used from the repository for now. See [Getting started](/docs/getting-started/).
 
 ## License
 

@@ -1,6 +1,10 @@
 # Without a framework
 
-`@rebodocs/editor` is plain TypeScript and the DOM. The `Editor` class is the pages; everything around it is a separate piece you create if you want it.
+```bash
+npm install @rebodocs/editor
+```
+
+[`@rebodocs/editor`](https://www.npmjs.com/package/@rebodocs/editor) is plain TypeScript and the DOM. The `Editor` class is the pages; everything around it is a separate piece you create if you want it.
 
 ```html
 <div id="toolbar"></div>
@@ -26,7 +30,7 @@ const pdf = await editor.exportPdf('Contract');
 
 The element given to the editor needs a height.
 
-> Today this package is used as source, inside the repository. From npm, the whole editor without React is `mountDocs` from `@rebodocs/react/mount`: see below.
+> For the whole editor at once, with its menu and panels, and nothing to wire, `mountDocs` from `@rebodocs/react/mount` does it without React: see below.
 
 ## The pieces
 

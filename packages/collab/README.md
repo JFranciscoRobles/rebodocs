@@ -1,6 +1,6 @@
 # @rebodocs/collab
 
-> Not on npm by itself yet. It is used from this repository, and it is inside [`@rebodocs/react`](https://www.npmjs.com/package/@rebodocs/react), which is.
+[npm](https://www.npmjs.com/package/@rebodocs/collab) · `npx @rebodocs/collab --backend https://…`
 
 Several people on the same document at once, each seeing where the others
 are: the format changes travel in, the server that orders them, and the
@@ -17,13 +17,23 @@ application's own backend keeps the files and decides who may open them.
 | Part | File | What it does |
 | --- | --- | --- |
 | Changes | `changes.ts` | The difference between two documents as a list of operations addressed by paragraph id; applying them; transforming one against another so that everyone ends with the same document. |
-| Server | `server.ts`, `storage.ts`, `main.ts` | One room per document: the base file and an ordered log of changes. Node's `http` only, no dependencies. |
+| Server | `server.ts`, `storage.ts`, `main.ts` (`@rebodocs/collab/server`, `/storage`, the command `rebodocs-collab`) | One room per document: the base file and an ordered log of changes. Node's `http` only, and the engine. |
 | Client | `session.ts` (`@rebodocs/collab/browser`) | Joins a room for an `Editor`: sends its changes, applies the others', shows their carets, undoes only this person's steps, reconnects. |
 
 ## Running the server
 
 ```bash
-npm run collab -- --backend https://my-app.example/api/docs
+npx @rebodocs/collab --backend https://my-app.example/api/docs
+```
+
+From this repository, `npm run collab -- …` runs the same server from its
+sources. In a Node program of your own:
+
+```ts
+import { createCollabServer } from '@rebodocs/collab/server';
+import { backendStorage } from '@rebodocs/collab/storage';
+
+const server = createCollabServer({ port: 7420, storage: backendStorage({ url: 'https://my-app.example/api/docs', key: process.env.KEY }) });
 ```
 
 | Option | Environment | What it is |

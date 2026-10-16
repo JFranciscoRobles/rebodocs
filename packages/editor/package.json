@@ -1,12 +1,17 @@
 {
   "name": "@rebodocs/editor",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "A DOCX editor for the browser: pages, caret and selection, toolbar, menu, side panel and status bar. No framework.",
   "license": "MIT",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "dependencies": {
     "@rebodocs/core": "*"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs"
   }
 }

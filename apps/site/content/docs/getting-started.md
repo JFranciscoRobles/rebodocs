@@ -1,6 +1,6 @@
 # Getting started
 
-The editor for React is [on npm](https://www.npmjs.com/package/@rebodocs/react). The other packages are used from the repository for now.
+Every package is on npm: [`@rebodocs/react`](https://www.npmjs.com/package/@rebodocs/react) for React and Next.js, and the engine, the editor without a framework, collaboration and the tools for an assistant by themselves. [Packages](/docs/packages/) says which to take.
 
 ## Put it in a React application
 
@@ -90,9 +90,9 @@ See [On a server](/docs/server/).
 | `npm test` | The tests. |
 | `npm run typecheck` | Types, over every package. |
 | `npm run build:react` | Builds and packs `@rebodocs/react`. |
-| `npm run build:mcp` | Builds `@rebodocs/mcp` into `packages/mcp/dist`, to publish. |
+| `npm run build:packages` | Builds core, editor, collab and mcp, each into its `dist/`, to publish. |
 | `npm run generate -- template.docx data.json -o out.pdf` | Fills a template without a browser. |
-| `npm run collab` | The collaboration server. |
-| `npm run mcp` | The MCP server for AI assistants. |
+| `npm run collab` | The collaboration server; `npx @rebodocs/collab` outside the repository. |
+| `npm run mcp` | The MCP server for AI assistants; `npx @rebodocs/mcp` outside the repository. |
 | `npm run locale -- fr texts/fr.json` | Starts or updates a translation of the interface. |
 | `npm run site` | This website, locally. |

@@ -1,6 +1,10 @@
 # On a server: DOCX and PDF
 
-`@rebodocs/core` has no DOM. The code that lays a document out in the browser runs in Node, so a document generated on a server breaks its lines and pages where the editor would.
+```bash
+npm install @rebodocs/core
+```
+
+[`@rebodocs/core`](https://www.npmjs.com/package/@rebodocs/core) has no DOM. The code that lays a document out in the browser runs in Node, so a document generated on a server breaks its lines and pages where the editor would.
 
 ## Open, change, save
 

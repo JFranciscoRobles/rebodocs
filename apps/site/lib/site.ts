@@ -3,6 +3,8 @@ export const REPO = 'https://github.com/JFranciscoRobles/rebodocs';
 export const SITE = 'https://rebodocs.com';
 /** The package an application installs. */
 export const NPM = 'https://www.npmjs.com/package/@rebodocs/react';
+/** Every package, on npm. */
+export const NPM_ORG = 'https://www.npmjs.com/org/rebodocs';
 
 export interface NavItem {
   title: string;

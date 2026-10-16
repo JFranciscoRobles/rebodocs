@@ -1,6 +1,6 @@
 {
   "name": "rebodocs",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "A word processor for the browser, compatible with Word (DOCX) files, with its own engine: layout, editing, collaboration, PDF and templates.",
   "license": "MIT",
   "private": true,
@@ -31,6 +31,7 @@
     "site": "npm run build -w @rebodocs/react && npm run dev -w @rebodocs/site",
     "build:site": "npm run build -w @rebodocs/react && npm run build -w @rebodocs/site",
     "build:react": "npm run build -w @rebodocs/react && npm pack -w @rebodocs/react --pack-destination packages/react",
+    "build:packages": "npm run build -w @rebodocs/core -w @rebodocs/editor -w @rebodocs/collab -w @rebodocs/mcp",
     "build:mcp": "npm run build -w @rebodocs/mcp"
   },
   "devDependencies": {

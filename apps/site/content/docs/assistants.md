@@ -2,7 +2,7 @@
 
 `@rebodocs/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server: what an assistant such as Claude Desktop, Claude Code or Cursor uses to read and change Word documents.
 
-It is [on npm](https://www.npmjs.com/package/@rebodocs/mcp), with the engine inside: `npx @rebodocs/mcp` runs the server, and `npm install @rebodocs/mcp` puts the tools, or Claude in a chat, in your application.
+It is [on npm](https://www.npmjs.com/package/@rebodocs/mcp): `npx @rebodocs/mcp` runs the server, and `npm install @rebodocs/mcp` puts the tools, or Claude in a chat, in your application.
 
 It gives the assistant the operations a person has in the editor. "Fill this contract", "add a clause after the third one" or "turn this list into a table" are done on the real document, with its layout and formatting intact, and not on a copy of its text.
 
@@ -27,7 +27,7 @@ In the configuration of your MCP client:
 }
 ```
 
-It comes from [npm](https://www.npmjs.com/package/@rebodocs/mcp), with the engine inside: there is nothing to clone. On a Mac with Node installed by nvm, Claude Desktop does not see the `npx` of your terminal: put its whole path in `command`, as `which npx` gives it. In Claude Desktop the configuration is `~/Library/Application Support/Claude/claude_desktop_config.json`; restart it after changing it.
+It comes from [npm](https://www.npmjs.com/package/@rebodocs/mcp), with the engine as its dependency: there is nothing to clone. On a Mac with Node installed by nvm, Claude Desktop does not see the `npx` of your terminal: put its whole path in `command`, as `which npx` gives it. In Claude Desktop the configuration is `~/Library/Application Support/Claude/claude_desktop_config.json`; restart it after changing it.
 
 | Option | What it is |
 | --- | --- |

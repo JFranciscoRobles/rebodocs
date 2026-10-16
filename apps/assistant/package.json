@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/assistant-demo",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Claude in the editor: a chat beside a shared document that reads and changes it, with its look kept, and the others in the room seeing it happen.",
   "license": "MIT",
   "private": true,
