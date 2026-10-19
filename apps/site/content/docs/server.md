@@ -35,10 +35,10 @@ const fonts = ['Arial.ttf', 'Arial Bold.ttf', 'Arial Italic.ttf']
 const { pdf, missingFonts } = renderPdf(importDocx(bytes), fonts, 'Receipt 1024');
 ```
 
-- Fonts are embedded, cut down to the characters used. The text of the PDF can be selected and searched.
+- Fonts are embedded: TrueType ones cut down to the characters used, OpenType ones in CFF whole. The text of the PDF can be selected and searched.
 - `missingFonts` says which families the document asks for that you did not give, and what stood in for each. A stand-in has other widths, so lines may break elsewhere: give the real fonts for a faithful result.
 - Fonts the DOCX carries inside are used by themselves.
-- Only TrueType (`.ttf`) files are read.
+- TrueType (`.ttf`) and OpenType (`.otf`) files are read.
 
 ## The command-line tool
 

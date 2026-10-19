@@ -53,7 +53,8 @@ const ZOOM_STEP = 10;
 const GRID_ZOOM = 0.3;
 const STYLE_ID = 'dx-statusbar-style';
 /** What goes before the page while the header or the footer is being edited. */
-const areaPrefix = (area: 'body' | 'header' | 'footer') => (area === 'body' ? '' : `${t(area === 'header' ? 'area.header' : 'area.footer')} · `);
+const areaPrefix = (area: 'body' | 'header' | 'footer' | 'footnote' | 'textbox') =>
+  area === 'body' ? '' : `${t(area === 'header' ? 'area.header' : area === 'footer' ? 'area.footer' : area === 'textbox' ? 'area.textbox' : 'area.footnote')} · `;
 
 const CSS = `
 .dx-sb{display:flex;align-items:center;gap:4px;min-height:28px;padding:0 10px;background:#f3f5f9;border-top:1px solid #d9dce3;font:12px system-ui,-apple-system,"Segoe UI",sans-serif;color:#4a4f5a;user-select:none;white-space:nowrap;overflow:hidden}
@@ -193,7 +194,10 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
 
   bar.append(
     // In the header or the footer, the page is the one whose header shows the caret.
-    info('page', () => `${areaPrefix(editor.area)}${t('status.page', { page: editor.currentPage, pages: editor.pageCount })}`),
+    info('page', () => {
+      const section = editor.sectionCount > 1 ? `${t('area.section', { n: editor.sectionIndex + 1 })} · ` : '';
+      return `${section}${areaPrefix(editor.area)}${t('status.page', { page: editor.currentPage, pages: editor.pageCount })}`;
+    }),
     // With text selected, how much of the document it is.
     info('words', () => {
       const text = selected();

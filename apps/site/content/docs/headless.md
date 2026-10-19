@@ -64,9 +64,10 @@ const { state, commands, editor, docs, ready } = useDocs();
 | Pictures | `insertImageFile`, `insertImageGrid`, `setPictureWrap`, `fitSelectedPicture` |
 | Templates | `insertVariable`, `fillVariables`, `insertSignatures` |
 | Links and comments | `setLink`, `removeLink`, `addNote`, `setNoteText`, `setNoteColor`, `removeNote`, `selectNote` |
-| Structure | `insertToc`, `updateToc`, `goToHeading`, `moveSection` |
+| Structure | `insertToc`, `updateToc`, `goToHeading`, `moveSection`, `insertFootnote`, `insertTextBox`, `restoreVersion` |
+| Review | `setTrackChanges`, `acceptRevision`, `rejectRevision`, `acceptAllRevisions`, `rejectAllRevisions`, `goToRevision`, `selectRevision` |
 | Columns | `setColumns`, `insertColumnBreak` |
-| Page | `setPage`, `setPageNumbering`, `setFirstPageDifferent`, `setArea`, `setLetterhead`, `setLetterheadFile`, `fitLetterheadMargins`, `removeLetterhead` |
+| Page | `setPage`, `setPageNumbering`, `setFirstPageDifferent`, `setOwnHeaders`, `setArea`, `setLetterhead`, `setLetterheadFile`, `fitLetterheadMargins`, `removeLetterhead` |
 | Search | `find`, `findStep`, `replaceFound`, `replaceAllFound` |
 | View | `setZoom`, `setFit`, `setView`, `setShowNotes`, `print` |
 
@@ -84,7 +85,7 @@ Each gives what there is to show and what there is to do, for a piece of interfa
 | `useDocsOutline()` | `items`, `active`, `goTo`, `move`. |
 | `useDocsVariables()` | `names`, `active`, `insert`, `select`, `fill`; and what each asks of its value: `formats`, `uses`, `setFormat`, `preview`. |
 | `useDocsStyles()` | `styles`, `active`, `set`. |
-| `useDocsPage()` | `page`, `set`, `numbering`, `setNumbering`, `firstPageDifferent`, and the letterhead. |
+| `useDocsPage()` | `page`, `set`, the sections, `ownHeaders`, `numbering`, `setNumbering`, `firstPageDifferent`, and the letterhead. |
 | `useDocsSelectionBox()` | Where the selection is on screen, to put a floating panel beside it. |
 | `useDocsCount()` | `words` and `characters` of the document, and of what is `selected`. |
 | `useDocsBubble()` | The bar beside the selection, with `<DocsProvider bubble>`: `open`, `close`, `toggle`, `ask`. |

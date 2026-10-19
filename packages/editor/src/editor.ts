@@ -9,6 +9,7 @@ import {
   type LayoutCache,
   type OutlineItem,
   type Line,
+  type Turn,
   type ListKind,
   type PageNumbering,
   type PageSetup,
@@ -49,9 +50,45 @@ import {
   tocRange,
   tocTarget,
   updateToc,
+  type FootnotePart,
   type StoryPart,
   storyKind,
+  footnoteIdOf,
+  restoreVersion as versionOver,
+  type TextBoxBand,
+  type TextBoxPart,
+  insertTextBox,
+  textBoxId,
+  textBoxIdOf,
+  textBoxPart,
+  type RevisionView,
+  acceptRevisions,
+  decideAllRevisions,
+  hasRevisions,
+  rejectRevisions,
+  revisionAt,
+  revisionNow,
+  revisionsIn,
+  revisionsOf,
+  trackDocEdit,
+  trackEdit,
+  footnoteNumbers,
+  hasOwnFirstPage,
+  insertFootnote,
+  shownFootnotes,
+  pageAt,
+  hasOwnStories,
+  sectionCount,
+  sectionIndexOf,
+  sectionMarks,
+  setOwnFirstPage,
+  setOwnStories,
+  setSectionPage,
   storyOf,
+  footnotePart,
+  splitPart,
+  storyParts,
+  storySource,
   storyPart,
   withStory,
   floatAt,
@@ -113,6 +150,7 @@ import {
   outsideField,
   pageNumbering,
   paragraphLength,
+  paragraphText,
   paragraphStyles,
   pictureAt,
   propsAt,
@@ -164,7 +202,7 @@ import {
   setHeaderRow,
 } from '@rebodocs/core';
 import { onLocaleChange, t } from './i18n';
-import { fontFile, onFontsChange } from './fonts';
+import { fontFaces, fontFile, onFontsChange } from './fonts';
 import { IS_MAC, keyboardInset } from './platform';
 import { CanvasMeasurer, cssFont } from './measurer';
 
@@ -210,14 +248,15 @@ export type ZoomFit = 'width' | 'page';
 export const MIN_ZOOM = 0.25;
 export const MAX_ZOOM = 4;
 
-/** What the selection is in and typing goes to: the text of the document, or its header or footer. */
-export type EditArea = 'body' | 'header' | 'footer';
+/** What the selection is in and typing goes to: the text of the document, its header or footer, or a note at the foot of a page. */
+export type EditArea = 'body' | 'header' | 'footer' | 'footnote' | 'textbox';
 
 interface Snapshot {
   doc: Doc;
   selection: Selection;
   area: EditArea;
   areaPage: number;
+  areaNote?: string;
 }
 
 const PT_TO_PX = 4 / 3;
@@ -247,6 +286,8 @@ const MIN_PICTURE = 8;
 const DRAG_START = 4;
 /** The longest side, in pixels, a picture keeps in a PDF. */
 const MAX_PDF_PIXELS = 2400;
+/** How far into the left margin, in points, the bar beside a line with a tracked change goes. */
+const CHANGE_BAR_GAP = 14;
 const STYLE_ID = 'dx-editor-style';
 /**
  * What the hidden field the keyboard writes to always holds, ahead of what is
@@ -288,7 +329,13 @@ const CSS = `
 .dx-cell-lines{outline:.5pt solid #000;outline-offset:-.25pt}
 .dx-cell-guide{outline:.5pt dashed #a9c3ee;outline-offset:-.25pt}
 .dx-rule{position:absolute;border-left:.5pt solid #000;pointer-events:none}
+.dx-notes-rule{position:absolute;background:#000;pointer-events:none}
+.dx-change-bar{position:absolute;width:1px;background:#5f6470;pointer-events:none}
+.dx-textbox{position:absolute;box-sizing:border-box;pointer-events:none}
+.dx-textbox.dx-on{outline:1px dashed #0b57d0;outline-offset:2px}
 .dx-band{position:absolute;left:0;top:0}
+.dx-turn{position:absolute;overflow:hidden}
+.dx-turn .dx-turn{overflow:visible;width:0;height:0}
 .dx-editing .dx-band{opacity:.4}
 .dx-editing-header .dx-band-header,.dx-editing-footer .dx-band-footer{opacity:1}
 .dx-edge{position:absolute;left:0;right:0;height:0;border-top:1px dashed #0b57d0;pointer-events:none}
@@ -337,6 +384,7 @@ body>:not(.dx-print){display:none!important}
 .dx-peer span{position:absolute;left:0;bottom:100%;padding:1pt 4pt;border-radius:3pt 3pt 3pt 0;color:#fff;font:600 7.5pt/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;white-space:nowrap}
 .dx-caret{position:absolute;width:1.5px;background:var(--dx-caret,#000);pointer-events:none;display:none}
 .dx-focused .dx-caret{display:block;animation:dx-blink 1.06s steps(1) infinite}
+.dx-readonly .dx-caret{display:none!important}
 @keyframes dx-blink{50%{opacity:0}}
 .dx-input{position:absolute;width:1px;height:1em;padding:0;border:0;outline:0;opacity:0;resize:none;overflow:hidden;white-space:pre;pointer-events:none;font-size:16px}
 .dx-handles{position:absolute;inset:0;overflow:hidden;pointer-events:none}
@@ -376,12 +424,24 @@ export class Editor {
   private marginEls: HTMLElement[] = [];
   /** Set while the zoom follows the size of the window. */
   fit: ZoomFit | undefined;
+  /** Set while nothing typed or done may change the document. */
+  private locked = false;
+  /** Set while Delete is being done: a caret goes after what it takes out, which stays while changes are tracked. */
+  private forward = false;
   /** Whether typing "# ", "- " or **text** formats as Markdown would. */
   autoformat = true;
+  /**
+   * Whether a DOCX the editor makes carries the fonts the application gave it
+   * that its text is in, for whoever opens it without them: the TrueType ones
+   * whose licence lets them be embedded.
+   */
+  embedFonts = true;
   /** Where the selection is. In the header or the footer, the commands act on its text. */
   area: EditArea = 'body';
   /** The page whose header or footer shows the caret; every page has the same one. */
   private areaPage = 0;
+  /** The note at the foot of the page whose text the caret is in, by its id. */
+  private areaNote: string | undefined;
   private textView: { doc: Doc; part: StoryPart; view: Doc } | undefined;
   /** What is being searched for, and where it is found in the text the selection is in. */
   private finding: { query: string; options: FindOptions } | undefined;
@@ -418,7 +478,7 @@ export class Editor {
   private resizeObserver: ResizeObserver;
   private selLayers: HTMLElement[] = [];
   /** What each page element currently shows: the line boxes and where they sit, and the table cells. */
-  private painted: { lines: { raw: object; y: number }[]; cells: CellBox[]; floats: number; rules: string }[] = [];
+  private painted: { lines: { raw: object; y: number; turn?: Turn }[]; cells: CellBox[]; floats: number; rules: string }[] = [];
   /** Object URLs of the pictures of the loaded document, by the part they are in and their XML. */
   private imageUrls = new Map<string, string | null>();
   /** Fonts the loaded document carries with it, registered with the page while it is open. */
@@ -564,6 +624,22 @@ export class Editor {
     this.input.focus({ preventScroll: true });
   }
 
+  /**
+   * Whether the document is only to be looked at: it can be selected, copied
+   * and moved about, but nothing typed or done changes it, and undoing does
+   * nothing. Off unless set.
+   */
+  get readOnly(): boolean {
+    return this.locked;
+  }
+
+  set readOnly(on: boolean) {
+    this.locked = on;
+    this.input.readOnly = on;
+    this.root.classList.toggle('dx-readonly', on);
+    this.emit();
+  }
+
   // --- Document -----------------------------------------------------------
 
   load(doc: Doc): void {
@@ -574,6 +650,7 @@ export class Editor {
     this.found = [];
     this.area = 'body';
     this.areaPage = 0;
+    this.areaNote = undefined;
     this.syncArea();
     this.loadEmbeddedFonts();
     this.selection = { anchor: docStart(), focus: docStart() };
@@ -593,8 +670,10 @@ export class Editor {
    * into view; without, the selection stays where it was, as far as it still can.
    */
   edit(change: (doc: Doc) => Doc, reveal?: Position): void {
-    const doc = change(this.doc);
+    let doc = change(this.doc);
     if (doc === this.doc) return;
+    // While changes are tracked, so are these: word by word, as what is changed at once is read.
+    if (this.doc.trackRevisions && doc.trackRevisions) doc = trackDocEdit(this.doc, doc, this.reviser());
     if (this.area !== 'body') this.setArea('body');
     const at = (pos: Position) => clampPosition(doc, pos);
     this.commitDoc(doc, reveal ? { anchor: at(reveal), focus: at(reveal) } : { anchor: at(this.selection.anchor), focus: at(this.selection.focus) });
@@ -624,6 +703,132 @@ export class Editor {
     this.root.scrollTop = inView ? scroll + (this.caretBox().top - scroll - before) : scroll;
   }
 
+  /**
+   * Puts the caret at `pos` and brings it to the middle of the view: in the
+   * text, or with `part` in that header, footer or note, on the first page
+   * that shows it.
+   */
+  goTo(pos: Position, part?: StoryPart): void {
+    if (!part) {
+      if (this.area !== 'body') this.setArea('body');
+    } else {
+      const note = footnoteIdOf(part);
+      const box = textBoxIdOf(part);
+      if (note !== undefined) this.setArea('footnote', undefined, note);
+      else if (box !== undefined) this.setArea('textbox', undefined, box);
+      else {
+        const kind = storyKind(part as Exclude<StoryPart, FootnotePart | TextBoxPart>);
+        const page = this.paged.pages.findIndex((_, i) => storyPart(this.paged, kind, i) === part);
+        if (page < 0) return;
+        this.setArea(kind, page);
+      }
+      if (this.part !== part) return;
+    }
+    this.setSelection(pos);
+    this.centerCaret();
+  }
+
+  /**
+   * Takes the document back to an earlier version of it, as one step to
+   * undo: what did not change since stays as it is, and the others working
+   * on it are sent only what did.
+   */
+  restoreVersion(version: Doc): void {
+    this.edit((doc) => versionOver(doc, version));
+  }
+
+  // --- Tracked changes ----------------------------------------------------
+
+  /** Whether what is typed and taken out is kept as changes to accept or reject (⌘⇧E / Ctrl+Shift+E). It is said in the file. */
+  get trackChanges(): boolean {
+    return !!this.doc.trackRevisions;
+  }
+
+  /** Starts or stops tracking changes. Not a step to undo: what was tracked stays. */
+  setTrackChanges(on: boolean): void {
+    if (on === this.trackChanges || this.locked) return;
+    const { trackRevisions: _, ...rest } = this.doc;
+    this.doc = on ? { ...this.doc, trackRevisions: true } : rest;
+    this.afterDocChange(false);
+  }
+
+  /** The changes of the document, of its text first and then of its headers, footers and notes. */
+  get revisions(): RevisionView[] {
+    return revisionsOf(this.doc);
+  }
+
+  /** Whether there is any change to accept or reject. */
+  get hasRevisions(): boolean {
+    return hasRevisions(this.doc);
+  }
+
+  /** The change the caret is in, or the first the selection takes in. */
+  get activeRevision(): RevisionView | undefined {
+    const { from, to } = this.range;
+    const part = this.part;
+    const at = revisionAt(this.text.paragraphs, from);
+    if (at && (this.collapsed || comparePositions(at.range.from, to) < 0)) return part ? { ...at, part } : at;
+    if (this.collapsed) return undefined;
+    const inside = revisionsIn(this.text.paragraphs).find((r) => comparePositions(r.range.from, to) < 0 && comparePositions(from, r.range.to) < 0);
+    return inside && (part ? { ...inside, part } : inside);
+  }
+
+  /** Accepts the changes the selection takes in, or the one the caret is in. Says whether there was any. */
+  acceptRevision(): boolean {
+    return this.decideRevision(true);
+  }
+
+  /** Rejects the changes the selection takes in, or the one the caret is in. Says whether there was any. */
+  rejectRevision(): boolean {
+    return this.decideRevision(false);
+  }
+
+  private decideRevision(accept: boolean): boolean {
+    if (this.locked) return false;
+    const active = this.activeRevision;
+    if (!active) return false;
+    const range = this.collapsed ? active.range : this.range;
+    const text = accept ? acceptRevisions(this.text, range) : rejectRevisions(this.text, range);
+    if (text.paragraphs === this.text.paragraphs) return false;
+    this.commit(text, { anchor: range.from, focus: range.from }, '', false);
+    return true;
+  }
+
+  /** Accepts, or rejects, every change of the document, as one step to undo. */
+  acceptAllRevisions(): void {
+    this.decideAll(true);
+  }
+
+  rejectAllRevisions(): void {
+    this.decideAll(false);
+  }
+
+  private decideAll(accept: boolean): void {
+    if (this.locked || !this.hasRevisions) return;
+    if (this.area !== 'body') this.setArea('body');
+    const doc = decideAllRevisions(this.doc, accept);
+    this.commitDoc(doc, { anchor: clampPosition(doc, this.selection.anchor), focus: clampPosition(doc, this.selection.anchor) });
+  }
+
+  /** Selects the next change of the text being edited after the caret, or the one before it; says whether there was one. */
+  goToRevision(dir: 1 | -1): boolean {
+    const all = revisionsIn(this.text.paragraphs);
+    const { from } = this.range;
+    // From a caret, the change it is at the start of is the next; from a selection, the one after it.
+    const after = (r: RevisionView) => comparePositions(r.range.from, from) > (this.collapsed ? -1 : 0);
+    const found = dir > 0 ? all.find(after) : [...all].reverse().find((r) => comparePositions(r.range.from, from) < 0);
+    if (!found) return false;
+    this.selectRevision(this.part ? { ...found, part: this.part } : found);
+    return true;
+  }
+
+  /** Selects a change, in its header, footer or note when it is in one. */
+  selectRevision(revision: RevisionView): void {
+    this.goTo(revision.range.from, revision.part);
+    const end = clampPosition(this.text, revision.range.to);
+    this.setSelection(revision.range.from, end);
+  }
+
   /** Where the other people working on the document are, to draw their carets. */
   setPeers(peers: PeerCaret[]): void {
     if (!peers.length && !this.peers.length) return;
@@ -643,7 +848,20 @@ export class Editor {
 
   exportDocx(): Uint8Array {
     this.updateToc();
-    return exportDocx(this.doc);
+    return exportDocx(this.doc, this.embedFonts ? { fonts: this.givenFontsInUse() } : {});
+  }
+
+  /** The faces the application gave whose family some text of the document is in, its styles' included. */
+  private givenFontsInUse(): ReturnType<typeof fontFaces> {
+    const faces = fontFaces();
+    if (!faces.length) return [];
+    const used = new Set<string>();
+    const doc = this.doc;
+    for (const story of [doc, ...storyParts(doc).map((part) => storyOf(doc, part))]) {
+      for (const para of story?.paragraphs ?? []) for (const run of para.runs) used.add(resolveRun(run.props).fontFamily.toLowerCase());
+    }
+    for (const style of doc.styles ?? []) if (style.run.fontFamily) used.add(style.run.fontFamily.toLowerCase());
+    return faces.filter((face) => used.has(face.family.toLowerCase()));
   }
 
   /** The text of the document as Markdown: headings, emphasis, lists and tables; no fonts, colours or pictures. */
@@ -662,17 +880,28 @@ export class Editor {
     // What is printed is the pages, also when they are not what is being shown.
     const flow = this.view === 'flow';
     if (flow) this.setView('column');
-    const { width, height } = this.layout.page;
     const holder = document.createElement('div');
     holder.className = 'dx-print';
     const style = document.createElement('style');
-    style.textContent = `@page{size:${width}pt ${height}pt;margin:0}`;
+    // Each sheet of the size of its page: a named page for each size the document has.
+    const sizes = new Map<string, string>();
+    const sizeOf = (i: number) => {
+      const { width, height } = this.setupOf(i);
+      const key = `${width}pt ${height}pt`;
+      if (!sizes.has(key)) sizes.set(key, `dx-size-${sizes.size}`);
+      return { width, height, name: sizes.get(key)! };
+    };
+    const first = sizeOf(0);
+    this.sheetEls.forEach((_, i) => sizeOf(i));
+    style.textContent = `@page{size:${first.width}pt ${first.height}pt;margin:0}` + [...sizes].map(([size, name]) => `@page ${name}{size:${size};margin:0}`).join('');
     holder.appendChild(style);
-    for (const sheet of this.sheetEls) {
+    for (const [i, sheet] of this.sheetEls.entries()) {
+      const { width, height, name } = sizeOf(i);
       const page = document.createElement('div');
       page.className = 'dx-print-page';
       page.style.width = `${width}pt`;
       page.style.height = `${height}pt`;
+      page.style.setProperty('page', name);
       const copy = sheet.cloneNode(true) as HTMLElement;
       copy.style.transform = '';
       // The selection and the marks of the editor are not part of the document.
@@ -725,9 +954,9 @@ export class Editor {
    * cell. Its indents are measured from them.
    */
   textColumn(): { left: number; right: number } {
-    const { width, marginLeft, marginRight } = this.layout.page;
     const flow = this.flow;
     const line = lineForPosition(flow, this.mapOffset(this.selection.focus, true));
+    const { width, marginLeft, marginRight } = this.setupOf(this.pageOf(line.page));
     const box = line.cell === undefined ? undefined : flow.pages[line.page]?.cells[line.cell];
     const at = box && locateCell(this.text, this.selection.focus.para);
     if (!box || !at) return { left: marginLeft, right: width - marginRight };
@@ -798,7 +1027,7 @@ export class Editor {
   private floatBoxIn(text: Doc, pos: Position): Rect | undefined {
     const layout = layoutDocument(this.merged(text), this.measurer);
     // In a header or a footer, the one of the page being edited: its positions are those of the page.
-    const flow = (this.area !== 'body' && bandLayout(layout, this.area, this.areaPage)) || layout;
+    const flow = (this.areaKey && bandLayout(layout, this.areaKey, this.areaPage)) || layout;
     for (const page of flow.pages) {
       const float = page.floats.find((f) => f.para === pos.para && f.offset === pos.offset);
       if (float) return { page: this.pageOf(page.index), x: float.x, y: float.y, width: float.width, height: float.height };
@@ -806,21 +1035,69 @@ export class Editor {
     return undefined;
   }
 
-  /** Whether the first page has a header and a footer of its own, which the other pages do not show. */
-  get firstPageDifferent(): boolean {
-    return !!this.doc.firstPage;
+  /** The page of the section table `table` is in. */
+  private pageOfTable(table: number): PageSetup {
+    return pageAt(this.doc, Math.max(0, this.doc.paragraphs.findIndex((p) => p.cell?.table === table)));
+  }
+
+  /** How many sections the document is set out in. */
+  get sectionCount(): number {
+    return sectionCount(this.doc);
   }
 
   /**
-   * Gives the first page a header and a footer of its own, empty to begin
-   * with, or takes them away: it then shows the ones every page shows.
+   * The section, counting from 0, that what is being edited is in: the
+   * caret's, or that of the page whose header or footer is being edited.
+   */
+  get sectionIndex(): number {
+    if (this.area === 'body') return sectionIndexOf(this.doc, this.selection.focus.para);
+    return this.paged.pages[this.areaPage]?.section ?? this.sectionCount - 1;
+  }
+
+  /** The size and the margins of the page of that section. */
+  get page(): PageSetup {
+    return this.sectionPages()[this.sectionIndex] ?? this.doc.page;
+  }
+
+  /** The page of each section, in order. */
+  sectionPages(): PageSetup[] {
+    return [...sectionMarks(this.doc).map((i) => this.doc.paragraphs[i].section!.page), this.doc.page];
+  }
+
+  /** Whether the first page of the section has a header and a footer of its own, which its other pages do not show. */
+  get firstPageDifferent(): boolean {
+    return hasOwnFirstPage(this.doc, this.sectionIndex);
+  }
+
+  /**
+   * Gives the first page of the section a header and a footer of its own,
+   * empty to begin with, or takes them away: it then shows the ones its other pages show.
    */
   setFirstPageDifferent(on: boolean): void {
-    if (on === this.firstPageDifferent) return;
+    const index = this.sectionIndex;
+    if (on === hasOwnFirstPage(this.doc, index)) return;
     // What is being edited may be what goes, or what the first page stops showing.
     if (this.area !== 'body') this.setArea('body');
-    const { firstPage: _, ...rest } = this.doc;
-    this.commitDoc(on ? { ...rest, firstPage: {} } : rest, this.selection);
+    this.commitDoc(setOwnFirstPage(this.doc, index, on), this.selection);
+  }
+
+  /**
+   * Whether the section has a header and a footer of its own. Those without
+   * show the document's, which are the last section's; that one always has them.
+   */
+  get ownHeaders(): boolean {
+    return hasOwnStories(this.doc, this.sectionIndex);
+  }
+
+  /** Gives the section a header and a footer of its own, copies of the document's to begin with, or has it show the document's again. */
+  setOwnHeaders(on: boolean): void {
+    const index = this.sectionIndex;
+    if (index >= this.sectionCount - 1 || on === hasOwnStories(this.doc, index)) return;
+    const area = this.area;
+    const page = this.areaPage;
+    if (area !== 'body') this.setArea('body');
+    this.commitDoc(setOwnStories(this.doc, index, on), this.selection);
+    if (area !== 'body') this.setArea(area, page);
   }
 
   /** True when the caret is in a paragraph with nothing in it. */
@@ -909,7 +1186,9 @@ export class Editor {
 
   /** The zoom at which the pages across the window, or one whole page, just fit in it. */
   private fitZoom(fit: ZoomFit): number {
-    const { width, height } = this.layout.page;
+    // The page the caret is on, or the widest when they are all to fit across.
+    const { height } = this.setupOf(this.currentPage - 1);
+    const width = fit === 'width' ? Math.max(...this.layout.pages.map((_, i) => this.setupOf(i).width)) : this.setupOf(this.currentPage - 1).width;
     const across = this.view === 'spread' ? 2 : 1;
     const beside = this.showNotes && this.view !== 'grid' && this.view !== 'flow' ? NOTE_MARGIN * across : 0;
     const byWidth = (this.root.clientWidth - this.gap * (across + 1)) / ((width * across + beside) * PT_TO_PX);
@@ -933,8 +1212,13 @@ export class Editor {
     return true;
   }
 
+  /** The size and margins of page `i` of what is shown: those of its section. */
+  private setupOf(i: number): PageSetup {
+    return this.layout.pages[i]?.setup ?? this.layout.page;
+  }
+
   private sizePage(i: number): void {
-    const { width, height } = this.layout.page;
+    const { width, height } = this.setupOf(i);
     this.pageEls[i].style.width = `${width * this.zoom}pt`;
     this.pageEls[i].style.height = `${height * this.zoom}pt`;
     const sheet = this.sheetEls[i].style;
@@ -961,14 +1245,24 @@ export class Editor {
    * One that does not exist yet starts as an empty paragraph, and is dropped
    * again if it is left empty.
    */
-  setArea(area: EditArea, page?: number): void {
+  setArea(area: EditArea, page?: number, note?: string): void {
     if (this.view === 'flow' && area !== 'body') return;
-    const at = Math.max(0, Math.min(page ?? this.currentPage - 1, this.pageCount - 1));
-    if (area === this.area && (area === 'body' || at === this.areaPage)) return;
+    // A note is edited on the page its text starts on, unless another page that shows some of it is asked for; a text box, on one it is on.
+    const own = area === 'footnote' || area === 'textbox';
+    if (own && (note === undefined || this.notePage(note, page, area) === undefined)) return;
+    const at = own ? this.notePage(note!, page, area)! : Math.max(0, Math.min(page ?? this.currentPage - 1, this.pageCount - 1));
+    if (area === this.area && (area === 'body' || at === this.areaPage) && (!own || note === this.areaNote)) return;
     this.dropEmptyStory();
     this.area = area;
     this.areaPage = at;
+    this.areaNote = own ? note : undefined;
     this.ensureStory();
+    // Only to be looked at, a header or a footer that is not there cannot be made.
+    if (this.locked && this.part && !storyOf(this.doc, this.part)?.paragraphs.length) {
+      this.area = 'body';
+      this.areaPage = 0;
+      this.areaNote = undefined;
+    }
     this.syncArea();
     this.render();
     this.refind();
@@ -996,12 +1290,27 @@ export class Editor {
    * and that is the page being edited.
    */
   private get part(): StoryPart | undefined {
-    return this.area === 'body' ? undefined : storyPart(this.doc, this.area, this.areaPage);
+    if (this.area === 'footnote') return footnotePart(this.areaNote!);
+    if (this.area === 'textbox') return textBoxPart(this.areaNote!);
+    return this.area === 'body' ? undefined : storyPart(this.paged, this.area, this.areaPage);
+  }
+
+  /** What `bandLayout` knows the area being edited by, when it is not the text. */
+  private get areaKey(): 'header' | 'footer' | FootnotePart | TextBoxPart | undefined {
+    return this.area === 'body' ? undefined : this.area === 'footnote' ? footnotePart(this.areaNote!) : this.area === 'textbox' ? textBoxPart(this.areaNote!) : this.area;
+  }
+
+  /** The page that shows note `id`, or text box `id`: `page` when it shows it, otherwise the first that does. */
+  private notePage(id: string, page?: number, area: 'footnote' | 'textbox' = 'footnote'): number | undefined {
+    const shows = (i: number) => (area === 'textbox' ? this.paged.pages[i]?.textBoxes?.some((box) => box.id === id) : this.paged.pages[i]?.footnotes?.notes.some((note) => note.id === id));
+    if (page !== undefined && shows(page)) return page;
+    const first = this.paged.pages.findIndex((_, i) => shows(i));
+    return first < 0 ? undefined : first;
   }
 
   /** The layout the selection is in: every page, or the header or footer of the page being edited. */
   private get flow(): Layout {
-    return (this.area !== 'body' && bandLayout(this.layout, this.area, this.areaPage)) || this.layout;
+    return (this.areaKey && bandLayout(this.layout, this.areaKey, this.areaPage)) || this.layout;
   }
 
   /** The real document with a changed `text` put back where it came from. */
@@ -1037,7 +1346,7 @@ export class Editor {
 
   private ensureStory(): void {
     const part = this.part;
-    if (!part || storyOf(this.doc, part)?.paragraphs.length) return;
+    if (!part || this.locked || storyOf(this.doc, part)?.paragraphs.length) return;
     // In the font the document opens with, at the usual size: its first text may well be a title.
     const props: RunProps = { fontFamily: resolveRun(propsAt(this.doc, docStart())).fontFamily };
     this.doc = withStory(this.doc, part, { paragraphs: [{ props: {}, runs: [{ text: '', props }] }] });
@@ -1046,26 +1355,54 @@ export class Editor {
   /** Takes away the header or footer being left when it is a single empty paragraph made here. */
   private dropEmptyStory(): void {
     const part = this.part;
-    if (!part) return;
+    // A note is there while its reference is, whatever it holds; and a text box while its drawing is.
+    if (!part || this.area === 'footnote' || this.area === 'textbox') return;
     const paragraphs = storyOf(this.doc, part)?.paragraphs ?? [];
     if (paragraphs.length !== 1 || paragraphs[0].origin !== undefined || paragraphs[0].runs.some((run) => run.text)) return;
     this.doc = withStory(this.doc, part, undefined);
   }
 
   private syncArea(): void {
-    this.root.classList.toggle('dx-editing', this.area !== 'body');
+    // A note is edited where it is, as the text is: nothing else is dimmed.
+    this.root.classList.toggle('dx-editing', this.area === 'header' || this.area === 'footer');
     this.root.classList.toggle('dx-editing-header', this.area === 'header');
     this.root.classList.toggle('dx-editing-footer', this.area === 'footer');
+    this.root.classList.toggle('dx-editing-footnote', this.area === 'footnote');
+    this.root.classList.toggle('dx-editing-textbox', this.area === 'textbox');
+  }
+
+  /** The text box under a point of the window, the one on top when several are, and whether the point is on its edge. */
+  private textBoxAt(clientX: number, clientY: number): { page: number; id: string; edge: boolean } | undefined {
+    const page = this.pageAt(clientY);
+    const boxes = this.layout.pages[page]?.textBoxes;
+    if (!boxes?.length) return undefined;
+    const rect = this.pageEls[page].getBoundingClientRect();
+    const scale = this.setupOf(page).width / rect.width;
+    const x = (clientX - rect.left) * scale;
+    const y = (clientY - rect.top) * scale;
+    // Within a few pixels of the line round it, at any zoom.
+    const near = 5 * scale;
+    const hit = [...boxes].reverse().find(({ frame: f }) => x >= f.x - near && x <= f.x + f.width + near && y >= f.y - near && y <= f.y + f.height + near);
+    if (!hit) return undefined;
+    const { frame: f } = hit;
+    const edge = x < f.x + near || x > f.x + f.width - near || y < f.y + near || y > f.y + f.height - near;
+    return { page, id: hit.id, edge };
   }
 
   /** Which page a point of the window is on, and which part of it: its header, its text or its footer. */
-  private zoneAt(clientY: number): { page: number; area: EditArea } {
+  private zoneAt(clientY: number): { page: number; area: EditArea; note?: string } {
     const page = this.pageAt(clientY);
     if (this.view === 'flow') return { page, area: 'body' };
     const rect = this.pageEls[page].getBoundingClientRect();
-    const y = (clientY - rect.top) * (this.layout.page.height / rect.height);
-    const { header, footer } = this.layout.pages[page];
-    const { height, marginTop, marginBottom } = this.layout.page;
+    const { height, marginTop, marginBottom } = this.setupOf(page);
+    const y = (clientY - rect.top) * (height / rect.height);
+    const { header, footer, footnotes } = this.layout.pages[page];
+    // The notes at the foot of the page, from the line above them down: each as far down as its last line.
+    if (footnotes && y >= footnotes.rule.y) {
+      const note = footnotes.notes.find((_, k) => k === footnotes.notes.length - 1 || y < Math.max(...footnotes.notes[k + 1].lines.map((l) => l.y), 0));
+      const bottomOf = Math.max(...footnotes.notes.flatMap((n) => n.lines.map((l) => l.y + l.height)));
+      if (note && y <= bottomOf) return { page, area: 'footnote', note: note.id };
+    }
     // A header taller than its margin reaches as far as its last line, and so does the footer.
     const top = Math.max(marginTop, ...(header?.lines ?? []).map((l) => l.y + l.height));
     const bottom = Math.min(height - marginBottom, ...(footer?.lines ?? []).map((l) => l.y));
@@ -1201,7 +1538,12 @@ export class Editor {
       }
     }
     const kind = this.collapsed && !byWord ? (dir < 0 ? 'backspace' : 'delete') : '';
-    this.commit(deleteRange(this.text, range), { anchor: range.from, focus: range.from }, kind);
+    this.forward = dir > 0;
+    try {
+      this.commit(deleteRange(this.text, range), { anchor: range.from, focus: range.from }, kind);
+    } finally {
+      this.forward = false;
+    }
   }
 
   toggleMark(key: MarkKey): void {
@@ -1498,6 +1840,7 @@ export class Editor {
 
   /** Brings the table up to date again while doing so moves its own headings to other pages; it settles in a pass or two. */
   private settleToc(): void {
+    if (this.locked) return;
     for (let pass = 0; pass < 3; pass++) {
       const doc = updateToc(this.doc, this.tocOptions());
       if (doc === this.doc) return;
@@ -1561,7 +1904,7 @@ export class Editor {
    */
   insertImage(bytes: Uint8Array, type: string, width: number, height: number): void {
     const column = this.textColumn();
-    const { height: pageHeight, marginTop, marginBottom } = this.doc.page;
+    const { height: pageHeight, marginTop, marginBottom } = this.page;
     const fit = Math.min(1, (column.right - column.left) / width, (pageHeight - marginTop - marginBottom - 24) / height);
     const doc = this.collapsed ? this.text : deleteRange(this.text, this.range);
     const result = insertImage(doc, outsideField(doc, this.range.from), { bytes, type, width: width * fit, height: height * fit });
@@ -1798,7 +2141,7 @@ export class Editor {
    */
   get canEditTables(): boolean {
     if (this.area === 'body') return true;
-    const fixed = this.doc.source?.[`${this.part!}Source`]?.story.tables?.length ?? 0;
+    const fixed = storySource(this.doc, this.part!)?.story.tables?.length ?? 0;
     const table = this.text.paragraphs[this.selection.focus.para]?.cell?.table;
     return table === undefined || table >= fixed;
   }
@@ -1871,18 +2214,20 @@ export class Editor {
     if (this.canSplitCell) this.reshapeTable(splitCell(this.text, this.selection.focus.para));
   }
 
-  /** The borders, the line, the shading and the place of the text of the caret's cell, and whether its row is a heading; undefined outside a table. */
-  activeCellProps(): { borders: boolean; shade: string; valign: 'top' | 'center' | 'bottom'; line?: Border; header: boolean; height: number; exact: boolean } | undefined {
+  /** The borders, the line, the shading, the place and the direction of the text of the caret's cell, and whether its row is a heading; undefined outside a table. */
+  activeCellProps():
+    | { borders: boolean; shade: string; valign: 'top' | 'center' | 'bottom'; direction: 'level' | 'up' | 'down'; line?: Border; header: boolean; height: number; exact: boolean }
+    | undefined {
     const loc = locateCell(this.text, this.selection.focus.para);
     if (!loc) return undefined;
     const { cell, row } = loc;
     const sides = cell.lines;
     // The line the cell is drawn with, when all its sides have the same one.
     const line = sides?.top && (['right', 'bottom', 'left'] as const).every((k) => JSON.stringify(sides[k]) === JSON.stringify(sides.top)) ? sides.top : undefined;
-    return { borders: cell.borders, shade: cell.shade ?? '', valign: cell.valign ?? 'top', line, header: !!row.header, height: row.height, exact: !!row.exact };
+    return { borders: cell.borders, shade: cell.shade ?? '', valign: cell.valign ?? 'top', direction: cell.direction ?? 'level', line, header: !!row.header, height: row.height, exact: !!row.exact };
   }
 
-  /** Sets the borders, their line, the shading ('' for none) or the place of the text of the cells the selection covers. */
+  /** Sets the borders, their line, the shading ('' for none), the place or the direction of the text of the cells the selection covers. */
   setTableCellProps(patch: CellPatch): void {
     if (!this.canEditTables) return;
     const doc = setCellProps(this.text, this.selection.anchor.para, this.selection.focus.para, patch);
@@ -1969,6 +2314,48 @@ export class Editor {
     if (doc !== this.text) this.commit(doc, this.selection);
   }
 
+  /**
+   * Puts a note at the foot of the page at the caret, in place of what is
+   * selected, and takes the caret into it to write it. Notes are numbered in
+   * the order of their references in the text.
+   */
+  /**
+   * Puts a text box in at the caret, anchored to its paragraph and with the
+   * text going round it, and takes the caret into it. Says its id.
+   */
+  insertTextBox(text = ''): string | undefined {
+    if (this.locked || this.area !== 'body') return undefined;
+    const width = Math.min(180, this.textColumn().right - this.textColumn().left);
+    const made = insertTextBox(this.text, this.range.from, { width, height: 54, text });
+    this.commit(made.doc, { anchor: made.pos, focus: made.pos });
+    this.setArea('textbox', undefined, made.id);
+    if ((this.area as EditArea) === 'textbox') this.setSelection(docEnd(this.text));
+    return made.id;
+  }
+
+  /** The text boxes of the document, each with its id and its text. */
+  get textBoxes(): { id: string; text: string }[] {
+    return (this.doc.textBoxes ?? []).map((box) => ({ id: box.id, text: box.paragraphs.map((p) => p.runs.map((run) => run.text).join('')).join('\n').replace(/[\u2060\uFFFC]/g, '') }));
+  }
+
+  insertFootnote(text = ''): void {
+    if (this.area !== 'body') return;
+    const doc = this.collapsed ? this.doc : deleteRange(this.doc, this.range);
+    const result = insertFootnote(doc, outsideField(doc, this.range.from), text);
+    this.commitDoc(result.doc, { anchor: result.pos, focus: result.pos });
+    if (this.view === 'flow') return;
+    this.setArea('footnote', undefined, result.id);
+    const note = this.text.paragraphs;
+    const end = { para: note.length - 1, offset: paragraphLength(note[note.length - 1]) };
+    this.setSelection(end);
+  }
+
+  /** The notes at the foot of the pages that the text refers to, in the order of their numbers. */
+  get footnotes(): { id: string; number: number; text: string }[] {
+    const numbers = footnoteNumbers(this.doc);
+    return shownFootnotes(this.doc).map((note) => ({ id: note.id, number: numbers.get(note.id)!, text: note.paragraphs.map((p) => paragraphText(p).replace(/[\u2060\uFFFC]/g, '')).join('\n').trim() }));
+  }
+
   /** Starts a new page at the caret. */
   insertPageBreak(): void {
     this.insertText('\f');
@@ -1998,11 +2385,22 @@ export class Editor {
     if (result.doc !== doc) this.commitDoc(result.doc, { anchor: result.pos, focus: result.pos });
   }
 
-  /** Changes the size or the margins of the page. */
-  setPage(patch: Partial<PageSetup>): void {
-    const page = { ...this.doc.page, ...patch };
-    if ((Object.keys(page) as (keyof PageSetup)[]).every((key) => page[key] === this.doc.page[key])) return;
-    this.commitDoc({ ...this.doc, page }, this.selection);
+  /** Changes the size or the margins of the page of the section, or, with `everywhere`, of every section. */
+  setPage(patch: Partial<PageSetup>, everywhere = false): void {
+    const marks = sectionMarks(this.doc);
+    const index = this.sectionIndex;
+    let doc = this.doc;
+    for (const [k, para] of [...marks, this.doc.paragraphs.length - 1].entries()) if (everywhere || k === index) doc = setSectionPage(doc, para, patch);
+    if (doc !== this.doc) this.commitDoc(doc, this.selection);
+  }
+
+  /** Gives each section the page it had: `pages` as `sectionPages` gave them, for a document with the same sections. */
+  setSectionPages(pages: PageSetup[]): void {
+    const marks = sectionMarks(this.doc);
+    if (pages.length !== marks.length + 1) return;
+    let doc = this.doc;
+    for (const [k, para] of [...marks, this.doc.paragraphs.length - 1].entries()) doc = setSectionPage(doc, para, pages[k]);
+    if (doc !== this.doc) this.commitDoc(doc, this.selection);
   }
 
   /** Where the page number is and how it reads; undefined when the document has none. */
@@ -2049,28 +2447,46 @@ export class Editor {
   }
 
   private restore(from: Snapshot[], to: Snapshot[]): void {
+    if (this.locked) return;
     const snapshot = from.pop();
     if (!snapshot) return;
     to.push(this.snapshot());
     this.doc = snapshot.doc;
     this.area = snapshot.area;
     this.areaPage = snapshot.areaPage;
+    this.areaNote = snapshot.areaNote;
     this.selection = snapshot.selection;
     this.syncArea();
     this.afterDocChange();
   }
 
   private snapshot(): Snapshot {
-    return { doc: this.doc, selection: this.selection, area: this.area, areaPage: this.areaPage };
+    return { doc: this.doc, selection: this.selection, area: this.area, areaPage: this.areaPage, areaNote: this.areaNote };
   }
 
-  /** Commits a change to the text the selection is in. */
-  private commit(text: Doc, selection: Selection, kind = ''): void {
+  /**
+   * Commits a change to the text the selection is in. While changes are
+   * tracked, what it took out stays, marked, and what it put in is marked,
+   * unless `tracked` is false: accepting and rejecting are no changes to track.
+   */
+  private commit(text: Doc, selection: Selection, kind = '', tracked = true): void {
+    if (tracked && this.doc.trackRevisions && !this.locked && text !== this.text) {
+      const edit = trackEdit(this.text, text, this.reviser());
+      const caret = comparePositions(selection.anchor, selection.focus) === 0 ? (this.forward ? 'forward' : 'back') : undefined;
+      selection = { anchor: edit.map(selection.anchor, caret), focus: edit.map(selection.focus, caret) };
+      text = edit.doc;
+    }
     this.commitDoc(this.merged(text), selection, kind);
+  }
+
+  /** Who the changes made here are by, and when: now. */
+  private reviser(): { author: string; date: string } {
+    return { author: this.author || t('note.anonymous'), date: revisionNow() };
   }
 
   /** Commits a change to the document as a whole. */
   private commitDoc(doc: Doc, selection: Selection, kind = ''): void {
+    if (this.locked) return;
     const now = Date.now();
     const merge = kind !== '' && kind === this.lastEdit.kind && now - this.lastEdit.time < TYPING_MERGE_MS;
     this.commits++;
@@ -2094,8 +2510,17 @@ export class Editor {
     this.lastEdit.kind = '';
     this.refind();
     this.render();
-    // The page whose header was being edited may be gone.
+    // The page whose header was being edited may be gone; a note may have gone to another page, or away with its reference.
     this.areaPage = Math.min(this.areaPage, this.pageCount - 1);
+    if (this.area === 'footnote' || this.area === 'textbox') {
+      const page = this.notePage(this.areaNote!, this.areaPage, this.area);
+      if (page === undefined) {
+        this.area = 'body';
+        this.areaNote = undefined;
+        this.syncArea();
+        this.selection = { anchor: clampPosition(this.doc, this.selection.anchor), focus: clampPosition(this.doc, this.selection.focus) };
+      } else this.areaPage = page;
+    }
     this.renderSelection();
     if (reveal) this.scrollCaretIntoView();
     this.emit();
@@ -2141,7 +2566,14 @@ export class Editor {
 
       // A page whose lines are the same boxes at the same place already shows them.
       // Everything the page shows: its header, its text and its footer.
-      const parts = (['header', 'body', 'footer'] as const).map((name) => ({ name, band: name === 'body' ? layoutPage : layoutPage[name] }));
+      // Text boxes under the text first, the others over it, after everything else.
+      const boxes = layoutPage.textBoxes ?? [];
+      const parts: { name: 'header' | 'body' | 'footer' | 'footnote' | 'textbox'; band: Band | LayoutPage | undefined }[] = [
+        ...boxes.filter((box) => box.behind).map((band) => ({ name: 'textbox' as const, band })),
+        ...(['header', 'body', 'footer'] as const).map((name) => ({ name, band: name === 'body' ? layoutPage : layoutPage[name] })),
+        ...(layoutPage.footnotes?.notes ?? []).map((band) => ({ name: 'footnote' as const, band })),
+        ...boxes.filter((box) => !box.behind).map((band) => ({ name: 'textbox' as const, band })),
+      ];
       const bands = parts.map((part) => part.band).filter((band) => band !== undefined);
       const lines = bands.flatMap((band) => band.lines);
       const cells = bands.flatMap((band) => band.cells);
@@ -2151,16 +2583,16 @@ export class Editor {
         before?.lines.length === lines.length &&
         before.cells.length === cells.length &&
         before.floats === floats.length &&
-        lines.every((l, k) => l.raw === before.lines[k].raw && l.y === before.lines[k].y) &&
+        lines.every((l, k) => l.raw === before.lines[k].raw && l.y === before.lines[k].y && l.turn?.x === before.lines[k].turn?.x && l.turn?.y === before.lines[k].turn?.y) &&
         cells.every((c, k) => {
           const was = before.cells[k];
           return c.y === was.y && c.height === was.height && c.x === was.x && c.width === was.width && c.borders === was.borders && c.shade === was.shade && c.lines === was.lines;
         }) &&
-        JSON.stringify(layoutPage.rules ?? []) === before.rules
+        JSON.stringify([layoutPage.rules ?? [], layoutPage.footnotes?.rule ?? null, boxes.map((box) => [box.frame, box.look])]) === before.rules
       ) {
         return;
       }
-      this.painted[i] = { lines: lines.map((l) => ({ raw: l.raw, y: l.y })), cells, floats: floats.length, rules: JSON.stringify(layoutPage.rules ?? []) };
+      this.painted[i] = { lines: lines.map((l) => ({ raw: l.raw, y: l.y, turn: l.turn })), cells, floats: floats.length, rules: JSON.stringify([layoutPage.rules ?? [], layoutPage.footnotes?.rule ?? null, boxes.map((box) => [box.frame, box.look])]) };
 
       const sheet = document.createDocumentFragment();
       // Each part in a box of its own, so the ones not being edited can be dimmed.
@@ -2168,8 +2600,25 @@ export class Editor {
         if (!band) continue;
         const content = document.createElement('div');
         content.className = `dx-band dx-band-${name}`;
-        // The pictures that go under the text first; the ones over it, once it is drawn.
-        for (const float of band.floats) if (float.behind) content.appendChild(this.pictureElement(float.xml, float, float.part));
+        // A text box: what fills it and the line round it, centred on its edge as in Word.
+        if (name === 'textbox') {
+          const { frame, look } = band as TextBoxBand;
+          const edge = look.line?.width ?? 0;
+          const node = document.createElement('div');
+          node.className = 'dx-textbox';
+          node.dataset.box = (band as TextBoxBand).id;
+          Object.assign(node.style, {
+            left: `${frame.x - edge / 2}pt`,
+            top: `${frame.y - edge / 2}pt`,
+            width: `${frame.width + edge}pt`,
+            height: `${frame.height + edge}pt`,
+            background: look.fill ? `#${look.fill}` : 'transparent',
+            border: look.line ? `${edge}pt solid #${look.line.color}` : '0',
+          });
+          content.appendChild(node);
+        }
+        // The pictures that go under the text first; the ones over it, once it is drawn. A text box is not one: it was drawn above.
+        for (const float of band.floats) if (float.behind && textBoxId(float.xml) === undefined) content.appendChild(this.pictureElement(float.xml, float, float.part));
         for (const cell of band.cells) {
           const box = document.createElement('div');
           const sides = boxLines(cell);
@@ -2184,6 +2633,14 @@ export class Editor {
           content.appendChild(box);
           if (cell.lines) content.appendChild(this.cellLinesElement(cell));
         }
+        // The line above the notes at the foot of the page.
+        const notesRule = (band as LayoutPage).footnotes?.rule;
+        if (notesRule) {
+          const line = document.createElement('div');
+          line.className = 'dx-notes-rule';
+          Object.assign(line.style, { left: `${notesRule.x}pt`, top: `${notesRule.y}pt`, width: `${notesRule.width}pt`, height: `${notesRule.height}pt` });
+          content.appendChild(line);
+        }
         // The lines down between the columns of a section.
         for (const rule of (band as LayoutPage).rules ?? []) {
           const line = document.createElement('div');
@@ -2193,20 +2650,54 @@ export class Editor {
           line.style.height = `${rule.bottom - rule.top}pt`;
           content.appendChild(line);
         }
+        /** The text set vertically of each cell: turned about its corner, and cut to its cell. */
+        const turned = new Map<Turn, HTMLElement>();
+        const holder = (line: Line): HTMLElement => {
+          const cell = line.turn && line.cell !== undefined ? band.cells[line.cell] : undefined;
+          if (!line.turn || !cell) return content;
+          let inner = turned.get(line.turn);
+          if (!inner) {
+            const clip = document.createElement('div');
+            clip.className = 'dx-turn';
+            Object.assign(clip.style, { left: `${cell.x}pt`, top: `${cell.y}pt`, width: `${cell.width}pt`, height: `${cell.height}pt` });
+            inner = document.createElement('div');
+            inner.className = 'dx-turn';
+            // Placed back at the corner of the page, so that what it holds is in page coordinates.
+            Object.assign(inner.style, { left: `${-cell.x}pt`, top: `${-cell.y}pt`, transformOrigin: `${line.turn.x}pt ${line.turn.y}pt`, transform: `rotate(${line.turn.angle}deg)` });
+            clip.appendChild(inner);
+            content.appendChild(clip);
+            turned.set(line.turn, inner);
+          }
+          return inner;
+        };
+        // A line with a tracked change has a bar beside it in the margin, as in Word: one that only
+        // put in or took out a paragraph mark has nothing else to show it by.
+        const paragraphsOf = name === 'body' ? this.doc.paragraphs : (band as Band).part ? storyOf(this.doc, (band as Band).part!)?.paragraphs : undefined;
+        const barAt = this.setupOf(i).marginLeft - CHANGE_BAR_GAP;
         for (const line of band.lines) {
-          if (line.label) content.appendChild(this.textElement(line.label, line));
+          const into = holder(line);
+          if (!line.turn && (line.fragments.some((f) => f.props.revision) || (line.lastInParagraph && paragraphsOf?.[line.para]?.props.markRevision))) {
+            const bar = document.createElement('div');
+            bar.className = 'dx-change-bar';
+            Object.assign(bar.style, { left: `${barAt}pt`, top: `${line.y}pt`, height: `${line.height}pt` });
+            content.appendChild(bar);
+          }
+          if (line.label) into.appendChild(this.textElement(line.label, line));
           for (const f of line.fragments) {
-            if (f.kind === 'object' && f.width > 0) {
+            if (f.mark) {
+              // The number of a note: smaller, and raised.
+              into.appendChild(this.textElement({ ...f, kind: 'text', text: f.mark.text, font: f.mark.font, wordSpacing: 0 }, { ...line, baseline: line.baseline - f.mark.rise }));
+            } else if (f.kind === 'object' && f.width > 0 && textBoxId(f.props.object) === undefined) {
               const box = { x: f.x, y: line.baseline - f.ascent, width: f.width, height: f.ascent };
-              content.appendChild(this.pictureElement(f.props.object, box, name === 'body' ? undefined : ((band as Band).part ?? name)));
+              into.appendChild(this.pictureElement(f.props.object, box, name === 'body' ? undefined : ((band as Band).part ?? (name as 'header' | 'footer'))));
             } else if (f.kind === 'text') {
-              content.appendChild(this.textElement(f, line));
+              into.appendChild(this.textElement(f, line));
             } else if (f.leader) {
-              content.appendChild(this.textElement({ ...f, kind: 'text', ...f.leader, wordSpacing: 0 }, line));
+              into.appendChild(this.textElement({ ...f, kind: 'text', ...f.leader, wordSpacing: 0 }, line));
             }
           }
         }
-        for (const float of band.floats) if (!float.behind) content.appendChild(this.pictureElement(float.xml, float, float.part));
+        for (const float of band.floats) if (!float.behind && textBoxId(float.xml) === undefined) content.appendChild(this.pictureElement(float.xml, float, float.part));
         sheet.appendChild(content);
       }
       // The selection and the other marks go over everything, and darken what is under them as a marker pen
@@ -2393,7 +2884,7 @@ export class Editor {
 
   /** A small button over the table of contents, at the right of its first line, that brings it up to date. */
   private renderTocChip(): void {
-    if (this.area !== 'body') return;
+    if (this.area !== 'body' || this.locked) return;
     const range = tocRange(this.doc);
     if (!range) return;
     const at = caretRect(this.flow, this.measurer, this.mapOffset({ para: range.first, offset: 0 }, true));
@@ -2402,7 +2893,7 @@ export class Editor {
     chip.dataset.name = 'toc-update';
     chip.setAttribute('role', 'button');
     chip.textContent = `↻ ${t('toc.update')}`;
-    chip.style.right = `${this.layout.page.marginRight}pt`;
+    chip.style.right = `${this.setupOf(at.page).marginRight}pt`;
     chip.style.top = `${at.y - 19}pt`;
     // A press on it is not a press on the page.
     chip.addEventListener('mousedown', (e) => {
@@ -2418,6 +2909,8 @@ export class Editor {
 
   private renderSelection(): void {
     for (const layer of this.selLayers) layer.replaceChildren();
+    // The text box being written in shows where its edges are.
+    for (const node of this.pagesEl.querySelectorAll<HTMLElement>('.dx-textbox')) node.classList.toggle('dx-on', this.area === 'textbox' && node.dataset.box === this.areaNote);
     const { from, to } = this.range;
     const flow = this.flow;
     for (const rect of selectionRects(flow, this.measurer, { from: this.mapOffset(from, true), to: this.mapOffset(to, true) })) {
@@ -2494,9 +2987,9 @@ export class Editor {
       this.selLayers[picture.box.page].appendChild(frame);
     }
     this.renderPeers();
-    if (this.area !== 'body') {
+    if (this.area === 'header' || this.area === 'footer') {
       // A line along the edge of what is being edited, with its name.
-      const { height, marginTop, marginBottom } = this.layout.page;
+      const { height, marginTop, marginBottom } = this.setupOf(this.areaPage);
       const lines = flow.lines;
       const y = this.area === 'header' ? Math.max(marginTop, ...lines.map((l) => l.y + l.height)) : Math.min(height - marginBottom, ...lines.map((l) => l.y));
       const edge = document.createElement('div');
@@ -2504,8 +2997,11 @@ export class Editor {
       edge.style.top = `${y}pt`;
       const label = document.createElement('span');
       // The first page's own says so: it is not the one the other pages show.
-      const own = this.part === 'firstHeader' || this.part === 'firstFooter';
-      label.textContent = t(this.area === 'header' ? (own ? 'area.firstHeader' : 'area.header') : own ? 'area.firstFooter' : 'area.footer');
+      const base = this.part && splitPart(this.part).base;
+      const own = base === 'firstHeader' || base === 'firstFooter';
+      // In a document of several sections, of which one.
+      const section = this.sectionCount > 1 ? ` · ${t('area.section', { n: this.sectionIndex + 1 })}` : '';
+      label.textContent = t(this.area === 'header' ? (own ? 'area.firstHeader' : 'area.header') : own ? 'area.firstFooter' : 'area.footer') + section;
       edge.appendChild(label);
       this.selLayers[this.areaPage].appendChild(edge);
     }
@@ -2526,8 +3022,10 @@ export class Editor {
     for (const peer of this.peers) {
       // In a header or a footer, on the page they are editing it on; it is the same on the others.
       const page = Math.max(0, Math.min(peer.page, this.pageCount - 1));
-      const band = peer.part && bandLayout(this.layout, storyKind(peer.part), page);
-      if (peer.part && (!band || storyPart(this.doc, storyKind(peer.part), page) !== peer.part)) continue;
+      const kind = peer.part && storyKind(peer.part);
+      const own = kind === 'footnote' || kind === 'textbox';
+      const band = peer.part && bandLayout(this.layout, own ? (peer.part as FootnotePart | TextBoxPart) : (kind as 'header' | 'footer'), page);
+      if (peer.part && (!band || (!own && storyPart(this.layout, kind as 'header' | 'footer', page) !== peer.part))) continue;
       const flow = band || this.layout;
       const story = peer.part ? storyOf(this.doc, peer.part) : this.doc;
       if (!story) continue;
@@ -2553,7 +3051,7 @@ export class Editor {
       const caret = caretRect(flow, this.measurer, shown(peer.focus));
       const bar = document.createElement('div');
       bar.className = 'dx-peer';
-      Object.assign(bar.style, { left: `${caret.x}pt`, top: `${caret.y}pt`, height: `${caret.height}pt`, background: color });
+      Object.assign(bar.style, { left: `${caret.x}pt`, top: `${caret.y}pt`, height: `${caret.height || 1.5}pt`, ...(caret.width ? { width: `${caret.width}pt`, marginLeft: '0' } : {}), background: color });
       const label = document.createElement('span');
       label.textContent = peer.name || t('collab.someone');
       label.style.background = color;
@@ -2578,8 +3076,10 @@ export class Editor {
     const scale = PT_TO_PX * this.zoom;
     const left = `${pageEl.offsetLeft + caret.x * scale}px`;
     const top = `${pageEl.offsetTop + caret.y * scale}px`;
-    const height = `${caret.height * scale}px`;
-    Object.assign(this.caretEl.style, { left, top, height, visibility: show ? 'visible' : 'hidden' });
+    // In text set vertically the caret lies across the line.
+    const height = caret.width > 0 ? '1.5px' : `${caret.height * scale}px`;
+    const width = caret.width > 0 ? `${caret.width * scale}px` : '';
+    Object.assign(this.caretEl.style, { left, top, width, height, visibility: show ? 'visible' : 'hidden' });
     Object.assign(this.input.style, { left, top, height });
   }
 
@@ -2623,7 +3123,7 @@ export class Editor {
   private floatAtPoint(clientX: number, clientY: number): { pos: Position; box: Rect } | undefined {
     const index = this.area === 'body' ? this.pageAt(clientY) : this.areaPage;
     const rect = this.pageEls[index].getBoundingClientRect();
-    const scale = this.layout.page.width / rect.width;
+    const scale = this.setupOf(index).width / rect.width;
     const x = (clientX - rect.left) * scale;
     const y = (clientY - rect.top) * scale;
     // Text over a picture that is under it is what the click is for: the picture is taken where it shows by itself.
@@ -2640,7 +3140,7 @@ export class Editor {
   private pictureAtPoint(clientX: number, clientY: number): Position | undefined {
     const index = this.area === 'body' ? this.pageAt(clientY) : this.areaPage;
     const rect = this.pageEls[index].getBoundingClientRect();
-    const scale = this.layout.page.width / rect.width;
+    const scale = this.setupOf(index).width / rect.width;
     const x = (clientX - rect.left) * scale;
     const y = (clientY - rect.top) * scale;
     const page = this.flow.pages[this.area === 'body' ? index : 0];
@@ -2659,7 +3159,7 @@ export class Editor {
     if (this.area !== 'body') return undefined;
     const index = this.pageAt(clientY);
     const rect = this.pageEls[index].getBoundingClientRect();
-    const scale = this.layout.page.width / rect.width;
+    const scale = this.setupOf(index).width / rect.width;
     const x = (clientX - rect.left) * scale;
     const y = (clientY - rect.top) * scale;
     for (const cell of this.layout.pages[index].cells) {
@@ -2678,7 +3178,7 @@ export class Editor {
     if (this.area !== 'body') return undefined;
     const index = this.pageAt(clientY);
     const rect = this.pageEls[index].getBoundingClientRect();
-    const scale = this.layout.page.width / rect.width;
+    const scale = this.setupOf(index).width / rect.width;
     const x = (clientX - rect.left) * scale;
     const y = (clientY - rect.top) * scale;
     const cells = this.layout.pages[index].cells;
@@ -2704,7 +3204,7 @@ export class Editor {
     if (this.area !== 'body') return undefined;
     const index = this.pageAt(clientY);
     const rect = this.pageEls[index].getBoundingClientRect();
-    const scale = this.layout.page.width / rect.width;
+    const scale = this.setupOf(index).width / rect.width;
     const x = (clientX - rect.left) * scale;
     const y = (clientY - rect.top) * scale;
     const corners = new Map<number, { right: number; bottom: number }>();
@@ -2778,7 +3278,7 @@ export class Editor {
     // In a header or footer the point is taken on the page being edited, wherever it is.
     const index = this.area === 'body' ? this.pageAt(clientY) : this.areaPage;
     const rect = this.pageEls[index].getBoundingClientRect();
-    const scale = this.layout.page.width / rect.width;
+    const scale = this.setupOf(index).width / rect.width;
     const pos = hitTest(this.flow, this.measurer, this.area === 'body' ? index : 0, (clientX - rect.left) * scale, (clientY - rect.top) * scale);
     return this.mapOffset(pos, false);
   }
@@ -2803,7 +3303,7 @@ export class Editor {
       const frame = corner.parentElement as HTMLElement;
       const column = this.textColumn();
       // A floating picture can be as wide as the page; one in the line, as its column.
-      const max = picked.floating ? this.layout.page.width : column.right - column.left;
+      const max = picked.floating ? this.setupOf(picked.box.page).width : column.right - column.left;
       this.pictureResize = { pos: picked.pos, corner: corner.dataset.corner ?? 'se', startX: e.clientX, box: picked.box, frame, width: picked.box.width, height: picked.box.height, max, floating: picked.floating };
       return;
     }
@@ -2850,17 +3350,45 @@ export class Editor {
       this.columnDrag = { ...edge, startX: e.clientX, guide };
       return;
     }
+    // A click in a text box goes into it, to write in it; one on its edge takes the box itself, to move it or make it larger.
+    const box = this.view !== 'flow' ? this.textBoxAt(e.clientX, e.clientY) : undefined;
+    if (box && !box.edge) {
+      const same = this.area === 'textbox' && this.areaNote === box.id;
+      if (!same || this.areaPage !== box.page) this.setArea('textbox', box.page, box.id);
+      if (this.area === 'textbox') {
+        const pos = this.positionFromPoint(e.clientX, e.clientY);
+        if (e.detail === 2) {
+          const word = wordRangeAt(this.text, pos);
+          this.setSelection(word.from, word.to);
+        } else if (e.detail >= 3) {
+          this.setSelection({ para: pos.para, offset: 0 }, { para: pos.para, offset: paragraphLength(this.text.paragraphs[pos.para]) });
+        } else {
+          this.setSelection(e.shiftKey && same ? this.selection.anchor : pos, pos);
+          this.dragging = true;
+        }
+        return;
+      }
+    }
+    // Out of the box, back to the text.
+    if (this.area === 'textbox') this.setArea('body');
     const zone = this.zoneAt(e.clientY);
+    // A click on a note at the foot of the page goes into it, and one on the text from a note comes back out, as in Word.
+    const intoNote = zone.area === 'footnote' && (this.area !== 'footnote' || zone.note !== this.areaNote || zone.page !== this.areaPage);
+    if (intoNote || (this.area === 'footnote' && zone.area === 'body')) {
+      this.setArea(zone.area, zone.page, zone.note);
+      this.setSelection(this.positionFromPoint(e.clientX, e.clientY));
+      return;
+    }
     if (zone.area !== this.area) {
       // A double click on the header or the footer goes into it, and one on the text comes back out.
       if (e.detail === 2) {
-        this.setArea(zone.area, zone.page);
+        this.setArea(zone.area, zone.page, zone.note);
         this.setSelection(this.positionFromPoint(e.clientX, e.clientY));
         return;
       }
       if (this.area !== 'body') return;
     } else if (this.area !== 'body' && zone.page !== this.areaPage) {
-      this.setArea(this.area, zone.page);
+      this.setArea(this.area, zone.page, zone.note);
     }
     // A click on a picture selects it; dragging from there moves it.
     const picture = e.detail === 1 && !e.shiftKey ? this.pictureAtPoint(e.clientX, e.clientY) : undefined;
@@ -3101,7 +3629,7 @@ export class Editor {
       guide.remove();
       const laidOut = this.doc.tables?.[table];
       if (!laidOut) return;
-      const { width: pageWidth, marginLeft, marginRight } = this.doc.page;
+      const { width: pageWidth, marginLeft, marginRight } = this.pageOfTable(table);
       const columns = tableGeometry(laidOut, pageWidth - marginLeft - marginRight).columns;
       const scaleX = Math.max(8, width + e.clientX - startX) / width;
       const scaleY = Math.max(8, height + e.clientY - startY) / height;
@@ -3113,7 +3641,7 @@ export class Editor {
       const { table, boundary, startX, scale, guide } = this.columnDrag;
       this.columnDrag = undefined;
       guide.remove();
-      const { width, marginLeft, marginRight } = this.doc.page;
+      const { width, marginLeft, marginRight } = this.pageOfTable(table);
       const laidOut = this.doc.tables?.[table];
       if (!laidOut) return;
       const columns = tableGeometry(laidOut, width - marginLeft - marginRight).columns;
@@ -3233,6 +3761,18 @@ export class Editor {
     const byWord = e.altKey || (e.ctrlKey && !e.metaKey);
     let handled = true;
 
+    if (mod && e.altKey && e.code === 'KeyF') {
+      // A note at the foot of the page, with the keys Word has for it.
+      this.insertFootnote();
+      e.preventDefault();
+      return;
+    }
+    if (mod && e.shiftKey && !e.altKey && e.code === 'KeyE') {
+      // Tracking changes on and off, with the keys Word has for it.
+      this.setTrackChanges(!this.trackChanges);
+      e.preventDefault();
+      return;
+    }
     if (mod && !e.altKey) {
       switch (e.key.toLowerCase()) {
         case 'b':

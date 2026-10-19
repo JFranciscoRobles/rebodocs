@@ -215,13 +215,20 @@ export function useDocsStyles(): DocsStyles {
 }
 
 export interface DocsPage {
-  /** The size of the page and its margins, in points (1/72 in). */
+  /** The size of the page and its margins, in points (1/72 in): those of the section being edited. */
   page: PageSetup | undefined;
-  set(patch: Partial<PageSetup>): void;
+  /** Changes them for the section being edited, or, with `everywhere`, for every section. */
+  set(patch: Partial<PageSetup>, everywhere?: boolean): void;
+  /** How many sections the document has, and which one, from 0, is being edited: the caret's. */
+  sections: number;
+  section: number;
+  /** Whether that section has a header and a footer of its own; the others show the document's, which are the last section's. */
+  ownHeaders: boolean;
+  setOwnHeaders(on: boolean): void;
   /** Where the page number is and how it is written; undefined for none. */
   numbering: PageNumbering | undefined;
   setNumbering(numbering: PageNumbering | undefined): void;
-  /** Whether the first page has a header and a footer of its own. */
+  /** Whether the first page of the section has a header and a footer of its own. */
   firstPageDifferent: boolean;
   setFirstPageDifferent(on: boolean): void;
   /** Whether the document has a letterhead: a picture the size of the page, under the text of every page. */
@@ -240,13 +247,20 @@ export interface DocsPage {
 
 export function useDocsPage(): DocsPage {
   const { commands, state, editor } = useDocs();
-  const page = useDocsValue((e) => e.doc.page, null);
+  const page = useDocsValue((e) => e.page, null);
   const numbering = useDocsValue((e) => e.pageNumbering ?? null, null);
   const first = useDocsValue((e) => e.firstPageDifferent, false);
+  const sections = useDocsValue((e) => e.sectionCount, 1);
+  const section = useDocsValue((e) => e.sectionIndex, 0);
+  const own = useDocsValue((e) => e.ownHeaders, true);
   return useMemo(
     () => ({
       page: page ?? undefined,
-      set: (patch) => commands.setPage(patch),
+      set: (patch, everywhere) => commands.setPage(patch, everywhere),
+      sections,
+      section,
+      ownHeaders: own,
+      setOwnHeaders: (on) => commands.setOwnHeaders(on),
       numbering: numbering ?? undefined,
       setNumbering: (next) => commands.setPageNumbering(next),
       firstPageDifferent: first,
@@ -260,7 +274,7 @@ export function useDocsPage(): DocsPage {
         return image && new Blob([image.bytes as BlobPart], { type: image.type });
       },
     }),
-    [commands, editor, page, numbering, first, state.letterhead],
+    [commands, editor, page, numbering, first, sections, section, own, state.letterhead],
   );
 }
 

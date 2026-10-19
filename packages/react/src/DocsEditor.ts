@@ -27,12 +27,18 @@ export const DocsEditor = forwardRef<DocsHandle | undefined, DocsEditorProps>(fu
   const { docx, collab, name, author, locale, letterhead } = props;
   const featureKey = JSON.stringify(props.features ?? {}, (_key, value: unknown) => (typeof value === 'function' ? 'f' : value));
   const saves = !!props.onSave;
+  const versioned = props.versions ? (props.versions.save ? 2 : 1) : 0;
 
   useEffect(() => {
     const { className: _c, style: _s, onReady: _r, ...options } = latest.current;
     const mounted = mountDocs(element.current!, {
       ...options,
       onSave: options.onSave && ((file, called) => latest.current.onSave?.(file, called)),
+      versions: options.versions && {
+        list: () => latest.current.versions!.list(),
+        load: (id) => latest.current.versions!.load(id),
+        save: options.versions.save && ((file, info) => latest.current.versions!.save!(file, info)),
+      },
       onChange: (editor) => latest.current.onChange?.(editor),
       onCollab: (state, peers) => latest.current.onCollab?.(state, peers),
       onError: (message) => (latest.current.onError ?? ((text: string) => alert(text)))(message),
@@ -45,7 +51,7 @@ export const DocsEditor = forwardRef<DocsHandle | undefined, DocsEditorProps>(fu
       mounted.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docx, collab?.url, collab?.room, collab?.ticket, featureKey, saves]);
+  }, [docx, collab?.url, collab?.room, collab?.ticket, featureKey, saves, versioned]);
 
   useEffect(() => {
     if (name !== undefined) handle.current?.setName(name);

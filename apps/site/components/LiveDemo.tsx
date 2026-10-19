@@ -1,8 +1,16 @@
 'use client';
 
 // The editor itself, on the page: the same component an application installs.
-import { DocsEditor } from '@rebodocs/react';
+import { type Versions, DocsEditor } from '@rebodocs/react';
 import { useEffect, useState } from 'react';
+
+// The versions kept on this page, while it is open: an application keeps them beside its documents.
+const kept: { id: string; date: string; label?: string; author?: string; docx: Uint8Array }[] = [];
+const versions: Versions = {
+  list: async () => kept.map(({ docx, ...info }) => info),
+  load: async (id) => kept.find((version) => version.id === id)?.docx ?? Promise.reject(new Error('There is no such version.')),
+  save: async (docx, info) => void kept.push({ id: String(kept.length + 1), date: new Date().toISOString(), ...info, docx }),
+};
 
 export function LiveDemo() {
   const [file, setFile] = useState<Uint8Array>();
@@ -28,7 +36,7 @@ export function LiveDemo() {
       </div>
       <div className="h-[min(720px,78vh)] min-h-[460px]">
         {file ? (
-          <DocsEditor docx={file} name="receipt.docx" locale="en" features={{ files: true, language: true }} />
+          <DocsEditor docx={file} name="receipt.docx" locale="en" features={{ files: true, language: true }} versions={versions} />
         ) : (
           <p className="grid h-full place-items-center text-sm text-muted">{failed ? 'The sample document could not be loaded.' : 'Opening the document…'}</p>
         )}

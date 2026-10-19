@@ -42,6 +42,7 @@ Nothing to set up, and no backend: saving hands the file back as a download. [A 
 - **Every document is a room.** There is no other way to open one.
 - **A room is there only while someone is in it.** It opens when the first person comes in, and a moment after the last one leaves the document is saved and the room is let go of. The list says which rooms are open, and who is in each.
 - **The collaboration server keeps nothing.** A backend gives it the document, takes it back, and says who may come in, with a signed ticket for each person.
+- **A version of each session.** When everybody has left a document they changed, the backend keeps a version, signed by who changed it. The **Versions** tab of the side panel lists them, compares the document with one, goes back to one, and keeps one by hand. They are kept under `versions/`, as the storage demo keeps them.
 
 Open a document, press **Copy link** and open the link in another window. [Real-time collaboration](/docs/collaboration/#a-demo-to-run) explains each part.
 

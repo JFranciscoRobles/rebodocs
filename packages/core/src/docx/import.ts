@@ -11,6 +11,7 @@ import {
   type TableFloat,
   type Columns,
   type Doc,
+  type Footnote,
   type Note,
   type PageSetup,
   type Paragraph,
@@ -23,6 +24,8 @@ import {
   type Story,
   type Table,
   type TableRow,
+  type TextBox,
+  type TabStop,
   ANCHOR_CHAR,
   DEFAULT_BORDER,
   DEFAULT_PAGE,
@@ -41,8 +44,11 @@ import {
 } from '../numbering';
 import { noteKey } from '../notes';
 import { normalizeRuns } from '../ops';
+import { STORY_PARTS } from '../stories';
 import { standardStyles } from '../styles';
+import { textBoxId } from '../textboxes';
 import {
+  type BasePart,
   type BorderSet,
   type CellPadding,
   type DocxSource,
@@ -110,12 +116,49 @@ export function parseRunProps(rPr: XmlNode | undefined): RunProps {
   });
 }
 
+/** The right tab stop with a dotted leader of a paragraph, if it has one. */
+function leaderStop(pPr: XmlNode | undefined): XmlNode | undefined {
+  return childrenOf(child(pPr, 'w:tabs'), 'w:tab').find((tab) => (tab.attrs['w:val'] === 'right' || tab.attrs['w:val'] === 'end') && tab.attrs['w:leader'] === 'dot');
+}
+
 /** Where the right tab stop with a dotted leader of a paragraph is, if it has one; 0 when its tabs are cleared. */
 function leaderTab(pPr: XmlNode): number | undefined {
+  if (!child(pPr, 'w:tabs')) return undefined;
+  const stop = leaderStop(pPr);
+  return stop ? twips(stop.attrs['w:pos']) : undefined;
+}
+
+/** A tab stop as a file has it: one of the paragraph's own, or one that takes away the stop its style has at that place. */
+type ReadTab = TabStop | { pos: number; align: 'clear' };
+
+const TAB_ALIGN: Record<string, ReadTab['align']> = { left: 'left', start: 'left', num: 'left', center: 'center', right: 'right', end: 'right', decimal: 'decimal', bar: 'bar', clear: 'clear' };
+const TAB_LEADER: Record<string, TabStop['leader']> = { dot: 'dot', hyphen: 'hyphen', underscore: 'underscore', heavy: 'heavy', middleDot: 'middleDot' };
+
+/** The tab stops a paragraph sets, its dotted right one left out: that is its `leaderTab`. */
+function parseTabs(pPr: XmlNode): ReadTab[] | undefined {
   const tabs = child(pPr, 'w:tabs');
   if (!tabs) return undefined;
-  const stop = childrenOf(tabs, 'w:tab').find((tab) => (tab.attrs['w:val'] === 'right' || tab.attrs['w:val'] === 'end') && tab.attrs['w:leader'] === 'dot');
-  return stop ? twips(stop.attrs['w:pos']) : undefined;
+  const leader = leaderStop(pPr);
+  const out: ReadTab[] = [];
+  for (const tab of childrenOf(tabs, 'w:tab')) {
+    const align = TAB_ALIGN[tab.attrs['w:val'] ?? ''];
+    const pos = twips(tab.attrs['w:pos']);
+    if (!align || pos === undefined || tab === leader) continue;
+    const kind = TAB_LEADER[tab.attrs['w:leader'] ?? ''];
+    out.push(align === 'clear' ? { pos, align } : defined<TabStop>({ pos, align, leader: kind }));
+  }
+  return out;
+}
+
+/**
+ * The tab stops of a style or a paragraph over those of what it is based on:
+ * its own, and the others where it does not take them away. In order.
+ */
+export function mergeTabs(base: TabStop[] | undefined, over: TabStop[] | undefined): TabStop[] | undefined {
+  if (!base && !over) return undefined;
+  const own = (over ?? []) as ReadTab[];
+  const kept = ((base ?? []) as ReadTab[]).filter((tab) => tab.align !== 'clear' && !own.some((o) => Math.abs(o.pos - tab.pos) < 0.5));
+  return [...kept, ...own.filter((tab) => tab.align !== 'clear')].sort((a, b) => a.pos - b.pos) as TabStop[];
 }
 
 export function parseParagraphProps(pPr: XmlNode | undefined): ParagraphProps {
@@ -152,6 +195,8 @@ export function parseParagraphProps(pPr: XmlNode | undefined): ParagraphProps {
     keepLines: toggle(pPr, 'w:keepLines'),
     widowControl: toggle(pPr, 'w:widowControl'),
     leaderTab: leaderTab(pPr),
+    // Read with the ones that take away a stop of the style: `mergeTabs` puts them over it.
+    tabs: parseTabs(pPr) as TabStop[] | undefined,
     numId,
     listLevel: level === undefined ? undefined : Math.min(level, MAX_LIST_LEVEL),
   });
@@ -272,6 +317,8 @@ function mergeBorders(under: BorderSet | undefined, over: BorderSet | undefined)
 }
 
 const VALIGN: Record<string, 'center' | 'bottom'> = { center: 'center', bottom: 'bottom' };
+/** The vertical directions of the text of a cell, by their names in a file of either kind of the format. */
+const DIRECTION: Record<string, 'up' | 'down'> = { btLr: 'up', lr: 'up', lrV: 'up', tbRl: 'down', tbRlV: 'down', rl: 'down', rlV: 'down' };
 
 /** How a part of a table looks, from the `w:tblStylePr` of a table style. */
 function parseTablePart(node: XmlNode): TablePart {
@@ -352,7 +399,7 @@ function styleCatalog(sheet: StyleSheet, used: Set<string>): ParagraphStyle[] | 
   const entry = (id: string): ParagraphStyle => {
     const { pPr, rPr } = resolveStyle(sheet, id);
     // A list a style brings is not modelled as part of the style.
-    const { numId: _, listLevel: __, ...paragraph } = { ...sheet.paragraphDefaults, ...pPr };
+    const { numId: _, listLevel: __, ...paragraph } = defined({ ...sheet.paragraphDefaults, ...pPr, tabs: mergeTabs(sheet.paragraphDefaults.tabs, pPr.tabs) });
     const run = { ...sheet.runDefaults, ...rPr };
     return {
       id,
@@ -394,7 +441,9 @@ export function resolveStyle(
   }
   const out: ReturnType<typeof resolveStyle> = { pPr: {}, rPr: {}, padding: {} };
   for (const style of chain) {
+    const tabs = mergeTabs(out.pPr.tabs, style.pPr.tabs);
     Object.assign(out.pPr, style.pPr);
+    if (tabs) out.pPr.tabs = tabs;
     Object.assign(out.rPr, style.rPr);
     Object.assign(out.padding, style.padding);
     out.borders = mergeBorders(out.borders, style.borders);
@@ -406,7 +455,7 @@ export function resolveStyle(
         ...out.parts,
         [name]: was
           ? defined<TablePart>({
-              pPr: { ...was.pPr, ...part.pPr },
+              pPr: defined({ ...was.pPr, ...part.pPr, tabs: mergeTabs(was.pPr?.tabs, part.pPr?.tabs) }),
               rPr: { ...was.rPr, ...part.rPr },
               shade: part.shade ?? was.shade,
               cellBorders: mergeBorders(was.cellBorders, part.cellBorders),
@@ -433,7 +482,19 @@ interface InlineContext {
   field?: { code: string; result: boolean; filled?: boolean };
   /** Where the links of the part go outside the document, by relationship id. */
   links?: Map<string, string>;
+  /** The tracked change the runs now coming are part of: inside a `w:ins` or a `w:del`. */
+  revision?: Pick<RunProps, 'revision' | 'revisionAuthor' | 'revisionDate'>;
+  /** Told of each drawing with a text box in it: its `w:txbxContent`, and the XML of the run. */
+  box?: (content: XmlNode, objectXml: string) => void;
 }
+
+/** A tracked change as an element says it: put in or taken out, by whom, when. */
+function revisionOf(node: XmlNode, type: 'insert' | 'delete'): Pick<RunProps, 'revision' | 'revisionAuthor' | 'revisionDate'> {
+  return defined({ revision: type, revisionAuthor: node.attrs['w:author'] ?? '', revisionDate: node.attrs['w:date'] });
+}
+
+/** Tracked changes, and what they are: a move is a change too, taken out where it was and put in where it went. */
+const REVISIONS: Record<string, 'insert' | 'delete'> = { 'w:ins': 'insert', 'w:moveTo': 'insert', 'w:del': 'delete', 'w:moveFrom': 'delete' };
 
 /** The fields whose result changes from page to page. */
 function pageField(field: InlineContext['field']): string | undefined {
@@ -460,6 +521,7 @@ function collectRun(r: XmlNode, wrap: string, ctx: InlineContext): void {
     ...parseRunProps(rPr),
     opaque: rPr ? xml.slice(rPr.openEnd, rPr.closeStart) : undefined,
     wrap: wrap || undefined,
+    ...ctx.revision,
   });
   ctx.last = props;
 
@@ -478,6 +540,8 @@ function collectRun(r: XmlNode, wrap: string, ctx: InlineContext): void {
       case 'w:lastRenderedPageBreak':
         break;
       case 'w:t':
+      // What a tracked change took out is still text, struck through.
+      case 'w:delText':
         text += textOf(c);
         break;
       case 'w:tab':
@@ -508,11 +572,15 @@ function collectRun(r: XmlNode, wrap: string, ctx: InlineContext): void {
             if (empty) ctx.out.push({ text: '1', props: { ...props, field: empty } });
             ctx.field = undefined;
           }
-        } else if (c.name === 'w:instrText' && ctx.field) {
+        } else if ((c.name === 'w:instrText' || c.name === 'w:delInstrText') && ctx.field) {
           ctx.field.code += textOf(c);
         }
         const rPrXml = rPr ? xml.slice(rPr.start, rPr.end) : '';
-        ctx.out.push(objectRun(props, `${xml.slice(r.start, r.openEnd)}${rPrXml}${xml.slice(c.start, c.end)}</w:r>`));
+        const objectXml = `${xml.slice(r.start, r.openEnd)}${rPrXml}${xml.slice(c.start, c.end)}</w:r>`;
+        ctx.out.push(objectRun(props, objectXml));
+        // A shape with text of its own: its text is read as a story of the document.
+        const content = ctx.box && (c.name === 'w:drawing' || c.name === 'mc:AlternateContent') ? descendant(c, 'w:txbxContent') : undefined;
+        if (content) ctx.box!(content, objectXml);
       }
     }
   }
@@ -528,8 +596,6 @@ function joinWrap(outer: string, prefix: string, suffix: string): string {
 // Elements that only wrap runs; their runs are part of the visible text.
 const INLINE_WRAPPERS = new Set([
   'w:hyperlink',
-  'w:ins',
-  'w:moveTo',
   'w:smartTag',
   'w:fldSimple',
   'w:customXml',
@@ -543,6 +609,15 @@ function collectInline(node: XmlNode, wrap: string, ctx: InlineContext): void {
     if (c.name === '#text' || c.name === 'w:pPr' || c.name === 'w:proofErr') continue;
     if (c.name === 'w:r') {
       collectRun(c, wrap, ctx);
+      continue;
+    }
+    // A tracked change: its runs are part of the text, marked as put in or taken out.
+    const revision = REVISIONS[c.name];
+    if (revision) {
+      const outer = ctx.revision;
+      ctx.revision = revisionOf(c, revision);
+      collectInline(c, wrap, ctx);
+      ctx.revision = outer;
       continue;
     }
     // For w:sdt the runs live one level down, in w:sdtContent.
@@ -559,8 +634,10 @@ function collectInline(node: XmlNode, wrap: string, ctx: InlineContext): void {
       ctx.field = outer;
       continue;
     }
-    // Bookmarks, comment ranges, tracked deletions, math... carried as anchors.
-    const props = defined<RunProps>({ ...ctx.last, wrap: wrap || undefined });
+    // Where a move started and ended: the move is read as text taken out and text put in, which need no such marks.
+    if (/^w:move(?:From|To)Range(?:Start|End)$/.test(c.name)) continue;
+    // Bookmarks, comment ranges, math... carried as anchors, part of the change they are inside, if any.
+    const props = defined<RunProps>({ ...ctx.last, wrap: wrap || undefined, revision: undefined, revisionAuthor: undefined, revisionDate: undefined, ...ctx.revision });
     ctx.out.push(objectRun(props, xml.slice(c.start, c.end)));
   }
 }
@@ -578,7 +655,8 @@ function resolveParagraphProps(
   styled: ParagraphProps,
   direct: ParagraphProps,
 ): ParagraphProps {
-  const props = { ...sheet.paragraphDefaults, ...styled, ...direct };
+  const tabs = mergeTabs(mergeTabs(sheet.paragraphDefaults.tabs, styled.tabs), direct.tabs);
+  const props = defined({ ...sheet.paragraphDefaults, ...styled, ...direct, tabs });
   if (!numbering || !props.numId) return props;
   const level = props.listLevel ?? (styleId ? listLevelOfStyle(numbering, props.numId, styleId) : undefined) ?? 0;
   const def = levelOf(numbering, props.numId, level);
@@ -590,6 +668,7 @@ function resolveParagraphProps(
     ...styled,
     ...(fromStyle ? {} : indents),
     ...direct,
+    ...(tabs ? { tabs } : {}),
     listLevel: level,
   };
 }
@@ -610,6 +689,20 @@ interface BlockContext {
   tableStyle?: { pPr: ParagraphProps; rPr: RunProps };
   /** Where the links of the part go outside the document, by relationship id. */
   links?: Map<string, string>;
+  /** The path of the part being read. */
+  path?: string;
+  /** Reads the text of a text box whose drawing is in this part, the first time it comes. */
+  boxes?: (content: XmlNode, objectXml: string, ctx: BlockContext) => void;
+}
+
+/** The first element called `name` down from `node`, itself included. */
+function descendant(node: XmlNode, name: string): XmlNode | undefined {
+  if (node.name === name) return node;
+  for (const c of node.children) {
+    const found = descendant(c, name);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 /** The addresses the links of a part go to, by the id of the relationship that names each. */
@@ -630,10 +723,10 @@ function parseParagraph(p: XmlNode, ctx: BlockContext): Paragraph {
   const styleId = val(child(pPr, 'w:pStyle')) ?? sheet.defaultParagraphStyle;
   const style = resolveStyle(sheet, styleId);
   // A table style sits between the document defaults and the paragraph style.
-  const styled = { ...ctx.tableStyle?.pPr, ...style.pPr };
+  const styled = defined({ ...ctx.tableStyle?.pPr, ...style.pPr, tabs: mergeTabs(ctx.tableStyle?.pPr.tabs, style.pPr.tabs) });
   const props = resolveParagraphProps(sheet, ctx.numbering, styleId, styled, parseParagraphProps(pPr));
   const base = { ...sheet.runDefaults, ...ctx.tableStyle?.rPr, ...style.rPr };
-  const inline: InlineContext = { xml, sheet, base, last: base, out: [], links: ctx.links };
+  const inline: InlineContext = { xml, sheet, base, last: base, out: [], links: ctx.links, box: ctx.boxes && ((content, objectXml) => ctx.boxes!(content, objectXml, ctx)) };
   collectInline(p, '', inline);
   // An empty paragraph takes the formatting of its paragraph mark.
   const mark = child(pPr, 'w:rPr');
@@ -647,8 +740,12 @@ function parseParagraph(p: XmlNode, ctx: BlockContext): Paragraph {
   const runs = onlyMarks ? inline.out.map((run) => ({ ...run, props: defined<RunProps>({ ...run.props, fontSize: markProps.fontSize, fontFamily: markProps.fontFamily }) })) : inline.out;
   // A section break inside a table cell is not one Word honours.
   const sect = ctx.cell ? undefined : child(pPr, 'w:sectPr');
+  // The mark that ends the paragraph, put in or taken out while changes were tracked.
+  const markChange = mark?.children.find((c) => c.name === 'w:ins' || c.name === 'w:del' || c.name === 'w:moveTo' || c.name === 'w:moveFrom');
+  const markRevision = markChange && revisionOf(markChange, REVISIONS[markChange.name]);
+  const own = markRevision ? defined({ ...props, markRevision: markRevision.revision, markAuthor: markRevision.revisionAuthor, markDate: markRevision.revisionDate }) : props;
   const paragraph = defined<Paragraph>({
-    props: styleId ? { ...props, styleId } : props,
+    props: styleId ? { ...own, styleId } : own,
     runs: normalizeRuns(runs, markProps),
     cell: ctx.cell,
     origin: slots.length,
@@ -867,6 +964,7 @@ function parseTable(tbl: XmlNode, ctx: BlockContext): void {
           lines: drawn && !plain ? lines : undefined,
           shade: shadeOf(child(tcPr, 'w:shd')) ?? partShade ?? tableShade,
           valign,
+          direction: DIRECTION[val(child(tcPr, 'w:textDirection')) ?? ''],
           ...parsePadding(child(tcPr, 'w:tcMar')),
         }),
       );
@@ -957,11 +1055,6 @@ function parseSection(sect: XmlNode, xml: string): Section {
   });
 }
 
-/** Whether a section's properties name a header or a footer for its pages. */
-function namesStory(sect: XmlNode | undefined, reference: string): boolean {
-  return childrenOf(sect, reference).some((ref) => (ref.attrs['w:type'] ?? 'default') === 'default');
-}
-
 /** The text of a comment: its paragraphs, one to a line. */
 function commentText(node: XmlNode): string {
   const inline = (n: XmlNode): string =>
@@ -1017,6 +1110,17 @@ function readNoteColors(files: Record<string, Uint8Array>): Map<string, string> 
   return colors;
 }
 
+/** The part of a type the main part points to, such as its 'footnotes'. */
+function partOfType(files: Record<string, Uint8Array>, mainPath: string, type: string): string | undefined {
+  const slash = mainPath.lastIndexOf('/') + 1;
+  const dir = mainPath.slice(0, slash);
+  const rels = files[`${dir}_rels/${mainPath.slice(slash)}.rels`];
+  if (!rels) return undefined;
+  const rel = childrenOf(child(parseXml(strFromU8(rels)), 'Relationships'), 'Relationship').find((r) => r.attrs.Type?.endsWith(`/${type}`) && r.attrs.TargetMode !== 'External');
+  const target = rel?.attrs.Target;
+  return target ? (target.startsWith('/') ? target.slice(1) : dir + target) : undefined;
+}
+
 /** Path of the main document part, read from the package relationships. */
 function mainPartPath(files: Record<string, Uint8Array>): string {
   const rels = files['_rels/.rels'];
@@ -1045,11 +1149,27 @@ export function importDocx(data: Uint8Array): Doc {
   const body = child(child(parseXml(xml), 'w:document'), 'w:body');
   if (!body) throw new Error('Not a DOCX file: the document has no body');
 
+  // The text of the text boxes, read where their drawings are: once each, by the id of its drawing.
+  const textBoxes: TextBox[] = [];
+  const boxSources = new Map<string, StorySource>();
+  const boxes = (content: XmlNode, objectXml: string, ctx: BlockContext) => {
+    const id = textBoxId(objectXml);
+    if (id === undefined || boxSources.has(id)) return;
+    const boxSlots: SourceSlot[] = [];
+    const boxTables: Table[] = [];
+    const out: Paragraph[] = [];
+    collectBlocks(content, { ...ctx, slots: boxSlots, tables: boxTables, tableNodes: [], out, cell: undefined, tableStyle: undefined });
+    if (!out.length) return;
+    const box = defined<TextBox>({ id, paragraphs: out, tables: boxTables.length ? boxTables : undefined });
+    textBoxes.push(box);
+    boxSources.set(id, { path: ctx.path ?? mainPath, xml: ctx.xml, root: content, slots: boxSlots, story: box });
+  };
+
   const paragraphs: Paragraph[] = [];
   const slots: SourceSlot[] = [];
   const tables: Table[] = [];
   const tableNodes: XmlNode[] = [];
-  collectBlocks(body, { xml, sheet, numbering, slots, tables, tableNodes, out: paragraphs, links: externalLinks(files, mainPath) });
+  collectBlocks(body, { xml, sheet, numbering, slots, tables, tableNodes, out: paragraphs, links: externalLinks(files, mainPath), path: mainPath, boxes });
   if (!paragraphs.length) {
     paragraphs.push({ props: { ...sheet.paragraphDefaults }, runs: [{ text: '', props: { ...sheet.runDefaults } }] });
   }
@@ -1058,30 +1178,55 @@ export function importDocx(data: Uint8Array): Doc {
 
   // The header and footer every page shows: the ones the last section marks as default.
   const sect = child(body, 'w:sectPr');
-  const story = (reference: string, rootName: string, type = 'default'): StorySource | undefined => {
-    const ref = childrenOf(sect, reference).find((r) => (r.attrs['w:type'] ?? 'default') === type);
-    const path = relationships(source).get(ref?.attrs['r:id'] ?? '');
-    const part = path ? files[path] : undefined;
-    if (!path || !part) return undefined;
+  /** The parts read, by path: sections that name the same one share what was read from it. */
+  const read = new Map<string, StorySource | undefined>();
+  const readPart = (path: string | undefined, rootName: string): StorySource | undefined => {
+    if (!path) return undefined;
+    if (!read.has(path)) read.set(path, readStory(path, rootName));
+    return read.get(path);
+  };
+  const readStory = (path: string, rootName: string): StorySource | undefined => {
+    const part = files[path];
+    if (!part) return undefined;
     const partXml = strFromU8(part);
     const root = child(parseXml(partXml), rootName);
     if (!root) return undefined;
     const storyTables: Table[] = [];
     const storySlots: SourceSlot[] = [];
     const out: Paragraph[] = [];
-    collectBlocks(root, { xml: partXml, sheet, numbering, slots: storySlots, tables: storyTables, tableNodes: [], out, links: externalLinks(files, path) });
-    const read = defined<Story>({ paragraphs: out, tables: storyTables.length ? storyTables : undefined });
-    return { path, xml: partXml, root, slots: storySlots, story: read };
+    collectBlocks(root, { xml: partXml, sheet, numbering, slots: storySlots, tables: storyTables, tableNodes: [], out, links: externalLinks(files, path), path, boxes });
+    const made = defined<Story>({ paragraphs: out, tables: storyTables.length ? storyTables : undefined });
+    return { path, xml: partXml, root, slots: storySlots, story: made };
   };
-  const header = story('w:headerReference', 'w:hdr');
-  const footer = story('w:footerReference', 'w:ftr');
+  // What each section shows: a section that names no part of a kind shows the one the section before it shows, as in Word.
+  const ROOTS = { header: 'w:hdr', footer: 'w:ftr', firstHeader: 'w:hdr', firstFooter: 'w:ftr' } as const;
+  const REFS = { header: ['w:headerReference', 'default'], footer: ['w:footerReference', 'default'], firstHeader: ['w:headerReference', 'first'], firstFooter: ['w:footerReference', 'first'] } as const;
+  const named = (node: XmlNode | undefined, base: BasePart) => {
+    const [reference, type] = REFS[base];
+    const ref = childrenOf(node, reference).find((r) => (r.attrs['w:type'] ?? 'default') === type);
+    return ref && relationships(source).get(ref.attrs['r:id'] ?? '');
+  };
+  const ownsFirst = (node: XmlNode | undefined) => {
+    const titlePg = child(node, 'w:titlePg');
+    return !!titlePg && !['0', 'false', 'off'].includes(titlePg.attrs['w:val'] ?? '1');
+  };
+  const marks = paragraphs.filter((p) => p.section);
+  const nodes = [...marks.map((p) => child(child(slots[p.origin!].node, 'w:pPr'), 'w:sectPr')), sect];
+  const shows: Partial<Record<BasePart, string>>[] = [];
+  nodes.forEach((node, k) => {
+    const was = shows[k - 1] ?? {};
+    shows.push(Object.fromEntries(STORY_PARTS.map((base) => [base, named(node, base) ?? was[base]])));
+  });
+  const last = shows[shows.length - 1];
+  const story = (base: BasePart) => readPart(last[base], ROOTS[base]);
+  const header = story('header');
+  const footer = story('footer');
   if (header) Object.assign(source, { headerPath: header.path, headerSource: header });
   if (footer) Object.assign(source, { footerPath: footer.path, footerSource: footer });
   // A first page with a header and a footer of its own.
-  const titlePg = child(sect, 'w:titlePg');
-  const ownFirst = !!titlePg && !['0', 'false', 'off'].includes(titlePg.attrs['w:val'] ?? '1');
-  const firstHeader = ownFirst ? story('w:headerReference', 'w:hdr', 'first') : undefined;
-  const firstFooter = ownFirst ? story('w:footerReference', 'w:ftr', 'first') : undefined;
+  const ownFirst = ownsFirst(sect);
+  const firstHeader = ownFirst ? story('firstHeader') : undefined;
+  const firstFooter = ownFirst ? story('firstFooter') : undefined;
   if (firstHeader) Object.assign(source, { firstHeaderPath: firstHeader.path, firstHeaderSource: firstHeader });
   if (firstFooter) Object.assign(source, { firstFooterPath: firstFooter.path, firstFooterSource: firstFooter });
   source.titlePage = ownFirst;
@@ -1090,6 +1235,10 @@ export function importDocx(data: Uint8Array): Doc {
   const settings = files[`${dir}settings.xml`];
   const compat = settings && /<w:compatSetting\b[^>]*w:name="compatibilityMode"[^>]*>/.exec(strFromU8(settings))?.[0];
   const compatMode = int(/w:val="(\d+)"/.exec(compat || '')?.[1]);
+  const defaultTabStop = twips(settings && /<w:defaultTabStop\b[^>]*w:val="(\d+)"/.exec(strFromU8(settings))?.[1]);
+  // Whether the document keeps the changes made to it, as Word's "Track changes" says.
+  const tracking = settings ? /<w:trackRevisions\b(?![^>]*w:val="(?:0|false|off)")[^>]*\/?>/.test(strFromU8(settings)) : false;
+  source.trackRevisions = tracking;
 
   const page = parsePage(sect);
   source.page = page;
@@ -1098,25 +1247,61 @@ export function importDocx(data: Uint8Array): Doc {
   const lastStart = val(child(sect, 'w:type'));
   if (lastStart && SECTION_STARTS.has(lastStart) && lastStart !== 'nextPage') source.sectionStart = lastStart as SectionStart;
 
-  // A section that names no header shows the one of the section before it; the first ones may have none at all.
-  let header0 = false;
-  let footer0 = false;
-  for (const p of paragraphs) {
-    if (!p.section) continue;
-    const node = child(child(slots[p.origin!].node, 'w:pPr'), 'w:sectPr');
-    header0 ||= namesStory(node, 'w:headerReference');
-    footer0 ||= namesStory(node, 'w:footerReference');
-    if (!header0) p.section.noHeader = true;
-    if (!footer0) p.section.noFooter = true;
-  }
-  header0 ||= namesStory(sect, 'w:headerReference');
-  footer0 ||= namesStory(sect, 'w:footerReference');
+  // A section before the last shows the document's header when it shows the same part; one of its own when it shows another, and none when none.
+  marks.forEach((p, k) => {
+    const section = p.section!;
+    const own: Partial<Record<BasePart, StorySource>> = {};
+    for (const kind of ['header', 'footer'] as const) {
+      const path = shows[k][kind];
+      if (!path || !readPart(path, ROOTS[kind])) section[kind === 'header' ? 'noHeader' : 'noFooter'] = true;
+      else if (path !== last[kind]) own[kind] = readPart(path, ROOTS[kind]);
+    }
+    if (ownsFirst(nodes[k])) {
+      own.firstHeader = readPart(shows[k].firstHeader, ROOTS.firstHeader);
+      own.firstFooter = readPart(shows[k].firstFooter, ROOTS.firstFooter);
+      section.firstPage = defined({ header: own.firstHeader?.story, footer: own.firstFooter?.story });
+    }
+    if (own.header) section.header = own.header.story;
+    if (own.footer) section.footer = own.footer.story;
+    if (Object.values(own).some(Boolean)) (source.sectionStories ??= {})[p.origin!] = defined(own);
+  });
+  const header0 = !!header;
+  const footer0 = !!footer;
 
-  const read = readNotes(files, mainPath);
-  if (read) Object.assign(source, { notesPath: read.path, notes: read.notes });
+  // The notes at the foot of the pages, each a story of its own; the separator above them, as the file draws it.
+  const footnotes: Footnote[] = [];
+  let footnoteSeparator: Paragraph | undefined;
+  const footnotesPath = partOfType(files, mainPath, 'footnotes');
+  if (footnotesPath && files[footnotesPath]) {
+    const partXml = strFromU8(files[footnotesPath]);
+    const root = child(parseXml(partXml), 'w:footnotes');
+    const sources = new Map<string, StorySource>();
+    for (const node of childrenOf(root, 'w:footnote')) {
+      const id = node.attrs['w:id'];
+      const type = node.attrs['w:type'] ?? 'normal';
+      if (id === undefined) continue;
+      const storyTables: Table[] = [];
+      const storySlots: SourceSlot[] = [];
+      const out: Paragraph[] = [];
+      collectBlocks(node, { xml: partXml, sheet, numbering, slots: storySlots, tables: storyTables, tableNodes: [], out, links: externalLinks(files, footnotesPath), path: footnotesPath, boxes });
+      if (type === 'separator') {
+        footnoteSeparator ??= out[0];
+        continue;
+      }
+      if (type !== 'normal' || !out.length) continue;
+      const note = defined<Footnote>({ id, paragraphs: out, tables: storyTables.length ? storyTables : undefined });
+      footnotes.push(note);
+      sources.set(id, { path: footnotesPath, xml: partXml, root: node, slots: storySlots, story: note });
+    }
+    Object.assign(source, { footnotesPath, footnoteSources: sources });
+  }
+
+  const notes = readNotes(files, mainPath);
+  if (notes) Object.assign(source, { notesPath: notes.path, notes: notes.notes });
 
   const used = new Set<string>();
-  for (const p of [...paragraphs, ...(header?.story.paragraphs ?? []), ...(footer?.story.paragraphs ?? [])]) {
+  if (boxSources.size) source.textBoxSources = boxSources;
+  for (const p of [...paragraphs, ...[...read.values()].flatMap((part) => part?.story.paragraphs ?? []), ...footnotes.flatMap((note) => note.paragraphs), ...textBoxes.flatMap((box) => box.paragraphs)]) {
     if (p.props.styleId) used.add(p.props.styleId);
   }
 
@@ -1127,12 +1312,17 @@ export function importDocx(data: Uint8Array): Doc {
     noHeader: header0 ? undefined : true,
     noFooter: footer0 ? undefined : true,
     compatMode,
+    ...(defaultTabStop ? { defaultTabStop } : {}),
+    trackRevisions: tracking || undefined,
     paragraphs,
     tables: tables.length ? tables : undefined,
     header: header?.story,
     footer: footer?.story,
     firstPage,
-    notes: read?.notes.length ? read.notes : undefined,
+    notes: notes?.notes.length ? notes.notes : undefined,
+    footnotes: footnotes.length ? footnotes : undefined,
+    footnoteSeparator,
+    textBoxes: textBoxes.length ? textBoxes : undefined,
     styles: styleCatalog(sheet, used),
     numbering,
     source,

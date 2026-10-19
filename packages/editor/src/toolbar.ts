@@ -170,6 +170,9 @@ const ICONS = {
   variable: svg('<path d="M6.5 3.5c-1.5 0-2 .8-2 2v2c0 .9-.6 1.5-1.5 1.5.9 0 1.5.6 1.5 1.5v2c0 1.2.5 2 2 2M11.5 3.5c1.5 0 2 .8 2 2v2c0 .9.6 1.5 1.5 1.5-.9 0-1.5.6-1.5 1.5v2c0 1.2-.5 2-2 2"/>'),
   link: svg('<path d="M7.5 10.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.9.9"/><path d="M10.5 7.5a3 3 0 0 0-4.2 0L4 9.8A3 3 0 0 0 8.2 14l.9-.9"/>'),
   note: svg('<path d="M3.5 4.5h11v8h-6l-3 2.5v-2.5h-2z"/>'),
+  textBox: svg('<rect x="2.5" y="3.5" width="13" height="11" rx="1"/><path d="M5.5 7h7M9 7v5"/>'),
+  review: svg('<path d="M3 13.5V15h1.5l7.4-7.4-1.5-1.5L3 13.5zM12.6 4.4l1.5 1.5 1.2-1.2a1 1 0 0 0 0-1.4l-.1-.1a1 1 0 0 0-1.4 0l-1.2 1.2zM9 15h6"/>'),
+  footnote: svg('<path d="M2.5 15.5h13M2.5 12.5h7M3 4l4.5 5M7.5 4L3 9M11 3.5l1.5-1v4"/>'),
   pageBreak: svg('<path d="M4.5 2.5v4h9v-4M4.5 15.5v-4h9v4M2.5 9h2M6.5 9h2M10.5 9h2M14.5 9h1"/>'),
   columns: svg('<path d="M2.5 4h5.5M2.5 7h5.5M2.5 10h5.5M2.5 13h4M10 4h5.5M10 7h5.5M10 10h5.5M10 13h3"/>'),
   colOne: svg('<path d="M3 4h12M3 7h12M3 10h12M3 13h8"/>'),
@@ -180,6 +183,9 @@ const ICONS = {
   alignTop: svg('<path d="M3 3h12M9 15V6.5M6 9.5l3-3 3 3"/>'),
   alignMiddle: svg('<path d="M3 9h12M9 2.5v4M7 4.8l2 1.7 2-1.7M9 15.5v-4M7 13.2l2-1.7 2 1.7"/>'),
   alignBottom: svg('<path d="M3 15h12M9 3v8.5M6 8.5l3 3 3-3"/>'),
+  textLevel: svg('<path d="M3 5h8M7 5v8M12 12h4M14 10l2 2-2 2"/>'),
+  textUp: svg('<path d="M5 15V7M5 11h4M12 16V4M10 6l2-2 2 2"/>'),
+  textDown: svg('<path d="M5 3v8M5 7h4M12 2v12M10 12l2 2 2-2"/>'),
   lineSingle: svg('<path d="M2.5 9h13"/>'),
   lineDouble: svg('<path d="M2.5 7.5h13M2.5 10.5h13"/>'),
   lineDashed: svg('<path d="M2.5 9h13" stroke-dasharray="3 2"/>'),
@@ -626,6 +632,8 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
           ICONS.variable,
         ),
         entry('link', t('insert.link'), ask(options.onInsertLink, t('link.address'), (address) => editor.setLink(address)), false, undefined, `${MOD}K`, ICONS.link),
+        entry('footnote', t('insert.footnote'), () => editor.insertFootnote(), !body, undefined, IS_MAC ? '⌘⌥F' : 'Ctrl+Alt+F', ICONS.footnote),
+        entry('text-box', t('insert.textBox'), () => editor.insertTextBox(), !body, undefined, undefined, ICONS.textBox),
         entry('note', t('insert.note'), ask(options.onInsertNote, t('bubble.notePlaceholder'), (text) => editor.addNote(text)), !body, undefined, undefined, ICONS.note),
         // A document has one: once it is there, this brings it up to date.
         editor.hasToc
@@ -639,6 +647,39 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     },
   );
   insert.classList.add('dx-tb-text');
+
+  // --- Review -----------------------------------------------------------------------
+
+  // Tracked changes: on and off, and accepting or rejecting what was tracked. On, the button says so.
+  const review = button(
+    'review',
+    t('review.tools'),
+    `${ICONS.review}<span>${t('review')}</span>${ICONS.caret}`,
+    () => {
+      const panel = el('div', '');
+      const entry = (name: string, ...rest: Parameters<typeof item>) => {
+        const node = item(...rest);
+        node.dataset.name = `review-${name}`;
+        return node;
+      };
+      const active = !!editor.activeRevision;
+      const any = editor.hasRevisions;
+      panel.append(
+        entry('track', t('review.track'), () => editor.setTrackChanges(!editor.trackChanges), false, editor.trackChanges, IS_MAC ? '⌘⇧E' : 'Ctrl+Shift+E'),
+        el('div', 'dx-tb-rule'),
+        entry('accept', t('review.accept'), () => editor.acceptRevision(), !active),
+        entry('reject', t('review.reject'), () => editor.rejectRevision(), !active),
+        entry('prev', t('review.prev'), () => editor.goToRevision(-1), !any),
+        entry('next', t('review.next'), () => editor.goToRevision(1), !any),
+        el('div', 'dx-tb-rule'),
+        entry('accept-all', t('review.acceptAll'), () => editor.acceptAllRevisions(), !any),
+        entry('reject-all', t('review.rejectAll'), () => editor.rejectAllRevisions(), !any),
+      );
+      openPopover(review, panel);
+    },
+    () => ({ on: editor.trackChanges }),
+  );
+  review.classList.add('dx-tb-text');
 
   // --- Tables ---------------------------------------------------------------------
 
@@ -728,6 +769,12 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
             choice(ICONS.alignMiddle, t('table.alignCenter'), cell.valign === 'center', () => editor.setTableCellProps({ valign: 'center' })),
             choice(ICONS.alignBottom, t('table.alignBottom'), cell.valign === 'bottom', () => editor.setTableCellProps({ valign: 'bottom' })),
           ),
+          head(t('table.direction')),
+          segments(
+            choice(ICONS.textLevel, t('table.directionLevel'), cell.direction === 'level', () => editor.setTableCellProps({ direction: 'level' })),
+            choice(ICONS.textUp, t('table.directionUp'), cell.direction === 'up', () => editor.setTableCellProps({ direction: 'up' })),
+            choice(ICONS.textDown, t('table.directionDown'), cell.direction === 'down', () => editor.setTableCellProps({ direction: 'down' })),
+          ),
           el('div', 'dx-tb-rule'),
           item(editor.tableBorders() ? t('table.hideBorders') : t('table.showBorders'), () => editor.setTableBorders(!editor.tableBorders())),
           item(t('table.cellBorders'), () => editor.setTableCellProps({ borders: !cell.borders }), false, cell.borders),
@@ -750,7 +797,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   );
   // Off, it says what turns it on.
   updates.push(() => (table.dataset.tip = editor.inTable ? t('toolbar.tableTools') : `${t('toolbar.tableTools')} — ${t('toolbar.tableOff')}`));
-  group(insert, table);
+  group(insert, review, table);
 
   // --- Page -----------------------------------------------------------------------
 
@@ -776,7 +823,17 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     // A header and a footer for the first page alone: a cover does not show the ones of the pages after it.
     const first = item(t('page.firstDifferent'), () => editor.setFirstPageDifferent(!editor.firstPageDifferent), false, editor.firstPageDifferent);
     first.dataset.name = 'first-page';
-    panel.append(edit(t('toolbar.editHeader'), 'header'), edit(t('toolbar.editFooter'), 'footer'), first, el('div', 'dx-tb-rule'));
+    panel.append(edit(t('toolbar.editHeader'), 'header'), edit(t('toolbar.editFooter'), 'footer'), first);
+    // A section before the last may show the document's header and footer, or have its own.
+    if (editor.sectionIndex < editor.sectionCount - 1) {
+      const own = item(t('page.ownHeaders'), () => {
+        editor.setOwnHeaders(!editor.ownHeaders);
+        popover?.replaceChildren(pagePanel());
+      }, false, editor.ownHeaders);
+      own.dataset.name = 'own-headers';
+      panel.append(own);
+    }
+    panel.append(el('div', 'dx-tb-rule'));
     /** One of a row of choices of which a single one is on. */
     const choice = (html: string, label: string, on: boolean, next: PageNumbering | undefined, disabled = false) => {
       const node = el('button', `dx-tb-btn${on ? ' dx-on' : ''}`, html);
@@ -844,7 +901,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     const panel = el('div', '');
     panel.style.minWidth = '260px';
     const now = editor.columns;
-    const { width, marginLeft, marginRight } = editor.doc.page;
+    const { width, marginLeft, marginRight } = editor.page;
     const space = 36;
     const room = width - marginLeft - marginRight - space;
     // A narrow column is a third of the text's width, as in Word's columns to one side.

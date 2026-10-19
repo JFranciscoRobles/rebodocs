@@ -65,7 +65,7 @@ npx @rebodocs/collab --backend https://…   # the room server
 npm install @rebodocs/collab               # to start it from code, or for the client
 ```
 
-The change format (operations addressed by paragraph id, and how concurrent ones are reconciled), the room server, and the client the editor uses. `@rebodocs/collab/server` and `@rebodocs/collab/storage` are the server in a Node program of your own; `@rebodocs/collab/browser` is the client, which `@rebodocs/react` already has inside.
+The change format (operations addressed by paragraph id, and how concurrent ones are reconciled), the room server, and the client the editor uses. The server checks now and then that every editor has its document, and an editor that does not loads the room again; and it tells your backend when a session of work ends, and who changed the document in it, for a version to be kept then. `@rebodocs/collab/server` and `@rebodocs/collab/storage` are the server in a Node program of your own; `@rebodocs/collab/browser` is the client, which `@rebodocs/react` already has inside.
 
 Take it when several people must edit at once. See [Real-time collaboration](/docs/collaboration/).
 
@@ -89,6 +89,6 @@ Besides the packages, the repository has small applications that use them. See [
 | `apps/playground` | The page every package is tried in: `npm run dev`. Its `src/main.ts` is the shortest example of everything wired together. |
 | `apps/demo` | `@rebodocs/react` as an application uses it: the whole editor, and an interface of its own on the hooks. |
 | `apps/storage` | Documents in an S3 bucket: open, save, and a PDF made on the server. |
-| `apps/realtime` | Several people on one document, through a backend with its three routes and signed tickets. |
+| `apps/realtime` | Several people on one document, through a backend with its three routes and signed tickets, and a version of each session of work. |
 | `apps/assistant` | Claude in a chat beside a shared document: the page runs the tools, the backend takes the conversation to the Claude API. |
 | `apps/site` | This website. |

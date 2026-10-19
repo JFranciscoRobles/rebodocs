@@ -31,5 +31,17 @@ export const listDocs = () => ask<StoredFile[]>('/api/docs')
 
 export const createDoc = (key: string) => ask<{ key: string }>(at('/api/docs', key), { method: 'POST' })
 
+/** The versions of a document, as the side panel of the editor asks for them: `<DocsEditor versions={versionsOf(key)} />`. */
+export const versionsOf = (key: string) => ({
+  list: () => ask<{ id: string; date: string; author?: string; label?: string }[]>(at('/api/versions', key)),
+  async load(id: string) {
+    const answer = await fetch(`${at('/api/version', key)}&id=${encodeURIComponent(id)}`)
+    if (!answer.ok) throw new Error(`The server answered ${answer.status}.`)
+    return new Uint8Array(await answer.arrayBuffer())
+  },
+  save: (docx: Uint8Array, info: { label?: string; author?: string }) =>
+    ask<{ id: string }>(`${at('/api/versions', key)}&author=${encodeURIComponent(info.author ?? '')}&label=${encodeURIComponent(info.label ?? '')}`, { method: 'POST', body: docx as BodyInit }),
+})
+
 export const enterRoom = (key: string, name: string) =>
   ask<Room>(at('/api/room', key), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) })

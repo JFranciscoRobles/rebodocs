@@ -63,6 +63,10 @@ In a header or footer, positions are those of its own text: `editor.area` says w
 | `setLink(address)`, `removeLink()`, `activeLink` | |
 | `addNote(text)`, `setNoteText(id, text)`, `removeNote(id)`, `notes` | Comments, as Word has them. |
 | `insertToc()`, `updateToc()`, `outline`, `goToHeading(para)` | |
+| `trackChanges`, `setTrackChanges(on)`, `revisions`, `acceptRevision()`, `rejectRevision()`, `acceptAllRevisions()`, `rejectAllRevisions()`, `goToRevision(dir)` | Tracked changes, as Word's (⌘⇧E / Ctrl+Shift+E). See [tracked changes](/docs/tracked-changes/). |
+| `restoreVersion(doc)` | Takes the document back to an earlier version of it, as one step to undo. See [versions](/docs/versions/). |
+| `readOnly` | Set it, and nothing typed or done changes the document; it can still be selected and copied. |
+| `goTo(pos, part?)` | Puts the caret at `pos` and brings it into view: in the text, or in a header, footer or note (`part`). |
 
 Dragging works too: the edge between two columns moves it, the bottom edge of a row makes it taller or shorter, and the bottom right corner of a table makes the whole table larger or smaller.
 
@@ -73,6 +77,8 @@ Dragging works too: the edge between two columns moves it, the bottom edge of a 
 | `columns` | The columns of the section the caret is in: `count`, `space`, `widths` when they are not all as wide, `separator`. |
 | `setColumns(columns)` | With a caret, the section it is in; with a selection, the selected text alone, as a section of its own on the same page. |
 | `insertColumnBreak()` | What follows the caret starts at the top of the next column. |
+| `insertTextBox(text?)`, `textBoxes` | A text box anchored to the caret's paragraph, the text going round it, with the caret taken into it; the text boxes and their text. A click in a box edits it (`area` is then `'textbox'`); a click on its edge selects it, to drag it elsewhere. |
+| `insertFootnote(text?)`, `footnotes` | A note at the foot of the page at the caret (⌘⌥F / Ctrl+Alt+F), with the caret taken into it; the notes the text refers to, with their numbers. A click on a note edits it: `area` is then `'footnote'`. |
 
 ## Templates
 
@@ -87,9 +93,11 @@ Dragging works too: the edge between two columns moves it, the bottom edge of a 
 
 | Member | What it does |
 | --- | --- |
-| `setPage({ width, height, marginTop, … })` | Size and margins, in points. |
+| `page`, `setPage({ width, height, marginTop, … }, everywhere?)` | Size and margins, in points, of the section being edited (the caret's, or that of the page whose header is open); with `everywhere`, of every section. |
+| `sectionCount`, `sectionIndex`, `sectionPages()`, `setSectionPages(pages)` | The sections, the one being edited (from 0), and the page of each. |
+| `ownHeaders`, `setOwnHeaders(on)` | Whether a section before the last has a header and footer of its own; without, it shows the document's, which are the last section's. |
 | `setPageNumbering(numbering)`, `pageNumbering` | |
-| `setFirstPageDifferent(on)` | A header and footer of its own for the first page. |
+| `firstPageDifferent`, `setFirstPageDifferent(on)` | A header and footer of its own for the first page of the section. |
 | `hasLetterhead`, `letterhead`, `setLetterheadFile(file)`, `fitLetterheadMargins()`, `removeLetterhead()` | See [letterheads](/docs/letterhead/). |
 
 ## Finding

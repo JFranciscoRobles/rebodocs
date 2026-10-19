@@ -333,7 +333,9 @@ describe('docx', () => {
     const doc = importDocx(
       zipSync({ 'word/document.xml': strToU8(document), 'word/styles.xml': strToU8(styles) }),
     );
-    expect(docText(doc)).toBe('Head ing\ncell');
+    // What a tracked change took out is still in the text, marked as taken out.
+    expect(docText(doc)).toBe('Head inggone\ncell');
+    expect(doc.paragraphs[0].runs.at(-1)!.props.revision).toBe('delete');
     const [heading, cell] = doc.paragraphs;
     expect(heading.props).toMatchObject({ align: 'justify', spacingBefore: 12, spacingAfter: 0, lineHeight: 259 / 240 });
     expect(heading.runs[0].props).toMatchObject({ bold: true, fontSize: 16, fontFamily: 'Calibri' });

@@ -27,9 +27,9 @@ export {
   useDocsVariables,
 } from './pieces';
 export { type Docs, type DocsCommands, type DocsCoreOptions, type DocsHeadlessOptions, type DocsKeys, type DocsState, type LetterheadSource, createDocs } from './docs';
-export { addFont, addFonts, addLocale, fontFamilies, getLocale, locales, messages, onLocaleChange, setLocale, t } from '@rebodocs/editor';
-export type { Bubble, Editor, FontSource, MessageKey, Messages, NoteView } from '@rebodocs/editor';
-export { NOTE_COLORS } from '@rebodocs/core';
+export { addFont, addFonts, addLocale, createVersionView, fontFamilies, getLocale, loadVersion, locales, messages, onLocaleChange, setLocale, t } from '@rebodocs/editor';
+export type { Bubble, Editor, FontSource, MessageKey, Messages, NoteView, VersionInfo, VersionView, Versions } from '@rebodocs/editor';
+export { NOTE_COLORS, compareDocs } from '@rebodocs/core';
 export type { ActiveFormat, Border, CellPatch, Columns, FindOptions, FormatId, OutlineItem, PageNumbering, PageSetup } from '@rebodocs/core';
 export type { CollabState, Peer, Session } from '@rebodocs/collab/browser';
 export { type AssistantChat, type AssistantChatOptions, type ChatEntry, createAssistantChat } from '@rebodocs/mcp/browser';

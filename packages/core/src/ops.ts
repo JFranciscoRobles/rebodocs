@@ -32,7 +32,9 @@ function locate(p: Paragraph, offset: number): { index: number; inner: number } 
 /** Formatting that typed text would get at `pos`. */
 export function propsAt(doc: Doc, pos: Position): RunProps {
   const p = doc.paragraphs[pos.para];
-  const props = p.runs[locate(p, pos.offset).index].props;
+  let props = p.runs[locate(p, pos.offset).index].props;
+  // New text is no change of anybody's until it is tracked as one.
+  if (props.revision) props = defined({ ...props, revision: undefined, revisionAuthor: undefined, revisionDate: undefined });
   if (!props.object) return props;
   // Text typed next to an object takes its formatting but is not part of it.
   return defined({ ...props, object: undefined, anchor: undefined, objectWidth: undefined, objectHeight: undefined });
@@ -135,7 +137,8 @@ export function splitParagraph(doc: Doc, pos: Position): { doc: Doc; pos: Positi
   const len = paragraphLength(p);
   // The mark that ends a section is the one at the end of the paragraph, which goes with the second half.
   const { section: _, ...head } = p;
-  const left: Paragraph = { ...head, runs: normalizeRuns(sliceRuns(p.runs, 0, pos.offset), fallback) };
+  // So is the mark that was put in or taken out: the first half ends with a new one.
+  const left: Paragraph = { ...head, props: p.props.markRevision ? defined({ ...p.props, markRevision: undefined, markAuthor: undefined, markDate: undefined }) : p.props, runs: normalizeRuns(sliceRuns(p.runs, 0, pos.offset), fallback) };
   const right: Paragraph = {
     ...p,
     props: defined({ ...p.props, pageBreakBefore: undefined }),

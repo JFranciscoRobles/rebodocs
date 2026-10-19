@@ -43,9 +43,12 @@ tested with plain data.
 | Operations | `ops.ts`, `tables.ts`, `sections.ts`, `images.ts`, `links.ts`, `notes.ts`, `toc.ts`, `numbering.ts`, `pageNumbers.ts`, `letterhead.ts` | Pure functions: `(doc, …) => doc`. Insert and delete text, split and join paragraphs, format, lists, tables, pictures, links, comments, table of contents, page numbers, letterhead. |
 | DOCX | `docx/import.ts`, `docx/export.ts`, `docx/source.ts`, `docx/xml.ts` | Reads a DOCX into a `Doc` and writes it back. The original XML is kept, and only what changed is rewritten. |
 | Layout | `layout.ts`, `reflow.ts` | Breaks paragraphs into lines and lines into pages, with a `TextMeasurer` given from outside. Hit testing, caret and selection rectangles. `layoutReflow` sets the same document to the width of a screen. |
-| Output | `pdf.ts`, `render.ts`, `fonts.ts`, `png.ts`, `markdown.ts` | PDF with embedded and subsetted TrueType fonts, measuring from font files where there is no browser, Markdown. |
+| Output | `pdf.ts`, `render.ts`, `fonts.ts`, `png.ts`, `markdown.ts` | PDF with embedded TrueType (subsetted) and OpenType fonts, measuring from font files where there is no browser, Markdown. |
 | Templates | `variables.ts` | `{{name}}` variables: find, fill, formats (case, dates, numbers, amounts). |
 | Editing aids | `find.ts`, `outline.ts`, `autoformat.ts` | Find and replace, the outline of headings, Markdown-like shortcuts while typing. |
+| Text boxes | `textboxes.ts` | A shape with paragraphs of its own: its text is a story (`Doc.textBoxes`), found by the id of its drawing; how it looks; putting one in. |
+| Tracked changes | `revisions.ts`, `diffing.ts` | `trackEdit`: any edit as tracked changes, what it took out kept struck through; accepting, rejecting and listing them. |
+| Versions | `versions.ts` | `compareDocs`: what changed between two versions, paragraph by paragraph and word by word, and the later one with the changes marked. `restoreVersion`: an earlier version as a change to the current document. |
 
 ## Using it
 
@@ -60,7 +63,7 @@ const docx = exportDocx(doc);
 // Fill a template.
 const filled = fillVariables(doc, { 'client.name': 'Ana Pérez' });
 
-// Lay it out and make a PDF on a server, measuring with font files (.ttf).
+// Lay it out and make a PDF on a server, measuring with font files (.ttf or .otf).
 const fonts = fontFiles.flatMap((file) => readFont(file) ?? []);
 const { pdf, missingFonts } = renderPdf(filled, fonts);
 ```
@@ -87,12 +90,10 @@ undo, layout caching and change detection cheap.
 
 ## Where it can improve
 
-- **Coverage of the format.** Sections are laid out with their own margins
-  and columns, but not their own page size or header. No footnotes, text
-  boxes, tab stops or tracked changes: they survive a round trip but are not
-  laid out. Footnotes are what real documents miss most now.
-- **Tables.** A table inside a cell is not split across pages, vertical text
-  is shown horizontally, and a split row does not apply widow control inside its
+- **Coverage of the format.** Endnotes survive a round trip but are not laid
+  out. Text boxes are drawn as plain rectangles; tracked changes of
+  formatting are kept but not settled.
+- **Tables.** A row split across pages does not apply widow control inside its
   cells.
 - **Fidelity is measured on few documents.** The pagination rules were
   derived from two real files in Arial with Word for Mac. A larger corpus,
@@ -103,8 +104,9 @@ undo, layout caching and change detection cheap.
 - **Right-to-left and complex scripts.** Text is measured and broken as
   left-to-right runs. Arabic, Hebrew and scripts that need shaping are not
   handled.
-- **PDF.** Only TrueType outlines are embedded; OpenType/CFF fonts fall back
-  to a standard font. No tagged PDF (accessibility), no links or outline.
+- **PDF.** OpenType fonts in CFF go in whole, not cut down to the letters used;
+  font collections (.ttc) are not read. No tagged PDF (accessibility), no links
+  or outline.
 - **Hyphenation.** Words are never hyphenated, as Word does not by default.
 - **The API is wide.** `index.ts` exports nearly everything. Before a stable
   release it should be cut to what other packages actually need.

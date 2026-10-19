@@ -2,7 +2,7 @@
 // same layout the editor shows, measured with font files.
 
 import { type Doc, fillVariables, renderPdf } from '@rebodocs/core';
-// Looks for .ttf files in a folder and in the fonts of the system. An application
+// Looks for .ttf and .otf files in a folder and in the fonts of the system. An application
 // of your own reads the ones it ships with `readFont`, as the server guide shows.
 import { fontsFor } from '../../../packages/mcp/src/fonts';
 
@@ -16,7 +16,7 @@ export interface MadePdf {
 export function makePdf(template: Doc, values: Record<string, string>, title: string, fontDirs: string[] = []): MadePdf {
   const doc = fillVariables(template, values);
   const fonts = fontsFor(doc, fontDirs);
-  if (!fonts.length) throw new Error('No .ttf font was found to lay the document out with. Set FONTS_DIR to a folder that has some.');
+  if (!fonts.length) throw new Error('No .ttf or .otf font was found to lay the document out with. Set FONTS_DIR to a folder that has some.');
   const { pdf, layout, missingFonts } = renderPdf(doc, fonts, title);
   return { pdf, pages: layout.pages.length, missingFonts: Object.fromEntries(missingFonts) };
 }

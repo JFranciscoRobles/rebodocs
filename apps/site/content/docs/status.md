@@ -4,7 +4,7 @@ Rebodocs is a word processor compatible with Word files. It is not a copy of Wor
 
 ## What is checked
 
-**312 automated tests**, over the engine, the collaboration change format and session, the texts of the interface, the tools for an assistant and its chat (against a Claude of the tests' own), and the backends of the storage and real-time demos: a bucket kept in memory, and two people typing through the three routes.
+**388 automated tests**, over the engine, the collaboration change format and session, the texts of the interface, the tools for an assistant and its chat (against a Claude of the tests' own), and the backends of the storage and real-time demos: a bucket kept in memory, and two people typing through the three routes.
 
 **Compatibility of layout.** Real documents are compared line by line with the PDF Word exports from the same file. On the receipt used as reference, every line is within 0.4 pt of Word's. The comparison is a command, `npm run word-compare -- file.docx`, so any document can be measured.
 
@@ -34,16 +34,18 @@ Touch input was also tried on a real phone.
 
 **The format**
 
-- Sections and columns are laid out, but every page has the size and the header of the last section, and the page setup changes only that one.
-- No footnotes, text boxes or tracked changes. They survive a round trip, and are shown as plain text where they can be.
-- Tables: tab stops in cells (decimal ones among them) and vertical text are not laid out; a table inside a cell does not break across pages.
+- Endnotes are not laid out. They survive a round trip.
+- Text boxes are drawn as rectangles with a plain fill and line, not turned; one too small for its text loses whole lines where Word cuts one in half. Those only in VML, from old files, are kept but not shown.
+- Tracked changes of formatting and of table rows are kept but not shown or settled; changes to a table's shape are not tracked (see [tracked changes](/docs/tracked-changes/)).
+- Footnotes of a section in columns go across the whole page, and a reference in a table cell does not make room for its note.
+- Comparing versions covers the text and its look, not the page, the sections, style definitions or the size of pictures. A change of look is listed but not marked.
 - No right-to-left text, and no scripts that need shaping.
 - No hyphenation.
 
 **Output**
 
-- PDF embeds TrueType fonts only. No tagged (accessible) PDF, no links or outline in it.
-- Fonts given by an application are not embedded in the DOCX.
+- PDF embeds TrueType and OpenType fonts; OpenType ones in CFF go whole. No tagged (accessible) PDF, no links or outline in it.
+- Fonts given by an application go into the DOCX whole, and only TrueType ones.
 
 **The editor**
 
@@ -60,7 +62,8 @@ Touch input was also tried on a real phone.
 
 - One server process holds a room.
 - Access is checked on joining only.
-- A hard crash loses up to 30 seconds. No version history.
+- Two people cutting, joining and taking out paragraphs around the same place at the same instant can, rarely, end with different documents for a moment: the server's check finds it within a couple of seconds and the editor loads the room again, keeping what was typed, but what can be undone starts over (see [collaboration](/docs/collaboration/#when-two-people-change-the-same-thing)).
+- A hard crash loses up to 30 seconds. The server keeps no versions: the application does, and the editor compares and restores them (see [versions](/docs/versions/)).
 
 **Packaging**
 
@@ -75,9 +78,8 @@ In rough order of how much each would matter.
 2. **Browser tests in the repository.** The interface checks exist as scripts outside it; they belong in a test suite, and the demos have none.
 3. **Collaboration that scales**: several server processes per room, access checked while connected, a durable log.
 4. **Templates by locale**: dates and currency in the language and currency you choose.
-5. **Layout**: a page size and a header per section, tab stops in tables, footnotes.
-6. **Accessibility**: a readable mirror of the text for screen readers, and keyboard access to every menu.
-7. **Rich paste** from Word and the web.
+5. **Accessibility**: a readable mirror of the text for screen readers, and keyboard access to every menu.
+6. **Rich paste** from Word and the web.
 
 ## Contributing
 

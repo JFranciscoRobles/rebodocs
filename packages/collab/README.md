@@ -16,7 +16,7 @@ application's own backend keeps the files and decides who may open them.
 
 | Part | File | What it does |
 | --- | --- | --- |
-| Changes | `changes.ts` | The difference between two documents as a list of operations addressed by paragraph id; applying them; transforming one against another so that everyone ends with the same document. |
+| Changes | `changes.ts` | The difference between two documents as a list of operations addressed by paragraph id; applying them; transforming one against another so that everyone ends with the same document. Headers, footers, footnotes and text boxes go the same way; tracked changes travel as part of the formatting of their text. |
 | Server | `server.ts`, `storage.ts`, `main.ts` (`@rebodocs/collab/server`, `/storage`, the command `rebodocs-collab`) | One room per document: the base file and an ordered log of changes. Node's `http` only, and the engine. |
 | Client | `session.ts` (`@rebodocs/collab/browser`) | Joins a room for an `Editor`: sends its changes, applies the others', shows their carets, undoes only this person's steps, reconnects. |
 
@@ -57,7 +57,7 @@ R2, a disk):
 | Route | When | What it does |
 | --- | --- | --- |
 | `GET  URL/<id>` | Someone opens a room nobody is in. | Returns the DOCX. |
-| `PUT  URL/<id>` | Every `--save-every` seconds with changes, when the room empties, on shutdown. | Stores the DOCX. |
+| `PUT  URL/<id>` | Every `--save-every` seconds with changes, when the room empties, on shutdown. | Stores the DOCX. The one when the room empties, if anybody changed it, has `X-Rebodocs-Session-End: 1` and `X-Rebodocs-Authors` (who changed it, each name URL-encoded, separated by commas): when to keep a version. |
 | `POST URL/<id>/access` | Someone joins. Body: `{ "ticket": "…" }`. | Says whether they may, and as whom: `{ "name": "Ana" }`, or 403. |
 
 The application gives each person a ticket (a signed, short-lived token of
@@ -121,11 +121,18 @@ server.close();
   periodically, and there is no read-only role.
 - **A hard crash loses up to `--save-every` seconds.** The log should be
   written somewhere durable as it grows.
-- **Convergence is tested case by case, not proven.** The transform has unit
-  tests for pairs of concurrent edits. Randomized testing with many clients
-  would find the cases nobody thought of; concurrent edits to the structure
-  of the same table are the weakest part.
-- **No history.** Who changed what, and going back to an earlier version,
-  are not kept.
+- **Convergence is tested, not proven, and checked.** The transform has unit
+  tests for pairs of concurrent edits, and `test/convergence.test.ts` has two
+  people edit at random from 3,000 seeds, all of which end with the same
+  document; with 20,000 seeds and three edits each, 6 do not. So the server
+  sends each room a digest of its document a moment after the changes stop
+  (`checkAfter`), and an editor whose document differs loads the room again,
+  keeping what was typed and not sent, but not what can be undone. Tables are
+  not in the random edits, and concurrent edits to the structure of the same
+  table are the weakest part. More clients than two are untried.
+- **History is the application's.** The server keeps no versions: the
+  editor compares and restores the ones the application keeps (`versions`),
+  and tracked changes say who changed what. A room does not keep a version
+  of its own when it empties.
 - **Presence is minimal.** Carets and names; no "following" someone, no
   indication of who is typing.

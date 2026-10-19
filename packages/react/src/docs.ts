@@ -10,7 +10,7 @@
 
 import { type CollabState, type Peer, type Session, createRoom, joinRoom, pingServer } from '@rebodocs/collab/browser';
 import { letterheadImage } from '@rebodocs/core';
-import { type Bubble, type EditArea, type FontSource, type ViewMode, type ZoomFit, Editor, IS_MAC, addFonts, fontFamilies, createBubble, recallAuthor, setAuthor, t } from '@rebodocs/editor';
+import { type Bubble, type EditArea, type FontSource, type Versions, type ViewMode, type ZoomFit, Editor, IS_MAC, addFonts, fontFamilies, createBubble, recallAuthor, setAuthor, t } from '@rebodocs/editor';
 import { type AssistantLink, type AssistantOptions, connectAssistant } from '@rebodocs/mcp/browser';
 
 export interface DocsCoreOptions {
@@ -36,6 +36,17 @@ export interface DocsCoreOptions {
    * document alone, and stay once given.
    */
   fonts?: FontSource[];
+  /**
+   * Whether the DOCX made of the document carries the fonts given in `fonts`
+   * that its text is in (the TrueType ones whose licence lets them). On unless false.
+   */
+  embedFonts?: boolean;
+  /**
+   * The versions of the document, where the application keeps them: what
+   * lists them, gives one back, and keeps a new one. With them, the side
+   * panel has a tab to compare the document with one and to go back to it.
+   */
+  versions?: Versions;
   /** Given the document when the person saves (⌘S, or `save()`): keeping it is the application's business. */
   onSave?: (docx: Uint8Array, name: string) => void | Promise<void>;
   /** Called when the document changes. */
@@ -102,6 +113,10 @@ export interface DocsState {
   pictureSelected: boolean;
   /** Whether the document has a letterhead: a picture the size of the page under the text. */
   letterhead: boolean;
+  /** Whether what is typed and deleted is tracked, as changes to accept or reject. */
+  trackChanges: boolean;
+  /** How many changes there are to accept or reject; `editor.revisions` lists them. */
+  revisionCount: number;
   /** Where typing goes: the text, or the header or footer. */
   area: EditArea;
   page: number;
@@ -170,9 +185,20 @@ const COMMANDS = [
   'goToHeading',
   'moveSection',
   'insertSignatures',
+  'insertFootnote',
+  'insertTextBox',
+  'restoreVersion',
+  'setTrackChanges',
+  'acceptRevision',
+  'rejectRevision',
+  'acceptAllRevisions',
+  'rejectAllRevisions',
+  'goToRevision',
+  'selectRevision',
   'setPage',
   'setPageNumbering',
   'setFirstPageDifferent',
+  'setOwnHeaders',
   'setLetterhead',
   'setLetterheadFile',
   'fitLetterheadMargins',
@@ -238,6 +264,7 @@ const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingm
 export function createDocs(container: HTMLElement, options: DocsHeadlessOptions = {}): Docs {
   const editor = new Editor(container);
   if (options.fonts?.length) void addFonts(options.fonts);
+  if (options.embedFonts === false) editor.embedFonts = false;
   if (options.author) editor.author = options.author;
   else recallAuthor(editor);
   let name = options.name ?? '';
@@ -416,6 +443,8 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
       canSplitCell: editor.canSplitCell,
       pictureSelected: editor.pictureSelected,
       letterhead: editor.hasLetterhead,
+      trackChanges: editor.trackChanges,
+      revisionCount: editor.revisions.length,
       area: editor.area,
       page: editor.currentPage,
       pageCount: editor.pageCount,

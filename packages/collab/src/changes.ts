@@ -16,11 +16,16 @@ import {
   type Paragraph,
   type Run,
   type RunProps,
+  type Section,
   type Story,
   type StoryPart,
   type Table,
   STORY_PARTS,
+  createDoc,
+  footnotePart,
+  textBoxPart,
   cellOfTable,
+  defined,
   inCell,
   paragraphLength,
   paragraphText,
@@ -44,6 +49,8 @@ export interface Splice extends InFlow {
   insert: Run[];
   /** The formatting the paragraph keeps for what is typed next, when this leaves it without text. */
   empty?: RunProps;
+  /** What it puts in is the text it takes out, with other formatting: it moves nothing, and is made letter by letter. */
+  format?: true;
 }
 
 /** The formatting of a paragraph: only what changed of it. `null` takes a property away. */
@@ -53,6 +60,8 @@ export interface SetParagraph extends InFlow {
   props?: Record<string, unknown>;
   cell?: CellRef | null;
   origin?: number | null;
+  /** The section the paragraph ends, as a whole: its page, its columns, its own header and footer. */
+  section?: Section | null;
 }
 
 export interface InsertParagraphs extends InFlow {
@@ -67,6 +76,11 @@ export interface DeleteParagraph extends InFlow {
   id: string;
   /** The paragraph that was before it: where what was to go after it goes instead. */
   prev: string | null;
+  /**
+   * The paragraph as it was taken out. With it, what someone else was writing
+   * in it meanwhile is not lost: the paragraph goes, and what they wrote stays.
+   */
+  para?: Paragraph;
 }
 
 /** A paragraph cut in two at `at`: what follows becomes the paragraph `newId`, right after it. */
@@ -75,6 +89,11 @@ export interface Split extends InFlow {
   id: string;
   at: number;
   newId: string;
+  /**
+   * The formatting of the second half: that of the paragraph cut, whose mark
+   * it ends with, even when someone else brought that paragraph up to another.
+   */
+  props?: Record<string, unknown>;
 }
 
 /** The paragraph `next` added to the end of `id`, which was `at` long. */
@@ -102,7 +121,7 @@ export interface SetStory {
 
 export interface SetField {
   t: 'set';
-  key: 'page' | 'compatMode' | 'styles' | 'titlePage';
+  key: 'page' | 'compatMode' | 'styles' | 'titlePage' | 'columns' | 'sectionStart' | 'noHeader' | 'noFooter' | 'trackRevisions';
   value: unknown;
 }
 
@@ -131,9 +150,16 @@ export type Op = Splice | SetParagraph | InsertParagraphs | DeleteParagraph | Sp
 // --- Ids ----------------------------------------------------------------------------
 
 /** The paragraphs of each part of a document, the text first. */
+/** The parts a document, or either of two, has text in besides its body: its headers and footers, and its notes at the foot of the pages. */
+export function storyPartsOf(...docs: Doc[]): StoryPart[] {
+  const notes = new Set(docs.flatMap((doc) => (doc.footnotes ?? []).map((note) => footnotePart(note.id))));
+  const boxes = new Set(docs.flatMap((doc) => (doc.textBoxes ?? []).map((box) => textBoxPart(box.id))));
+  return [...STORY_PARTS, ...notes, ...boxes];
+}
+
 function flows(doc: Doc): { part?: StoryPart; paragraphs: Paragraph[] }[] {
   const out: { part?: StoryPart; paragraphs: Paragraph[] }[] = [{ paragraphs: doc.paragraphs }];
-  for (const part of STORY_PARTS) {
+  for (const part of storyPartsOf(doc)) {
     const story = storyOf(doc, part);
     if (story) out.push({ part, paragraphs: story.paragraphs });
   }
@@ -150,7 +176,8 @@ function flows(doc: Doc): { part?: StoryPart; paragraphs: Paragraph[] }[] {
 export function stampIds(doc: Doc): Doc {
   for (const { part, paragraphs } of flows(doc)) {
     paragraphs.forEach((p, i) => {
-      p.id = `${part ?? 'p'}${i}`;
+      // A note's id ends in digits: what follows it is kept apart.
+      p.id = part?.startsWith('footnote:') || part?.startsWith('textbox:') ? `${part}#${i}` : `${part ?? 'p'}${i}`;
     });
   }
   return doc;
@@ -196,7 +223,7 @@ export function ensureIds(before: Doc, after: Doc, mint: () => string): Doc {
   let doc = after;
   const paragraphs = withIds(before.paragraphs, after.paragraphs, mint);
   if (paragraphs !== after.paragraphs) doc = { ...doc, paragraphs };
-  for (const part of STORY_PARTS) {
+  for (const part of storyPartsOf(after)) {
     const story = storyOf(after, part);
     if (!story) continue;
     const next = withIds(storyOf(before, part)?.paragraphs ?? [], story.paragraphs, mint);
@@ -244,7 +271,8 @@ function diffParagraph(was: Paragraph, now: Paragraph, part: StoryPart | undefin
     const insert = sliceRuns(now.runs, head, b.length - tail);
     // An empty paragraph still has the formatting of what will be typed in it.
     const empty = b.length === 0 && !(a.length === 0 && sameProps(was.runs[0]?.props ?? {}, now.runs[0]?.props ?? {})) ? { empty: now.runs[0]?.props ?? {} } : {};
-    if (remove || insert.length || 'empty' in empty) out.push({ t: 'splice', ...flow, id, at: head, remove, insert, ...empty });
+    const format = remove > 0 && a.slice(head, a.length - tail) === b.slice(head, b.length - tail) ? { format: true as const } : {};
+    if (remove || insert.length || 'empty' in empty) out.push({ t: 'splice', ...flow, id, at: head, remove, insert, ...empty, ...format });
   }
   const op: SetParagraph = { t: 'para', ...flow, id };
   if (!sameProps(was.props, now.props)) {
@@ -256,7 +284,8 @@ function diffParagraph(was: Paragraph, now: Paragraph, part: StoryPart | undefin
   }
   if (!sameCell(was.cell, now.cell)) op.cell = now.cell ?? null;
   if (was.origin !== now.origin) op.origin = now.origin ?? null;
-  if (op.props || 'cell' in op || 'origin' in op) out.push(op);
+  if (was.section !== now.section && JSON.stringify(was.section ?? null) !== JSON.stringify(now.section ?? null)) op.section = now.section ?? null;
+  if (op.props || 'cell' in op || 'origin' in op || 'section' in op) out.push(op);
 }
 
 function commonPrefix(a: string, b: string): number {
@@ -308,13 +337,18 @@ function diffFlow(before: Paragraph[], after: Paragraph[], part: StoryPart | und
       const rest = now.slice(commonPrefix(was, now));
       joined = was !== now && rest.length > 0 && paragraphText(tail).endsWith(rest);
     }
-    for (let k = i; k <= stop; k++) {
-      if (joined && k === stop) {
-        out.push({ t: 'join', ...flow, id: last!.id!, next: tail.id!, at: paragraphLength(last!) });
-        state.set(last!.id!, { ...last!, runs: [...last!.runs, ...tail.runs] });
-      } else {
-        out.push({ t: 'delete', ...flow, id: olds[k].id!, prev: last?.id ?? ahead });
+    if (joined) {
+      // Text taken out from one paragraph to another: every paragraph between is brought up to the first, and their text goes as text.
+      // Someone writing in one of them meanwhile keeps what they wrote, as anywhere else in a stretch taken out.
+      let into = state.get(last!.id!)!;
+      for (let k = i; k <= stop; k++) {
+        out.push({ t: 'join', ...flow, id: last!.id!, next: olds[k].id!, at: paragraphLength(into) });
+        const { section: _, ...head } = into;
+        into = defined<Paragraph>({ ...head, runs: [...into.runs, ...olds[k].runs], section: olds[k].section });
       }
+      state.set(last!.id!, into);
+    } else {
+      for (let k = i; k <= stop; k++) out.push({ t: 'delete', ...flow, id: olds[k].id!, prev: last?.id ?? ahead, para: olds[k] });
     }
     i = stop;
   }
@@ -344,9 +378,10 @@ function diffFlow(before: Paragraph[], after: Paragraph[], part: StoryPart | und
       const head = paragraphText(now);
       const rest = paragraphText(follows);
       if (rest.length > 0 && text === head + rest) {
-        out.push({ t: 'split', ...flow, id: now.id!, at: head.length, newId: follows.id! });
+        out.push({ t: 'split', ...flow, id: now.id!, at: head.length, newId: follows.id!, props: was.props as unknown as Record<string, unknown> });
         state.set(follows.id!, { ...was, id: follows.id!, runs: someRuns(sliceRuns(was.runs, head.length, text.length), was.runs) });
-        was = { ...was, runs: someRuns(sliceRuns(was.runs, 0, head.length), was.runs) };
+        const { section: _, ...rest } = was;
+        was = { ...rest, runs: someRuns(sliceRuns(was.runs, 0, head.length), was.runs) };
       }
     }
     diffParagraph(was, now, part, out);
@@ -375,6 +410,9 @@ export function diff(before: Doc, after: Doc): Op[] {
   if (before === after) return out;
   if (before.page !== after.page && !sameProps(before.page, after.page)) out.push({ t: 'set', key: 'page', value: after.page });
   if (before.compatMode !== after.compatMode) out.push({ t: 'set', key: 'compatMode', value: after.compatMode ?? null });
+  for (const key of ['columns', 'sectionStart', 'noHeader', 'noFooter', 'trackRevisions'] as const) {
+    if (before[key] !== after[key] && JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null)) out.push({ t: 'set', key, value: after[key] ?? null });
+  }
   if (before.styles !== after.styles) out.push({ t: 'set', key: 'styles', value: after.styles ?? null });
   diffMap(before.numbering?.abstracts, after.numbering?.abstracts, (id, value) => out.push({ t: 'num', kind: 'abstract', id, value }));
   diffMap(before.numbering?.lists, after.numbering?.lists, (id, value) => out.push({ t: 'num', kind: 'list', id, value }));
@@ -393,13 +431,13 @@ export function diff(before: Doc, after: Doc): Op[] {
     for (const id of had.keys()) out.push({ t: 'note', id, value: null });
   }
   if (!before.firstPage !== !after.firstPage) out.push({ t: 'set', key: 'titlePage', value: !!after.firstPage });
-  for (const part of STORY_PARTS) {
+  for (const part of storyPartsOf(before, after)) {
     const was = storyOf(before, part);
     const now = storyOf(after, part);
     if (was === now) continue;
     if (!was || !now) {
       // Without a first page of its own, its header and footer went with it.
-      if (now || part === 'header' || part === 'footer' || after.firstPage) out.push({ t: 'story', part, value: now ?? null });
+      if (now || part === 'header' || part === 'footer' || part.startsWith('footnote:') || part.startsWith('textbox:') || after.firstPage) out.push({ t: 'story', part, value: now ?? null });
       continue;
     }
     diffTables(was.tables, now.tables, part, out);
@@ -634,6 +672,10 @@ function applyToFlow(flow: Flow, op: Exclude<Op, SetStory | SetField | SetNote |
         if (op.origin === null || op.origin === undefined) delete next.origin;
         else next.origin = op.origin;
       }
+      if ('section' in op) {
+        if (op.section) next.section = op.section;
+        else delete next.section;
+      }
       flow.set(i, next);
       return;
     }
@@ -662,7 +704,9 @@ function applyToFlow(flow: Flow, op: Exclude<Op, SetStory | SetField | SetNote |
       const p = flow.paragraphs[i];
       const length = paragraphLength(p);
       const at = Math.max(0, Math.min(op.at, length));
-      flow.splice(i, 1, { ...p, runs: someRuns(sliceRuns(p.runs, 0, at), p.runs) }, { ...p, id: op.newId, runs: someRuns(sliceRuns(p.runs, at, length), p.runs) });
+      // The mark that ends a section is at the end of the paragraph: it goes with the second half.
+      const { section: _, ...head } = p;
+      flow.splice(i, 1, { ...head, runs: someRuns(sliceRuns(p.runs, 0, at), p.runs) }, { ...p, id: op.newId, ...(op.props ? { props: op.props as unknown as Paragraph['props'] } : {}), runs: someRuns(sliceRuns(p.runs, at, length), p.runs) });
       return;
     }
     case 'join': {
@@ -672,7 +716,9 @@ function applyToFlow(flow: Flow, op: Exclude<Op, SetStory | SetField | SetNote |
       const p = flow.paragraphs[i];
       const next = flow.paragraphs[j];
       flow.touch(next);
-      flow.set(i, { ...p, runs: joinRuns([...p.runs, ...next.runs], p.runs[0]?.props ?? {}) });
+      // What is left ends with the mark of the second, and with the section it ended.
+      const { section: _, ...head } = p;
+      flow.set(i, defined<Paragraph>({ ...head, runs: joinRuns([...p.runs, ...next.runs], p.runs[0]?.props ?? {}), section: next.section }));
       flow.splice(j, 1);
       return;
     }
@@ -780,10 +826,15 @@ function mapOffset(offset: number, at: number, remove: number, added: number, af
  */
 function rebase(a: Op, b: Op, later: boolean): Op[] {
   if (!inText(a) || !inText(b) || a.part !== b.part) return [a];
+  if (b.t === 'delete' && b.para && touches(a, b.id)) return rescued(a, b);
+  if (a.t === 'delete' && a.para && touches(b, a.id)) return trimmed(a, b);
   switch (b.t) {
     case 'splice': {
       const added = insertLength(b);
       if (a.t === 'splice' && a.id === b.id) {
+        // Formatting moves nothing: what it gave to the letters the other took out goes with them, and where both gave some, the one made second.
+        if (a.format && (!b.format || !later)) return outside(a, b);
+        if (b.format) return [a];
         const from = a.at;
         const to = a.at + a.remove;
         const bTo = b.at + b.remove;
@@ -798,7 +849,8 @@ function rebase(a: Op, b: Op, later: boolean): Op[] {
         const stop = Math.max(start, mapOffset(to, b.at, b.remove, added, false));
         return [{ ...a, at: start, remove: stop - start }];
       }
-      if (a.t === 'split' && a.id === b.id) return [{ ...a, at: mapOffset(a.at, b.at, b.remove, added, later) }];
+      // The text put in right where it is cut stays in the first half, as `split` below says; put in place of text that starts there, in the second.
+      if (a.t === 'split' && a.id === b.id) return b.format ? [a] : [{ ...a, at: mapOffset(a.at, b.at, b.remove, added, a.at !== b.at || b.remove === 0) }];
       if (a.t === 'join' && a.id === b.id) return [{ ...a, at: Math.max(0, a.at - b.remove + added) }];
       return [a];
     }
@@ -806,6 +858,13 @@ function rebase(a: Op, b: Op, later: boolean): Op[] {
       if (a.t === 'splice' && a.id === b.id) {
         const to = a.at + a.remove;
         if (a.at > b.at || (a.at === b.at && a.remove > 0)) return [{ ...a, id: b.newId, at: a.at - b.at }];
+        // Formatting across the cut: each half its letters.
+        if (a.format && to > b.at) {
+          return [
+            { ...a, id: b.newId, at: 0, remove: to - b.at, insert: sliceRuns(a.insert, b.at - a.at, a.remove) },
+            { ...a, remove: b.at - a.at, insert: sliceRuns(a.insert, 0, b.at - a.at) },
+          ];
+        }
         if (to > b.at) {
           return [
             { t: 'splice', ...(a.part ? { part: a.part } : {}), id: b.newId, at: 0, remove: to - b.at, insert: [] },
@@ -818,8 +877,12 @@ function rebase(a: Op, b: Op, later: boolean): Op[] {
       if (a.t === 'join' && a.id === b.id) return [{ ...a, id: b.newId, at: Math.max(0, a.at - b.at) }];
       if (a.t === 'insert' && a.after === b.id) return [{ ...a, after: b.newId }];
       if (a.t === 'delete' && a.prev === b.id) return [{ ...a, prev: b.newId }];
-      // Formatting given to the whole paragraph is for both halves of it.
-      if (a.t === 'para' && a.id === b.id && a.props) return [a, { t: 'para', ...(a.part ? { part: a.part } : {}), id: b.newId, props: a.props }];
+      // Formatting given to the whole paragraph is for both halves of it; the section it ends, for the second.
+      if (a.t === 'para' && a.id === b.id && (a.props || 'section' in a)) {
+        const { section, ...first } = a;
+        const second: SetParagraph = { t: 'para', ...(a.part ? { part: a.part } : {}), id: b.newId, ...(a.props ? { props: a.props } : {}), ...('section' in a ? { section } : {}) };
+        return [...(first.props || 'cell' in first || 'origin' in first ? [first] : []), second];
+      }
       return [a];
     }
     case 'join': {
@@ -828,11 +891,38 @@ function rebase(a: Op, b: Op, later: boolean): Op[] {
       if (a.t === 'join') {
         if (a.id === b.id && a.next === b.next) return [];
         if (a.id === b.next) return [{ ...a, id: b.id, at: a.at + b.at }];
+        // The same paragraph brought up to two: one of them took out the paragraph
+        // between, which came back empty for the other to bring it up to. The empty
+        // one goes, and what was brought is in the other.
+        if (a.next === b.next) {
+          if (b.at === 0 && (a.at !== 0 || later)) return [{ ...a, next: b.id }];
+          if (a.at === 0) return [{ t: 'delete', ...(a.part ? { part: a.part } : {}), id: a.id, prev: b.id }];
+        }
         return [a];
       }
       if (a.t === 'insert' && a.after === b.next) return [{ ...a, after: b.id }];
       if (a.t === 'delete') return a.id === b.next ? [] : a.prev === b.next ? [{ ...a, prev: b.id }] : [a];
-      if (a.t === 'para' && a.id === b.next) return [];
+      // The section the second ended is the one what is left ends.
+      if (a.t === 'para' && a.id === b.next) return 'section' in a ? [{ t: 'para', ...(a.part ? { part: a.part } : {}), id: b.id, section: a.section }] : [];
+      return [a];
+    }
+    case 'para': {
+      // Formatting given to a paragraph someone cut is for both halves.
+      if (a.t === 'split' && a.id === b.id && a.props && b.props) {
+        const props = { ...a.props };
+        for (const [key, value] of Object.entries(b.props)) {
+          if (value === null || value === undefined) delete props[key];
+          else props[key] = value;
+        }
+        return [{ ...a, props }];
+      }
+      return [a];
+    }
+    case 'insert': {
+      // Paragraphs both put after the same one: those made second, after the others.
+      if (a.t === 'insert' && later && a.after === b.after && b.paras.length) return [{ ...a, after: b.paras[b.paras.length - 1].id! }];
+      // Paragraphs put in right before one taken out: what was to go where it was goes after them.
+      if (a.t === 'delete' && a.prev === b.after && b.paras.length) return [{ ...a, prev: b.paras[b.paras.length - 1].id! }];
       return [a];
     }
     case 'delete': {
@@ -843,6 +933,105 @@ function rebase(a: Op, b: Op, later: boolean): Op[] {
     default:
       return [a];
   }
+}
+
+// --- A paragraph one deleted while the other was writing in it ---------------------
+// As in a document of characters: the paragraph goes, with the text it had, and
+// what the other put in it meanwhile stays where the paragraph was. Whoever was
+// writing goes on in the same paragraph, which keeps its id. It takes the
+// deletion knowing the paragraph it took out (`para`); one that does not, from
+// an editor of before, takes it all as it did.
+
+/** Whether a change is about the paragraph `id`. */
+const touches = (op: TextOp, id: string): boolean => (op.t === 'join' ? op.id === id || op.next === id : op.t !== 'insert' && op.id === id);
+
+/**
+ * A change to the text of a paragraph as what it really put in: a change
+ * comes as one stretch taken out and one put in, which can have in it, as it
+ * was, text that was there (typing at both ends of a word, giving it
+ * formatting). Gives the stretches that are new, one after the other.
+ */
+function narrow(op: Splice, para: Paragraph): Splice[] {
+  const was = paragraphText(para).slice(op.at, op.at + op.remove);
+  const put = op.insert.map((run) => run.text).join('');
+  const piece = (at: number, remove: number, from: number, to: number): Splice => ({ ...op, at, remove, insert: sliceRuns(op.insert, from, to) });
+  if (put === was) return [];
+  const inside = was ? put.indexOf(was) : -1;
+  // What was there, with something put before it and after it.
+  if (inside >= 0) {
+    const out: Splice[] = [];
+    if (inside + was.length < put.length) out.push(piece(op.at + op.remove, 0, inside + was.length, put.length));
+    if (inside > 0) out.push(piece(op.at, 0, 0, inside));
+    return out;
+  }
+  let head = 0;
+  while (head < was.length && head < put.length && was[head] === put[head]) head++;
+  let tail = 0;
+  while (tail < was.length - head && tail < put.length - head && was[was.length - 1 - tail] === put[put.length - 1 - tail]) tail++;
+  return [piece(op.at + head, op.remove - head - tail, head, put.length - tail)];
+}
+
+/** Whether a change to a paragraph puts text in it that it did not have: not formatting given to what is there, which comes as the same text again. */
+const brings = (op: Splice, para: Paragraph): boolean => narrow(op, para).some((piece) => piece.insert.some((run) => run.text));
+
+/** The paragraph a change leaves of `para`, made the way everybody makes it: two, when it cuts it. */
+function follow(para: Paragraph, op: TextOp): Paragraph[] {
+  const { cell, ...plain } = para;
+  const { part: _, ...flat } = op;
+  const out = apply(createDoc([plain]), [flat as Op]).paragraphs;
+  const placed = op.t === 'para' && 'cell' in op ? (op.cell ?? undefined) : cell;
+  return placed ? out.map((p) => ({ ...p, cell: placed })) : out;
+}
+
+/** Taking all the text out of the paragraph a deletion is about, and leaving it there. */
+const emptied = (d: DeleteParagraph): Splice => ({ t: 'splice', ...(d.part ? { part: d.part } : {}), id: d.id, at: 0, remove: paragraphLength(d.para!), insert: [] });
+
+/** What `a` becomes after the deletion `d` of the paragraph it is about: what brings text to it puts the paragraph back, empty, to bring it to. */
+function rescued(a: TextOp, d: DeleteParagraph): Op[] {
+  const back = (made: Op[]): Op[] => [
+    { t: 'insert', ...(d.part ? { part: d.part } : {}), after: d.prev, paras: [{ ...d.para!, runs: [{ text: '', props: d.para!.runs[0]?.props ?? {} }] }] },
+    ...transform(made, [emptied(d)]).second,
+  ];
+  if (a.t === 'splice') return brings(a, d.para!) ? back(narrow(a, d.para!)) : [];
+  // Another paragraph brought up to the end of it: what it had goes, and what was brought stays.
+  if (a.t === 'join' && a.id === d.id) return back([a]);
+  // Formatting it, cutting it, or bringing it up to the one before: the deletion takes care of it.
+  return [];
+}
+
+/** What the deletion `d` becomes after `b`, which changed the paragraph it takes out: it takes out what the paragraph had, and leaves what was brought. */
+function trimmed(d: DeleteParagraph, b: TextOp): Op[] {
+  const flow = d.part ? { part: d.part } : {};
+  switch (b.t) {
+    case 'splice':
+      return brings(b, d.para!) ? transform([emptied(d)], narrow(b, d.para!)).second : [{ ...d, para: follow(d.para!, b)[0] }];
+    case 'para':
+      return [{ ...d, para: follow(d.para!, b)[0] }];
+    case 'split': {
+      // Both halves were what it had.
+      const [head, tail] = follow(d.para!, b);
+      return [{ ...d, para: head }, { t: 'delete', ...flow, id: b.newId, prev: d.prev, para: tail }];
+    }
+    case 'join':
+      // Brought up to the end of the one before, what it had is there now; brought another up to its own end, it keeps that.
+      return b.next === d.id ? [{ t: 'splice', ...flow, id: b.id, at: b.at, remove: paragraphLength(d.para!), insert: [] }] : [emptied(d)];
+    default:
+      return [];
+  }
+}
+
+/** Formatting `a` made after the change `b` to the same paragraph: on the letters `b` left, and split around what `b` put in. */
+function outside(a: Splice, b: Splice): Splice[] {
+  const from = a.at;
+  const to = a.at + a.remove;
+  const bTo = b.at + b.remove;
+  const out: Splice[] = [];
+  const piece = (start: number, end: number, at: number) => {
+    if (end > start) out.push({ ...a, at, remove: end - start, insert: sliceRuns(a.insert, start - from, end - from) });
+  };
+  piece(Math.max(from, bTo), to, Math.max(from, bTo) - b.remove + insertLength(b));
+  piece(from, Math.min(to, b.at), from);
+  return out;
 }
 
 function pair(as: Op[], bs: Op[]): [Op[], Op[]] {
@@ -922,7 +1111,7 @@ export function mapAnchor(anchor: Anchor, op: Op): Anchor {
   if (op.t === 'story' || op.t === 'set' || op.t === 'note' || op.t === 'media' || op.t === 'num' || op.part !== anchor.part) return anchor;
   switch (op.t) {
     case 'splice':
-      return op.id === anchor.id ? { ...anchor, offset: mapOffset(anchor.offset, op.at, op.remove, insertLength(op), false) } : anchor;
+      return op.id === anchor.id && !op.format ? { ...anchor, offset: mapOffset(anchor.offset, op.at, op.remove, insertLength(op), false) } : anchor;
     case 'split':
       return op.id === anchor.id && anchor.offset > op.at ? { ...anchor, id: op.newId, offset: anchor.offset - op.at } : anchor;
     case 'join':
@@ -932,6 +1121,56 @@ export function mapAnchor(anchor: Anchor, op: Op): Anchor {
     default:
       return anchor;
   }
+}
+
+// --- Whether two hold the same document -------------------------------------------
+// The rules above are tested, not proven: two people can, rarely, end with
+// documents that differ. The server says now and then what its document is
+// like, in a few letters; an editor whose own is not like it loads the room
+// again. Only what reads differently counts: how the text is cut into runs,
+// and properties left at nothing, do not.
+
+/** A few letters that are the same for two documents that read the same: their text, paragraph by paragraph, with its formatting and the shape of its tables. */
+export function digest(doc: Doc): string {
+  const plain = (value: object | undefined) =>
+    value
+      ? JSON.stringify(
+          Object.entries(value)
+            .filter(([, v]) => v !== undefined && v !== null && v !== '' && v !== false)
+            .sort(([x], [y]) => (x < y ? -1 : 1)),
+        )
+      : '';
+  const parts: string[] = [];
+  const flow = (paragraphs: Paragraph[]) => {
+    for (const p of paragraphs) {
+      let runs = '';
+      let last = '';
+      for (const run of p.runs) {
+        if (!run.text) continue;
+        const look = plain(run.props);
+        runs += look === last ? run.text : `\u0001${look}\u0002${run.text}`;
+        last = look;
+      }
+      parts.push(`${p.id}\u0003${plain(p.props)}\u0003${p.cell ? `${p.cell.table}.${p.cell.row}.${p.cell.cell}` : ''}\u0003${p.section ? JSON.stringify(p.section) : ''}\u0003${runs}`);
+    }
+  };
+  flow(doc.paragraphs);
+  parts.push(JSON.stringify(doc.tables ?? []));
+  for (const part of storyPartsOf(doc)) {
+    parts.push(`\u0004${part}`);
+    flow(storyOf(doc, part)?.paragraphs ?? []);
+  }
+  for (const note of doc.notes ?? []) parts.push(`\u0005${note.id}`);
+  // FNV-1a, twice over, from two starts: 16 hex letters.
+  const text = parts.join('\n');
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ c, 0x811c9dc5) >>> 0;
+  }
+  return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
 }
 
 // --- Over the wire ------------------------------------------------------------------

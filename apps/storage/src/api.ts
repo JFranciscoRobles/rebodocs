@@ -7,6 +7,14 @@ export interface BucketFile {
   modified: string
 }
 
+/** A version kept of a document: its key in the bucket is its id. */
+export interface Version {
+  id: string
+  date: string
+  author?: string
+  label?: string
+}
+
 export interface MadePdf {
   key: string
   url: string
@@ -53,3 +61,16 @@ export const variablesOf = async (key: string) => (await ask<{ names: string[] }
 
 export const makePdf = (key: string, values: Record<string, string>) =>
   ask<MadePdf>(at('/api/pdf', key), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(values) })
+
+export const listVersions = (key: string) => ask<Version[]>(at('/api/versions', key))
+
+/** Keeps `docx` as a version of the document at `key`, as the bucket's: the browser writes it there itself. */
+export async function saveVersion(key: string, docx: Uint8Array, meta: { label?: string; author?: string } = {}): Promise<Version> {
+  const { url, type, version } = await ask<{ url: string; type: string; version: Version }>(at('/api/versions', key), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(meta),
+  })
+  await bucket(url, { method: 'PUT', headers: { 'content-type': type }, body: docx as BodyInit })
+  return version
+}

@@ -6,7 +6,8 @@
 import { insertTable, setCellProps } from './tables';
 import { type Doc, type Media, type Paragraph, type Position, type Run, ANCHOR_CHAR, OBJECT_CHAR, defined } from './model';
 import { normalizeRuns, propsAt, sliceRuns } from './ops';
-import { type Anchor, type DocxSource, type StoryPart, anchoredObject, objectImage } from './docx/source';
+import { type Anchor, type DocxSource, type StoryPart, anchoredObject, imageInPart } from './docx/source';
+import { storyPath } from './stories';
 
 const EMU_PER_POINT = 12700;
 /** What stands for the relationship id of a picture that is not in a package yet: this and its key in `doc.media`. */
@@ -273,10 +274,10 @@ export function movePicture(doc: Doc, from: Position, to: Position): { doc: Doc;
 }
 
 /** The picture an object embeds: one put in here, or one of the package the document came from. */
-export function docImage(doc: Pick<Doc, 'media'> & { source?: DocxSource }, xml: string, part?: StoryPart): Media | undefined {
+export function docImage(doc: Pick<Doc, 'media' | 'paragraphs'> & { source?: DocxSource }, xml: string, part?: StoryPart): Media | undefined {
   const key = mediaKey(xml);
   if (key !== undefined) return doc.media?.[key];
-  return doc.source ? objectImage(doc.source, xml, part) : undefined;
+  return doc.source ? imageInPart(doc.source, xml, part ? storyPath(doc, part) : doc.source.mainPath) : undefined;
 }
 
 /** The room, in points, above and below each picture of a grid. */

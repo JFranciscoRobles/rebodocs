@@ -16,6 +16,11 @@ rooms are open and who is in each.
 Open a document, press **Copy link**, and open the link in another window or
 another browser. While someone types it saves itself every 10 seconds.
 
+When everybody has left a document they changed, the backend keeps a version
+of it, signed by who changed it. The **Versions** tab of the side panel lists
+them, compares the document with one and goes back to one, and keeps one by
+hand.
+
 [The guide](https://rebodocs.com/docs/collaboration/) explains each part.
 
 Nothing to set up: the documents are kept in `documents/`, and the first time
@@ -45,8 +50,9 @@ three: the pages, your backend, and
 | File | What it is |
 | --- | --- |
 | `server/collab.ts` | The three routes the collaboration server asks, the signed tickets, and the name of a room. |
-| `server/api.ts` | What the page asks: the documents and who is in the room of each, a new one, a ticket into a room. |
+| `server/api.ts` | What the page asks: the documents and who is in the room of each, a new one, a ticket into a room, the versions. |
 | `server/store.ts` | Where the documents are kept: a folder, or anything with `list`, `get` and `put`. |
+| `server/versions.ts` | The versions, under `versions/` in the same store and named as `apps/storage` names them: one for each session of work, and those kept by hand. |
 | `server/dev.ts`, `vite.config.ts` | How the demo runs everything in one process. |
 | `src/App.tsx` | The page: who you are, the documents, who else is there, the editor. |
 | `test/realtime.test.ts` | The backend with a collaboration server on it, and two people typing. |

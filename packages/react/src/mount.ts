@@ -14,7 +14,7 @@ import { type DocsCoreOptions, type LetterheadSource, createDocs } from './docs'
 export interface DocsFeatures {
   /** The menu of the document: exporting, and the page. On unless false. */
   menu?: boolean;
-  /** The side panel: outline, variables and notes. On unless false. */
+  /** The side panel: outline, variables, notes, and the versions when given. On unless false. */
   panel?: boolean;
   ruler?: boolean;
   statusBar?: boolean;
@@ -131,6 +131,7 @@ export function mountDocs(container: HTMLElement, options: DocsOptions = {}): Do
 
   interface Mounted {
     toolbar: ReturnType<typeof createToolbar>;
+    panel?: ReturnType<typeof createPanel>;
     status?: ReturnType<typeof createStatusBar>;
     destroy(): void;
   }
@@ -153,7 +154,7 @@ export function mountDocs(container: HTMLElement, options: DocsOptions = {}): Do
         })
       : undefined;
     const findBar = on(features.find) ? createFindBar(editor) : undefined;
-    const panel = on(features.panel) ? createPanel(panelEl, editor) : undefined;
+    const panel = on(features.panel) ? createPanel(panelEl, editor, { versions: options.versions, onError: options.onError }) : undefined;
     const bubble = createBubble(editor);
     editor.onLinkKey = () => bubble.ask('link');
     const toolbar = createToolbar(toolbarEl, editor, {
@@ -192,7 +193,7 @@ export function mountDocs(container: HTMLElement, options: DocsOptions = {}): Do
         })
       : undefined;
     const parts = [sidebar, findBar, panel, toolbar, ruler, status, bubble];
-    return { toolbar, status, destroy: () => parts.forEach((one) => one?.destroy()) };
+    return { toolbar, status, panel, destroy: () => parts.forEach((one) => one?.destroy()) };
   };
   let mounted: Mounted | undefined = mount();
 
@@ -200,9 +201,14 @@ export function mountDocs(container: HTMLElement, options: DocsOptions = {}): Do
   const responsive = on(features.responsive) ? createResponsive(root, editor) : undefined;
 
   // What is not the editor's to tell changes too: the name, and the people on the document.
+  let wasDirty = docs.state().dirty;
   const unsubscribe = docs.subscribe(() => {
     mounted?.toolbar.refresh();
     mounted?.status?.refresh();
+    // Saved: the application may have kept a version of it.
+    const dirty = docs.state().dirty;
+    if (wasDirty && !dirty) mounted?.panel?.refreshVersions();
+    wasDirty = dirty;
   });
 
   return {

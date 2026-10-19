@@ -92,9 +92,9 @@ const measurer: TextMeasurer = {
 };
 
 describe('lossless round-trip', () => {
-  it('reads the visible text, skipping deleted runs and field codes', () => {
+  it('reads the text, what tracked changes took out among it, and skips field codes', () => {
     expect(docText(open())).toBe(
-      ['Title', 'First item', 'See the site and added7', 'A1', 'B1', 'End of section', 'Plain & simple'].join('\n'),
+      ['Title', 'First item', 'See the site and addedremoved7', 'A1', 'B1', 'End of section', 'Plain & simple'].join('\n'),
     );
   });
 
@@ -127,15 +127,16 @@ describe('lossless round-trip', () => {
       '<w:hyperlink r:id="rId5" w:history="1"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/><w:color w:val="0563C1" w:themeColor="hyperlink"/></w:rPr><w:t xml:space="preserve">the site</w:t></w:r></w:hyperlink>',
       '<w:bookmarkEnd w:id="1"/>',
       `<w:r>${DRAWING}</w:r>`,
-      '<w:ins w:id="9" w:author="Ana"><w:r><w:t xml:space="preserve">added</w:t></w:r></w:ins>',
-      '<w:del w:id="10" w:author="Ana"><w:r><w:delText>removed</w:delText></w:r></w:del>',
+      // The tracked changes, written again with ids of their own.
+      '<w:ins w:id="900000" w:author="Ana"><w:r><w:t xml:space="preserve">added</w:t></w:r></w:ins>',
+      '<w:del w:id="900001" w:author="Ana"><w:r><w:delText xml:space="preserve">removed</w:delText></w:r></w:del>',
       '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>',
       '<w:r><w:fldChar w:fldCharType="end"/></w:r>',
     ]) {
       expect(xml).toContain(kept);
     }
     // The edited file reads back to the same model it was written from.
-    expect(docText(importDocx(exportDocx(insertText(doc, at, 'X').doc)))).toContain('XSee the site and added7');
+    expect(docText(importDocx(exportDocx(insertText(doc, at, 'X').doc)))).toContain('XSee the site and addedremoved7');
   });
 
   it('writes only the formatting that changed', () => {
@@ -202,7 +203,7 @@ describe('lossless round-trip', () => {
     const layout = layoutDocument(doc, measurer);
     const objects = layout.lines.filter((l) => l.para === para).flatMap((l) => l.fragments.filter((f) => f.kind === 'object'));
     expect(objects.filter((f) => f.width > 0).map((f) => [f.width, f.ascent])).toEqual([[100, 50]]);
-    expect(objects.filter((f) => f.width === 0).length).toBe(7);
+    expect(objects.filter((f) => f.width === 0).length).toBe(6);
   });
 
   it('steps the caret over anchors', () => {

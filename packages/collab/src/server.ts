@@ -14,10 +14,10 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
 import { type Doc, exportDocx, importDocx } from '@rebodocs/core';
-import { type Op, apply, decode, encode, fromBase64, stampIds, transform } from './changes';
-import { type Entry, type RoomStorage, folderStorage, memoryStorage } from './storage';
+import { type Op, apply, decode, digest, encode, fromBase64, stampIds, transform } from './changes';
+import { type Entry, type RoomStorage, type Session, folderStorage, memoryStorage } from './storage';
 
-export type { Entry };
+export type { Entry, Session };
 
 export interface CollabServerOptions {
   port: number;
@@ -35,6 +35,12 @@ export interface CollabServerOptions {
   idle?: number;
   /** How often the document of a room people are in is given to a storage that keeps nothing else, in milliseconds. */
   saveEvery?: number;
+  /**
+   * How long after the last change a room is told what its document is like,
+   * for every editor in it to see that it has the same, in milliseconds; 1500.
+   * While changes keep coming, it is told at least every four times as long.
+   */
+  checkAfter?: number;
 }
 
 export interface CollabServer {
@@ -87,7 +93,13 @@ interface Room {
   live?: { doc: Doc; rev: number };
   /** How many changes the storage that only keeps the document has of it, and whether a folding still has to reach it. */
   saved: number;
-  unkept?: boolean;
+  /** The session whose changes were folded into the file, while the storage still has to be given it. */
+  unkept?: Session;
+  /** What everybody who came in since the changes were last folded is called, by the client they came with. */
+  names: Map<string, string>;
+  /** When the room is to be told what its document is like, and since when it waits to be. */
+  check?: NodeJS.Timeout;
+  checkSince?: number;
 }
 
 /** The colours people are told apart by, in the order they are given out. */
@@ -133,7 +145,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
         .load(id)
         .then((found) => {
           if (!found) return undefined;
-          const room: Room = { id, ...found, clients: new Map(), seqs: new Map(), saved: found.log.length };
+          const room: Room = { id, ...found, clients: new Map(), seqs: new Map(), saved: found.log.length, names: new Map() };
           for (const entry of room.log) room.seqs.set(entry.by, entry.seq);
           rooms.set(id, room);
           return room;
@@ -144,20 +156,44 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
     return wait;
   };
 
-  /** The document of a room as it is now, as a file. */
-  const current = (room: Room): Uint8Array => {
-    if (!room.log.length) return room.base;
+  /** The document of a room as it is now, made from its file and its changes the way every editor makes it. */
+  const live = (room: Room): Doc => {
     let { doc, rev } = room.live ?? { doc: stampIds(importDocx(room.base)), rev: 0 };
     for (; rev < room.log.length; rev++) doc = apply(doc, room.log[rev].ops);
     room.live = { doc, rev };
-    return exportDocx(doc);
+    return doc;
+  };
+
+  /** The document of a room as it is now, as a file. */
+  const current = (room: Room): Uint8Array => (room.log.length ? exportDocx(live(room)) : room.base);
+
+  const checkAfter = options.checkAfter ?? 1500;
+  /** Tells the room what its document is like, once the changes stop for a moment. */
+  const toCheck = (room: Room) => {
+    clearTimeout(room.check);
+    room.checkSince ??= Date.now();
+    const wait = Math.max(0, Math.min(checkAfter, room.checkSince + checkAfter * 4 - Date.now()));
+    room.check = setTimeout(() => {
+      room.check = undefined;
+      room.checkSince = undefined;
+      if (!room.clients.size || closed) return;
+      try {
+        tell(room, 'check', { epoch: room.epoch, rev: room.log.length, digest: digest(live(room)) });
+      } catch (error) {
+        complain(room, 'no se pudo calcular el documento para comprobarlo', error);
+      }
+    }, wait);
   };
 
   /** With nobody in it, a room's changes become its file: joining it again does not make them all over. */
   const fold = async (room: Room): Promise<void> => {
     if (room.clients.size || room.entering || closed) return;
     try {
+      let ended: Session | undefined;
       if (room.log.length) {
+        // Who changed it, as they were called: the session that ends.
+        const authors = [...new Set(room.log.map((entry) => room.names.get(entry.by) ?? ''))].filter(Boolean);
+        ended = { authors };
         const base = current(room);
         // What cannot be read back is not kept in place of what could.
         importDocx(base);
@@ -166,12 +202,13 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
         room.live = undefined;
         room.saved = 0;
         room.seqs.clear();
+        room.names.clear();
         room.epoch++;
-        room.unkept = true;
+        room.unkept = ended;
       }
       if (room.unkept) {
-        await storage.keep(room.id, kept(room), true);
-        room.unkept = false;
+        await storage.keep(room.id, kept(room), true, room.unkept);
+        room.unkept = undefined;
       }
       // Kept somewhere else, whole: nothing of it stays here.
       if (storage.forgets && !room.clients.size && !room.entering && rooms.get(room.id) === room) rooms.delete(room.id);
@@ -254,7 +291,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
       const posted = decode<{ name?: string; docx?: string }>(await body(req));
       const base = fromBase64(String(posted.docx ?? ''));
       importDocx(base);
-      const room: Room = { id: randomBytes(12).toString('base64url'), name: String(posted.name ?? '').slice(0, 200), epoch: 1, base, log: [], clients: new Map(), seqs: new Map(), saved: 0 };
+      const room: Room = { id: randomBytes(12).toString('base64url'), name: String(posted.name ?? '').slice(0, 200), epoch: 1, base, log: [], clients: new Map(), seqs: new Map(), saved: 0, names: new Map() };
       await storage.keep(room.id, kept(room), false);
       rooms.set(room.id, room);
       return void json(res, 200, { room: room.id });
@@ -310,6 +347,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
       // Who they are is for the system to say, when it does.
       const named = pass.name;
       client.name = (named ?? url.searchParams.get('name') ?? '').slice(0, 80);
+      room.names.set(client.id, client.name);
       client.streams.add(res);
       res.writeHead(200, { ...cors, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       // What it has of the room is of use only if it is of the room as it is now.
@@ -334,7 +372,10 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
       if (!client) return void json(res, 409, { error: 'client' });
       if (action === 'presence') {
         client.sel = posted.sel ?? undefined;
-        if (typeof posted.name === 'string' && !storage.admit) client.name = posted.name.slice(0, 80);
+        if (typeof posted.name === 'string' && !storage.admit) {
+          client.name = posted.name.slice(0, 80);
+          room.names.set(client.id, client.name);
+        }
         tell(room, 'presence', seen(client), client.id);
         return void json(res, 200, {});
       }
@@ -347,6 +388,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
       room.seqs.set(client.id, seq!);
       storage.add(room.id, entry);
       tell(room, 'op', { rev: room.log.length - 1, ...entry });
+      toCheck(room);
       return void json(res, 200, {});
     }
 
@@ -383,6 +425,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
       clearInterval(saver);
       for (const room of rooms.values()) {
         clearTimeout(room.timer);
+        clearTimeout(room.check);
         for (const client of room.clients.values()) for (const stream of client.streams) stream.end();
       }
       server?.close();

@@ -8,6 +8,12 @@
 //   POST /api/url?key=…           an address to write a .docx to
 //   GET  /api/variables?key=…     the variables of a template
 //   POST /api/pdf?key=…           fills it with the JSON of the body and stores the PDF
+//   GET  /api/versions?key=…      the versions kept of a document
+//   POST /api/versions?key=…      an address to write a new version to, named by the JSON of the body
+//
+// A version is a copy of the document beside it, under `versions/`: its key
+// says when it was kept, and by whom and with what name, so that listing them
+// is one request. It is read as any other file, with `GET /api/url`.
 //
 // This is where an application of your own checks who is asking, before
 // signing anything: here anyone who reaches the server may open and save.
@@ -49,6 +55,55 @@ async function bodyOf(request: IncomingMessage): Promise<unknown> {
   }
 }
 
+/** Where the versions of a document are kept. */
+const VERSIONS = 'versions/';
+const versionsOf = (key: string) => `${VERSIONS}${key}/`;
+
+/** What a version says of itself, as the end of its key: when, then by whom and with what name. */
+interface VersionMeta {
+  author?: string;
+  label?: string;
+}
+
+const toBase64Url = (text: string) => Buffer.from(text, 'utf8').toString('base64url');
+const fromBase64Url = (text: string) => Buffer.from(text, 'base64url').toString('utf8');
+
+/** The key of a version kept now: its time, so that they sort, and what it says of itself. */
+function versionKey(key: string, meta: VersionMeta, now = new Date()): string {
+  const stamp = now.toISOString().replace(/[-:]/g, '');
+  const said = meta.author || meta.label ? `~${toBase64Url(JSON.stringify(meta))}` : '';
+  return `${versionsOf(key)}${stamp}${said}.docx`;
+}
+
+/** A version as the page lists it, from its key; undefined for a key that is not one. */
+function versionOf(file: { key: string; modified: string }, key: string) {
+  const name = file.key.slice(versionsOf(key).length);
+  const found = /^(\d{8}T\d{6}(?:\.\d+)?Z)(?:~([A-Za-z0-9_-]+))?\.docx$/.exec(name);
+  if (!found) return undefined;
+  const [, stamp, said] = found;
+  const date = new Date(stamp.replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6'));
+  let meta: VersionMeta = {};
+  try {
+    if (said) meta = JSON.parse(fromBase64Url(said)) as VersionMeta;
+  } catch {
+    // A name it cannot read: the version is still there.
+  }
+  return {
+    id: file.key,
+    date: Number.isNaN(date.getTime()) ? file.modified : date.toISOString(),
+    ...(typeof meta.author === 'string' && meta.author ? { author: meta.author } : {}),
+    ...(typeof meta.label === 'string' && meta.label ? { label: meta.label } : {}),
+  };
+}
+
+/** What a version is named by, as the body says it: short, and only text. */
+function metaOf(body: unknown): VersionMeta {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Refused(400, 'The body is not an object with what the version is called.');
+  const take = (value: unknown, most: number) => (typeof value === 'string' ? value.trim().slice(0, most) || undefined : undefined);
+  const { author, label } = body as Record<string, unknown>;
+  return { ...(take(author, 60) ? { author: take(author, 60) } : {}), ...(take(label, 100) ? { label: take(label, 100) } : {}) };
+}
+
 async function templateOf(bucket: Bucket, key: string) {
   const file = await bucket.get(key);
   if (!file) throw new Refused(404, 'There is no such document.');
@@ -61,10 +116,22 @@ async function templateOf(bucket: Bucket, key: string) {
  */
 export function createApi(bucket: () => Bucket, options: { fontDirs?: string[] } = {}) {
   const routes: Record<string, (url: URL, request: IncomingMessage) => Promise<unknown>> = {
-    'GET /api/files': () => bucket().list(),
+    // The versions are beside the documents, not among them.
+    'GET /api/files': async () => (await bucket().list()).filter((file) => !file.key.startsWith(VERSIONS)),
     'GET /api/url': async (url) => ({ url: await bucket().readUrl(keyOf(url, /\.(docx|pdf)$/i)) }),
     'POST /api/url': async (url) => ({ url: await bucket().writeUrl(keyOf(url, /\.docx$/i), DOCX), type: DOCX }),
     'GET /api/variables': async (url) => ({ names: variableNames(await templateOf(bucket(), keyOf(url, /\.docx$/i))) }),
+    'GET /api/versions': async (url) => {
+      const key = keyOf(url, /\.docx$/i);
+      const files = await bucket().list(versionsOf(key));
+      return files.map((file) => versionOf(file, key)).filter((version) => version !== undefined);
+    },
+    'POST /api/versions': async (url, request) => {
+      const key = keyOf(url, /\.docx$/i);
+      if (key.startsWith(VERSIONS)) throw new Refused(400, 'A version has no versions of its own.');
+      const version = versionKey(key, metaOf(await bodyOf(request)));
+      return { url: await bucket().writeUrl(version, DOCX), type: DOCX, version: versionOf({ key: version, modified: new Date().toISOString() }, key) };
+    },
     'POST /api/pdf': async (url, request) => {
       const key = keyOf(url, /\.docx$/i);
       const values = await bodyOf(request);

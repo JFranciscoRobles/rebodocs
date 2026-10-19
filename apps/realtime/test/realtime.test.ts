@@ -11,6 +11,7 @@ import { backendStorage } from '../../../packages/collab/src/storage';
 import { createApi } from '../server/api';
 import { createCollabBackend, createTickets, roomOf } from '../server/collab';
 import { DOCX, type Store, folderStore } from '../server/store';
+import { keepVersion, versionsOf } from '../server/versions';
 
 /** What the session needs of an editor, and nothing that needs a browser. */
 class Host implements CollabHost {
@@ -121,6 +122,22 @@ describe('the documents, in a folder', () => {
   });
 });
 
+describe('the versions', () => {
+  it('are found where a bucket lists them, as the storage demo keeps them', async () => {
+    // As `apps/storage/server/bucket.ts` lists: every key under the prefix, documents and PDFs only.
+    const files = new Map<string, Uint8Array>();
+    const bucket: Store = {
+      list: async (prefix = '') => [...files.keys()].filter((key) => key.startsWith(prefix) && /\.(docx|pdf)$/i.test(key)).map((key) => ({ key, size: files.get(key)!.length, modified: new Date().toISOString() })),
+      get: async (key) => files.get(key),
+      put: async (key, body) => void files.set(key, body),
+    };
+    const id = await keepVersion(bucket, 'a.docx', docxOf('A'), { author: 'Ana, Luis' });
+    expect(id).toMatch(/^versions\/a\.docx\/\d{8}T\d{6}\.\d+Z~[A-Za-z0-9_-]+\.docx$/);
+    expect((await versionsOf(bucket, 'a.docx')).map((version) => [version.id, version.author])).toEqual([[id, 'Ana, Luis']]);
+    expect(await versionsOf(bucket, 'b.docx')).toEqual([]);
+  });
+});
+
 describe('what the page asks', () => {
   it('lists the documents, and starts new ones empty', async () => {
     expect((await ask('/api/docs?key=new.docx', { method: 'POST' })).body).toEqual({ key: 'new.docx' });
@@ -226,6 +243,48 @@ describe('two people on one document', () => {
     expect(await peopleIn('shared.docx')).toEqual(['Eva']);
     eva.session.leave();
     await until(() => rooms.rooms().length === 0);
+  });
+
+  it('keeps a version when everybody leaves, signed by who changed it, and one whenever someone keeps it', async () => {
+    await store.put('kept.docx', docxOf('Kept'), DOCX);
+    const versions = async () => (await ask('/api/versions?key=kept.docx')).body as { id: string; author?: string; label?: string }[];
+    expect(await versions()).toEqual([]);
+    const ana = await enter('kept.docx', 'Ana');
+    const luis = await enter('kept.docx', 'Luis');
+    ana.host.edit((doc) => insertText(doc, { para: 0, offset: 4 }, ' by Ana').doc);
+    await until(() => luis.host.texts[0] === 'Kept by Ana');
+    luis.host.edit((doc) => insertText(doc, { para: 0, offset: 11 }, ' and Luis').doc);
+    await until(() => ana.host.texts[0] === 'Kept by Ana and Luis');
+    // While they work, what is given back is the document, and no version.
+    await rooms.flush();
+    expect(await textsOf('kept.docx')).toEqual(['Kept by Ana and Luis']);
+    expect(await versions()).toEqual([]);
+    ana.session.leave();
+    luis.session.leave();
+    await until(() => rooms.rooms().length === 0);
+    const end = Date.now() + 4000;
+    while (!(await versions()).length && Date.now() < end) await new Promise((done) => setTimeout(done, 20));
+    const [session] = await versions();
+    expect(session.author).toBe('Ana, Luis');
+    const file = await fetch(`${api}/api/version?key=kept.docx&id=${encodeURIComponent(session.id)}`);
+    expect(importDocx(new Uint8Array(await file.arrayBuffer())).paragraphs.map(paragraphText)).toEqual(['Kept by Ana and Luis']);
+    // Not among the documents, and not to be had as a version of another.
+    expect((await ask('/api/docs')).body.map((doc: { key: string }) => doc.key)).not.toContain(session.id);
+    expect((await fetch(`${api}/api/version?key=one.docx&id=${encodeURIComponent(session.id)}`)).status).toBe(404);
+
+    // Someone who only looks keeps none.
+    const eva = await enter('kept.docx', 'Eva');
+    eva.session.leave();
+    await until(() => rooms.rooms().length === 0);
+    await new Promise((done) => setTimeout(done, 100));
+    expect(await versions()).toHaveLength(1);
+
+    // Kept by hand, from the side panel: with a name and who kept it.
+    const made = await fetch(`${api}/api/versions?key=kept.docx&author=Eva&label=${encodeURIComponent('Before signing')}`, { method: 'POST', body: docxOf('By hand') as BodyInit });
+    expect(made.status).toBe(200);
+    const [latest] = await versions();
+    expect([latest.author, latest.label]).toEqual(['Eva', 'Before signing']);
+    expect(await versions()).toHaveLength(2);
   });
 
   it('counts nobody who went away while the backend was being asked about them', async () => {

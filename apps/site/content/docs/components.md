@@ -406,9 +406,11 @@ The page: its size and margins, its number, its header and footer, its letterhea
 
 | | |
 | --- | --- |
-| `page`, `set(patch)` | `{ width, height, marginTop, marginRight, marginBottom, marginLeft }` in points (1/72 in). |
+| `page`, `set(patch, everywhere?)` | `{ width, height, marginTop, marginRight, marginBottom, marginLeft }` in points (1/72 in), of the section being edited; with `everywhere`, of every section. |
+| `sections`, `section` | How many sections the document has, and which one is being edited, from 0. |
+| `ownHeaders`, `setOwnHeaders(on)` | Whether that section has a header and footer of its own, or shows the document's. |
 | `numbering`, `setNumbering(n)` | `{ place, align, format }`, or undefined for none. |
-| `firstPageDifferent`, `setFirstPageDifferent(on)` | A header and footer for the first page alone. |
+| `firstPageDifferent`, `setFirstPageDifferent(on)` | A header and footer for the first page of the section alone. |
 | `letterhead` | Whether the document has one. |
 | `setLetterhead(file, fit?)`, `fitLetterheadMargins()`, `removeLetterhead()`, `letterheadFile()` | Set it from a PNG or JPG, fit the margins to it, remove it, get it back as a file. |
 

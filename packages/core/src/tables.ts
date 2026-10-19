@@ -539,6 +539,8 @@ export interface CellPatch {
   line?: Border | null;
   shade?: string;
   valign?: 'top' | 'center' | 'bottom';
+  /** Which way the text reads: level, or set vertically from the bottom up or from the top down. */
+  direction?: 'level' | 'up' | 'down';
 }
 
 /** How much room a border takes across the edge it is on: a double line is two lines and the room between them. */
@@ -546,7 +548,7 @@ function lineRoom(line: Border | undefined): number {
   return !line ? 0 : line.style === 'double' ? line.width * 3 : line.width;
 }
 
-/** The borders, the line, the shading and the place of the text of the cells of the block between the cells of two paragraphs. */
+/** The borders, the line, the shading, the place and the direction of the text of the cells of the block between the cells of two paragraphs. */
 export function setCellProps(doc: Doc, paraA: number, paraB: number, patch: CellPatch): Doc {
   const rect = cellRect(doc, paraA, paraB);
   if (!rect) return doc;
@@ -581,7 +583,20 @@ export function setCellProps(doc: Doc, paraA: number, paraB: number, patch: Cell
         if (patch.valign === 'top') delete next.valign;
         else next.valign = patch.valign;
       }
-      if (next.borders === cell.borders && next.shade === cell.shade && next.lines === cell.lines && next.valign === cell.valign && next.borderTop === cell.borderTop) return cell;
+      if (patch.direction !== undefined) {
+        if (patch.direction === 'level') delete next.direction;
+        else next.direction = patch.direction;
+      }
+      if (
+        next.borders === cell.borders &&
+        next.shade === cell.shade &&
+        next.lines === cell.lines &&
+        next.valign === cell.valign &&
+        next.direction === cell.direction &&
+        next.borderTop === cell.borderTop
+      ) {
+        return cell;
+      }
       changed = true;
       return next;
     });

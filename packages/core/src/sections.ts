@@ -5,6 +5,7 @@
 import {
   type Columns,
   type Doc,
+  type PageSetup,
   type Paragraph,
   type Position,
   type Range,
@@ -35,7 +36,75 @@ export function sectionMarkOf(doc: Doc, para: number): number {
 export function sectionOf(doc: Doc, para: number): Section {
   const end = sectionMarkOf(doc, para);
   if (end >= 0) return doc.paragraphs[end].section!;
-  return defined<Section>({ page: doc.page, columns: doc.columns, start: doc.sectionStart, noHeader: doc.noHeader, noFooter: doc.noFooter });
+  return defined<Section>({ page: doc.page, columns: doc.columns, start: doc.sectionStart, noHeader: doc.noHeader, noFooter: doc.noFooter, firstPage: doc.firstPage });
+}
+
+/** The index of the section paragraph `para` is in, counting from 0: the last is the document's own. */
+export function sectionIndexOf(doc: Doc, para: number): number {
+  let k = 0;
+  for (let i = 0; i < Math.min(para, doc.paragraphs.length - 1); i++) if (doc.paragraphs[i].section && canEnd(doc, i)) k++;
+  return k;
+}
+
+/** The paragraph that ends section `index`, or -1 for the last. */
+function markOfSection(doc: Doc, index: number): number {
+  return sectionMarks(doc)[index] ?? -1;
+}
+
+/** The page of the section paragraph `para` is in. */
+export function pageAt(doc: Doc, para: number): PageSetup {
+  return sectionOf(doc, para).page;
+}
+
+/** The document with the page of the section paragraph `para` is in changed by `patch`: its size, its margins. */
+export function setSectionPage(doc: Doc, para: number, patch: Partial<PageSetup>): Doc {
+  const end = sectionMarkOf(doc, para);
+  const was = end < 0 ? doc.page : doc.paragraphs[end].section!.page;
+  const page = { ...was, ...patch };
+  if ((Object.keys(page) as (keyof PageSetup)[]).every((key) => page[key] === was[key])) return doc;
+  return end < 0 ? { ...doc, page } : patchSection(doc, end, { page });
+}
+
+/** Whether section `index` has a header and a footer of its own, and does not show the document's. The last one's are the document's. */
+export function hasOwnStories(doc: Doc, index: number): boolean {
+  const end = markOfSection(doc, index);
+  if (end < 0) return true;
+  const s = doc.paragraphs[end].section!;
+  return !!(s.header || s.footer || s.noHeader || s.noFooter);
+}
+
+/**
+ * Gives section `index` a header and a footer of its own, starting as copies
+ * of the ones it shows; or takes them away, and it shows the document's.
+ */
+export function setOwnStories(doc: Doc, index: number, own: boolean): Doc {
+  const end = markOfSection(doc, index);
+  if (end < 0 || own === hasOwnStories(doc, index)) return doc;
+  const { header: _h, footer: _f, noHeader: _nh, noFooter: _nf, ...rest } = doc.paragraphs[end].section!;
+  const section = own ? defined<Section>({ ...rest, header: doc.header ?? { paragraphs: [] }, footer: doc.footer ?? { paragraphs: [] } }) : rest;
+  const paragraphs = doc.paragraphs.slice();
+  paragraphs[end] = { ...paragraphs[end], section };
+  return { ...doc, paragraphs };
+}
+
+/** Whether the first page of section `index` has a header and a footer to itself. */
+export function hasOwnFirstPage(doc: Doc, index: number): boolean {
+  const end = markOfSection(doc, index);
+  return !!(end < 0 ? doc.firstPage : doc.paragraphs[end].section!.firstPage);
+}
+
+/** Gives the first page of section `index` a header and a footer to itself, which start empty, or takes them away. */
+export function setOwnFirstPage(doc: Doc, index: number, on: boolean): Doc {
+  if (on === hasOwnFirstPage(doc, index)) return doc;
+  const end = markOfSection(doc, index);
+  if (end < 0) {
+    const { firstPage: _, ...rest } = doc;
+    return on ? { ...rest, firstPage: {} } : rest;
+  }
+  const { firstPage: _, ...rest } = doc.paragraphs[end].section!;
+  const paragraphs = doc.paragraphs.slice();
+  paragraphs[end] = { ...paragraphs[end], section: on ? { ...rest, firstPage: {} } : rest };
+  return { ...doc, paragraphs };
 }
 
 /** The columns of the section paragraph `para` is in: one when it runs the whole width. */

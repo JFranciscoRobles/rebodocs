@@ -1,5 +1,5 @@
 import { DEFAULT_COLLAB_PORT, type Session, createRoom, joinRoom, pingServer } from '@rebodocs/collab/browser';
-import { Editor, addFont, addLocale, createBubble, createFindBar, createPanel, createResponsive, createRuler, createSidebar, createStatusBar, createToolbar, getLocale, recallAuthor, setAuthor, setLocale, t } from '@rebodocs/editor';
+import { type VersionInfo, type Versions, Editor, addFont, addLocale, createBubble, createFindBar, createPanel, createResponsive, createRuler, createSidebar, createStatusBar, createToolbar, getLocale, recallAuthor, setAuthor, setLocale, t } from '@rebodocs/editor';
 import { connectAssistant } from '@rebodocs/mcp/browser';
 import { sampleDoc } from './sample';
 
@@ -64,12 +64,23 @@ function setFile(name: string, from?: FileHandle): void {
   assistant.renamed();
 }
 
+// The versions of the document, kept in this page while it is open: an
+// application keeps them where it keeps its documents. They are another
+// file's once another file is opened.
+const kept: { info: VersionInfo; docx: Uint8Array }[] = [];
+const versions: Versions = {
+  list: async () => kept.map((version) => version.info),
+  load: async (id) => kept.find((version) => version.info.id === id)?.docx ?? Promise.reject(new Error('there is no such version')),
+  save: async (docx, info) => void kept.push({ info: { id: String(kept.length + 1), date: new Date().toISOString(), ...info }, docx }),
+};
+
 async function load(file: File, from?: FileHandle): Promise<void> {
   // Another file is not the document the others are on.
   if (session && !confirm(t('collab.leaveToOpen'))) return;
   leaveRoom();
   try {
     editor.loadDocx(await file.arrayBuffer());
+    kept.length = 0;
     setFile(file.name, from);
     editor.focus();
   } catch (error) {
@@ -164,7 +175,7 @@ function mount(): Mounted {
     onLocale: changeLocale,
   });
   const findBar = createFindBar(editor);
-  const panel = createPanel($('panel'), editor);
+  const panel = createPanel($('panel'), editor, { versions });
   const bubble = createBubble(editor);
   editor.onLinkKey = () => bubble.ask('link');
   const toolbar = createToolbar($('toolbar'), editor, {

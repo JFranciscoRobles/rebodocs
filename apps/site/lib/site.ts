@@ -40,6 +40,8 @@ export const NAV: { title: string; items: NavItem[] }[] = [
       { title: 'On a server: DOCX and PDF', slug: 'server' },
       { title: 'Documents in an S3 bucket', slug: 'storage' },
       { title: 'Letterheads', slug: 'letterhead' },
+      { title: 'Versions', slug: 'versions' },
+      { title: 'Tracked changes', slug: 'tracked-changes' },
       { title: 'Fonts', slug: 'fonts' },
       { title: 'Languages', slug: 'languages' },
     ],

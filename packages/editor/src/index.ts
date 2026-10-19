@@ -1,5 +1,5 @@
 export { IS_MAC, keyboardInset, onKeyboard } from './platform';
-export { type FontSource, addFont, addFonts, fontFamilies, fontFile, onFontsChange } from './fonts';
+export { type FontSource, addFont, addFonts, fontFaces, fontFamilies, fontFile, onFontsChange } from './fonts';
 export { type Responsive, type ResponsiveOptions, createResponsive } from './responsive';
 export { Editor, MAX_ZOOM, MIN_ZOOM, type EditArea, type MarkKey, type NoteView, type PeerCaret, type Selection, type ViewMode, type ZoomFit } from './editor';
 export { CanvasMeasurer, cssFont, cssFontFamily } from './measurer';
@@ -7,7 +7,8 @@ export { type Toolbar, type ToolbarOptions, createToolbar } from './toolbar';
 export { type StatusBar, type StatusBarOptions, createStatusBar } from './statusbar';
 export { type Ruler, createRuler } from './ruler';
 export { type FindBar, createFindBar } from './findbar';
-export { type Panel, type PanelTab, createPanel } from './panel';
+export { type Panel, type PanelOptions, type PanelTab, createPanel } from './panel';
+export { type VersionInfo, type VersionView, type VersionViewOptions, type Versions, createVersionView, loadVersion, restoreVersionOf, sortVersions, versionDate, versionName } from './versions';
 export { type Sidebar, type SidebarOptions, createSidebar } from './sidebar';
 export { type Bubble, createBubble } from './bubble';
 export { createImagePicker, insertPictures, openImageGrid } from './imagegrid';

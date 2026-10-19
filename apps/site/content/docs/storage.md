@@ -75,7 +75,7 @@ The code is the same. The environment says which one:
 
 ## The backend
 
-Five routes, in [`server/api.ts`](https://github.com/JFranciscoRobles/rebodocs/blob/main/apps/storage/server/api.ts). It is a plain Node handler, `(request, response)`, so it goes as it is into Express, a Next.js route or a server of your own.
+Seven routes, in [`server/api.ts`](https://github.com/JFranciscoRobles/rebodocs/blob/main/apps/storage/server/api.ts). It is a plain Node handler, `(request, response)`, so it goes as it is into Express, a Next.js route or a server of your own.
 
 | Route | What it answers |
 | --- | --- |
@@ -84,6 +84,10 @@ Five routes, in [`server/api.ts`](https://github.com/JFranciscoRobles/rebodocs/b
 | `POST /api/url?key=…` | `{ url, type }`: an address to write a `.docx` to, sending that `Content-Type`. |
 | `GET  /api/variables?key=…` | `{ names }`: the variables of a template. |
 | `POST /api/pdf?key=…` | Fills the template with the JSON of the body, stores the PDF, and answers `{ key, url, pages, missingFonts }`. |
+| `GET  /api/versions?key=…` | The versions kept of a document: `id` (its key, to read it with `/api/url`), `date`, `author`, `label`. |
+| `POST /api/versions?key=…` | `{ url, type, version }`: an address to write a new version to. The JSON of the body names it: `{ label, author }`. |
+
+Each save in the demo also keeps a version beside the document, under `versions/<key>/`, and the editor's side panel lists them, compares them and restores them. See [versions](/docs/versions/).
 
 Signing an address is two lines with the AWS SDK:
 
@@ -136,7 +140,7 @@ const { pdf, missingFonts } = renderPdf(fillVariables(template, values), fonts, 
 await bucket.put('contract.pdf', pdf, 'application/pdf');
 ```
 
-The demo looks for `.ttf` files in the fonts of the system, or in the folder `FONTS_DIR` names. A server of yours has no fonts unless you put them there: ship the ones your documents use, and read `missingFonts` to know when one was stood in for.
+The demo looks for `.ttf` and `.otf` files in the fonts of the system, or in the folder `FONTS_DIR` names. A server of yours has no fonts unless you put them there: ship the ones your documents use, and read `missingFonts` to know when one was stood in for.
 
 ## What to know
 

@@ -22,5 +22,9 @@ await addFont({ family: 'Raleway', src: '/Raleway-Regular.ttf' });
 addLocale('fr', { 'menu.save': 'Enregistrer' }); changeLocale('fr');
 ```
 
+The **Versions** tab of the side panel keeps versions in the page while it
+is open, and compares and restores them; an application would keep them
+beside its documents. Opening another file starts over.
+
 A document is shared with `?room=<id>&collab=<server>` in the address, once
 the collaboration server is running (`npm run collab`).

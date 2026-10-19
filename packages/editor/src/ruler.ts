@@ -1,8 +1,10 @@
 // The ruler over an Editor, as in Word: the width of the page in centimetres,
-// its margins, and the indents of the paragraph the caret is in. The edges of
-// the margins and the indent markers can be dragged. Like the toolbar, it only
-// uses the public methods of the editor.
+// its margins, and the indents and tab stops of the paragraph the caret is in.
+// The edges of the margins and the markers can be dragged; a click on the scale
+// sets a tab stop of the kind the button at the corner shows, and a stop dragged
+// off the ruler goes. Like the toolbar, it only uses the public methods of the editor.
 
+import type { TabStop } from '@rebodocs/core';
 import type { Editor } from './editor';
 import { type MessageKey, t } from './i18n';
 
@@ -34,12 +36,31 @@ const CSS = `
 .dx-ruler-hanging,.dx-ruler-right{top:11px;height:8px}
 .dx-ruler-left{top:19px;height:5px}
 .dx-ruler-m{position:absolute;top:0;width:9px;height:100%;cursor:ew-resize;z-index:1}
+.dx-ruler-tab{position:absolute;top:13px;width:9px;height:8px;margin-left:-4.5px;cursor:pointer;z-index:2}
+.dx-ruler-tab svg,.dx-ruler-kind svg{display:block;fill:none;stroke:var(--dx-ruler-ink,#5f6470);stroke-width:1.5}
+.dx-ruler-tab:hover svg,.dx-ruler-tab.dx-on svg{stroke:var(--dx-ruler-on,#0b57d0)}
+.dx-ruler-kind{position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:3}
+.dx-ruler-kind:hover{background:var(--dx-ruler-margin,#cfd4dd)}
 .dx-ruler-guide{position:fixed;width:0;border-left:1px dashed var(--dx-ruler-on,#0b57d0);pointer-events:none;z-index:30}
 `;
 
 const DOWN = '<svg viewBox="0 0 11 9" width="11" height="9"><path d="M1 1h9v3.5L5.5 8.5 1 4.5z"/></svg>';
 const UP = '<svg viewBox="0 0 11 8" width="11" height="8"><path d="M5.5.5 10 4.5V8H1V4.5z"/></svg>';
 const BOX = '<svg viewBox="0 0 11 5" width="11" height="5"><path d="M1 0h9v4.5H1z"/></svg>';
+
+/** The kinds of tab stop the corner button goes through, each with its mark and its name. */
+type TabKind = 'left' | 'center' | 'right' | 'decimal';
+const TAB_KINDS: TabKind[] = ['left', 'center', 'right', 'decimal'];
+const TAB_MARKS: Record<TabKind, string> = {
+  left: '<path d="M4.5 0v7h4.5"/>',
+  center: '<path d="M4.5 0v7M0 7h9"/>',
+  right: '<path d="M4.5 0v7H0"/>',
+  decimal: '<path d="M4.5 0v7M0 7h9"/><circle cx="7.5" cy="3" r=".8" fill="currentColor"/>',
+};
+const TAB_NAMES: Record<TabKind, MessageKey> = { left: 'ruler.tabLeft', center: 'ruler.tabCenter', right: 'ruler.tabRight', decimal: 'ruler.tabDecimal' };
+const tabMark = (kind: TabKind) => `<svg viewBox="0 0 9 8" width="9" height="8">${TAB_MARKS[kind]}</svg>`;
+/** How far from the ruler, in pixels, a dragged tab stop is let go of to take it away. */
+const TAB_DROP = 18;
 
 const HANDLES: [Handle, MessageKey, string][] = [
   ['marginLeft', 'ruler.marginLeft', ''],
@@ -82,6 +103,36 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
   // Clicks on the ruler must not take the keyboard away from the document.
   bar.addEventListener('mousedown', (e) => e.preventDefault());
 
+  // The kind of tab stop a click on the scale sets, at the corner; a click on it goes on to the next.
+  let kind: TabKind = 'left';
+  const kindButton = document.createElement('div');
+  kindButton.className = 'dx-ruler-kind';
+  const showKind = () => {
+    kindButton.innerHTML = tabMark(kind);
+    kindButton.title = `${t(TAB_NAMES[kind])}. ${t('ruler.tabHint')}`;
+  };
+  showKind();
+  kindButton.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    kind = TAB_KINDS[(TAB_KINDS.indexOf(kind) + 1) % TAB_KINDS.length];
+    showKind();
+  });
+  bar.appendChild(kindButton);
+  /** The marks of the tab stops of the paragraph, one for each. */
+  let tabMarks: HTMLElement[] = [];
+  // A click on the scale, inside the text, sets a stop there.
+  bar.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || (e.target !== bar && e.target !== canvas)) return;
+    const state = read();
+    const { origin, scale } = frame();
+    const pos = (e.clientX - bar.getBoundingClientRect().left - origin) / scale - state.left;
+    if (pos <= 0 || pos >= state.right - state.left) return;
+    const at = round(e.altKey ? pos : Math.round(pos / SNAP) * SNAP);
+    setTabs([...state.tabs.filter((tab) => Math.abs(tab.pos - at) > 0.5), { pos: at, align: kind }]);
+  });
+
   /** Everything the ruler shows, in points from the left edge of the page. */
   interface State {
     width: number;
@@ -93,18 +144,23 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
     indentLeft: number;
     indentFirstLine: number;
     indentRight: number;
+    /** Its tab stops, from the left of the column. */
+    tabs: TabStop[];
   }
 
   const read = (): State => {
-    const { width, marginLeft, marginRight } = editor.doc.page;
-    const { indentLeft, indentFirstLine, indentRight } = editor.activeParagraphProps();
-    return { width, marginLeft, marginRight, ...editor.textColumn(), indentLeft, indentFirstLine, indentRight };
+    const { width, marginLeft, marginRight } = editor.page;
+    const { indentLeft, indentFirstLine, indentRight, tabs } = editor.activeParagraphProps();
+    return { width, marginLeft, marginRight, ...editor.textColumn(), indentLeft, indentFirstLine, indentRight, tabs };
   };
+
+  /** Gives the paragraphs of the selection these tab stops, in order. */
+  const setTabs = (tabs: TabStop[]) => editor.setParagraphProps({ tabs: tabs.slice().sort((a, b) => a.pos - b.pos) });
 
   /** Pixels from the left of the ruler to the left of the page, and pixels per point. */
   const frame = () => {
     const page = editor.pageBounds();
-    return { origin: page.left - bar.getBoundingClientRect().left, scale: page.width / editor.doc.page.width };
+    return { origin: page.left - bar.getBoundingClientRect().left, scale: page.width / editor.page.width };
   };
 
   const draw = (state: State) => {
@@ -163,6 +219,26 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
     // The edges of the margins are taken from just outside the text, clear of the indent markers.
     at('marginLeft', state.marginLeft, -9);
     at('marginRight', state.width - state.marginRight);
+    // A mark for each tab stop that is a stop, made again when they change.
+    const stops = state.tabs.map((tab, index) => ({ tab, index })).filter(({ tab }) => tab.align !== 'bar');
+    if (tabMarks.length !== stops.length || stops.some(({ tab }, k) => tabMarks[k].dataset.kind !== tab.align)) {
+      for (const mark of tabMarks) mark.remove();
+      tabMarks = stops.map(({ tab, index }) => {
+        const mark = document.createElement('div');
+        mark.className = 'dx-ruler-tab';
+        mark.dataset.kind = tab.align;
+        mark.innerHTML = tabMark(tab.align as TabKind);
+        mark.title = `${t(TAB_NAMES[tab.align as TabKind])}. ${t('ruler.tabDrag')}`;
+        mark.addEventListener('mousedown', (e) => startTabDrag(e, Number(mark.dataset.index)));
+        mark.dataset.index = String(index);
+        bar.appendChild(mark);
+        return mark;
+      });
+    }
+    stops.forEach(({ tab, index }, k) => {
+      tabMarks[k].dataset.index = String(index);
+      tabMarks[k].style.left = `${origin + (state.left + tab.pos) * scale}px`;
+    });
   };
 
   const refresh = (state = read()) => {
@@ -174,7 +250,7 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
     if (!queued) {
       queued = requestAnimationFrame(() => {
         queued = 0;
-        if (!drag) refresh();
+        if (!drag && !tabDrag) refresh();
       });
     }
   };
@@ -294,6 +370,65 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
     onMove(e);
   }
 
+  // --- Dragging a tab stop: along the ruler to move it, off it to take it away -------------
+
+  let tabDrag: { index: number; from: State; at: number; off: boolean; guide: HTMLElement } | undefined;
+
+  const onTabMove = (e: MouseEvent) => {
+    if (!tabDrag) return;
+    const page = editor.pageBounds();
+    const scale = page.width / tabDrag.from.width;
+    const box = bar.getBoundingClientRect();
+    const pos = (e.clientX - page.left) / scale - tabDrag.from.left;
+    tabDrag.at = round(clamp(e.altKey ? pos : Math.round(pos / SNAP) * SNAP, 0, tabDrag.from.right - tabDrag.from.left));
+    tabDrag.off = e.clientY < box.top - TAB_DROP || e.clientY > box.bottom + TAB_DROP;
+    const tabs = tabDrag.from.tabs.map((tab, i) => (i === tabDrag!.index ? { ...tab, pos: tabDrag!.at } : tab)).filter((_, i) => !(tabDrag!.off && i === tabDrag!.index));
+    place({ ...tabDrag.from, tabs });
+    tabDrag.guide.style.display = tabDrag.off ? 'none' : '';
+    tabDrag.guide.style.left = `${page.left + (tabDrag.from.left + tabDrag.at) * scale}px`;
+  };
+
+  const endTabDrag = (apply: boolean) => {
+    if (!tabDrag) return;
+    const { index, from, at, off, guide } = tabDrag;
+    tabDrag = undefined;
+    guide.remove();
+    window.removeEventListener('mousemove', onTabMove);
+    window.removeEventListener('mouseup', onTabUp);
+    window.removeEventListener('keydown', onTabKey, true);
+    const was = from.tabs[index];
+    if (apply && was && (off || Math.abs(at - was.pos) > 0.01)) {
+      const rest = from.tabs.filter((_, i) => i !== index);
+      setTabs(off ? rest : [...rest.filter((tab) => Math.abs(tab.pos - at) > 0.5), { ...was, pos: at }]);
+    }
+    refresh();
+    editor.focus();
+  };
+  const onTabUp = () => endTabDrag(true);
+  const onTabKey = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    endTabDrag(false);
+  };
+
+  function startTabDrag(e: MouseEvent, index: number): void {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const from = read();
+    const guide = document.createElement('div');
+    guide.className = 'dx-ruler-guide';
+    const area = editor.element.getBoundingClientRect();
+    guide.style.top = `${area.top}px`;
+    guide.style.height = `${area.height}px`;
+    document.body.appendChild(guide);
+    tabDrag = { index, from, at: from.tabs[index]?.pos ?? 0, off: false, guide };
+    window.addEventListener('mousemove', onTabMove);
+    window.addEventListener('mouseup', onTabUp);
+    window.addEventListener('keydown', onTabKey, true);
+    onTabMove(e);
+  }
+
   // The ruler follows the page: when the document or the caret changes, and when the page moves under it.
   const unsubscribe = editor.onChange(schedule);
   editor.element.addEventListener('scroll', schedule, { passive: true });
@@ -306,6 +441,7 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
   return {
     destroy() {
       endDrag(false);
+      endTabDrag(false);
       unsubscribe();
       editor.element.removeEventListener('scroll', schedule);
       observer.disconnect();

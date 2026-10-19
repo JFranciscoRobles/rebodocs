@@ -26,7 +26,8 @@ const s3 = createServer(async (request, response) => {
     cors = body.toString('utf8');
     response.writeHead(200).end();
   } else if (!key && request.method === 'GET') {
-    const contents = [...objects].map(([name, file]) => `<Contents><Key>${name}</Key><Size>${file.body.length}</Size><LastModified>${file.at.toISOString()}</LastModified></Contents>`);
+    const prefix = url.searchParams.get('prefix') ?? '';
+    const contents = [...objects].filter(([name]) => name.startsWith(prefix)).map(([name, file]) => `<Contents><Key>${name}</Key><Size>${file.body.length}</Size><LastModified>${file.at.toISOString()}</LastModified></Contents>`);
     xml(200, `<ListBucketResult><Name>bucket</Name><IsTruncated>false</IsTruncated>${contents.join('')}</ListBucketResult>`);
   } else if (request.method === 'PUT') {
     objects.set(key, { body, type: request.headers['content-type'] ?? '', at: new Date() });
@@ -119,6 +120,28 @@ describe('a bucket behind the backend', () => {
     expect(new Uint8Array(await (await fetch(body.url)).arrayBuffer()).length).toBe(pdf.length);
     // The template stays a template.
     expect((await ask('/api/variables?key=template.docx')).body.names).toEqual(['client', 'amount']);
+  });
+
+  it('keeps versions of a document beside it, with who kept them and their name, and lists them apart', async () => {
+    const keep = async (text: string, meta: object) => {
+      const { status, body } = await ask('/api/versions?key=folder%2Fcontract.docx', { method: 'POST', body: JSON.stringify(meta) });
+      expect(status).toBe(200);
+      expect(body.version.id.startsWith('versions/folder/contract.docx/')).toBe(true);
+      expect((await fetch(body.url, { method: 'PUT', headers: { 'content-type': body.type }, body: docxOf(text) as BodyInit })).status).toBe(200);
+      return body.version;
+    };
+    const first = await keep('First draft', { label: 'Borrador para el cliente', author: 'Ana Pérez' });
+    expect(first).toMatchObject({ label: 'Borrador para el cliente', author: 'Ana Pérez' });
+    await new Promise((done) => setTimeout(done, 5));
+    await keep('Second draft', {});
+    const { body: listed } = await ask('/api/versions?key=folder%2Fcontract.docx');
+    expect(listed.map((v: { label?: string }) => v.label)).toEqual([undefined, 'Borrador para el cliente']);
+    expect(Date.parse(listed[1].date)).toBeGreaterThan(Date.now() - 60_000);
+    // Read as any other file; and not among the documents.
+    const read = await ask(`/api/url?key=${encodeURIComponent(listed[1].id)}`);
+    expect(paragraphText(importDocx(new Uint8Array(await (await fetch(read.body.url)).arrayBuffer())).paragraphs[0])).toBe('First draft');
+    expect((await ask('/api/files')).body.some((file: { key: string }) => file.key.startsWith('versions/'))).toBe(false);
+    expect((await ask(`/api/versions?key=${encodeURIComponent(listed[1].id)}`, { method: 'POST', body: '{}' })).status).toBe(400);
   });
 
   it('tells the bucket which origins may reach it', async () => {

@@ -11,9 +11,18 @@ import {
   importDocx,
   insertRow,
   insertTable,
+  insertFootnote,
+  insertImage,
   insertText,
+  docImage,
   paragraphText,
+  restoreVersion,
+  trackEdit,
+  insertTextBox,
   setParagraphProps,
+  setColumns,
+  setOwnStories,
+  setSectionPage,
   splitParagraph,
   withStory,
 } from '@rebodocs/core';
@@ -32,9 +41,9 @@ function shape(doc: Doc): unknown {
     list.map((p) => {
       const chars: string[] = [];
       for (const run of p.runs) for (const ch of run.text) chars.push(`${ch}${JSON.stringify(Object.entries(run.props).filter(([, v]) => v !== undefined).sort())}`);
-      return { id: p.id, props: Object.entries(p.props).filter(([, v]) => v !== undefined).sort(), cell: p.cell, text: chars.join('') };
+      return { id: p.id, props: Object.entries(p.props).filter(([, v]) => v !== undefined).sort(), cell: p.cell, section: p.section, text: chars.join('') };
     });
-  return { body: paragraphs(doc.paragraphs), tables: doc.tables, header: doc.header && paragraphs(doc.header.paragraphs), page: doc.page, notes: doc.notes };
+  return { body: paragraphs(doc.paragraphs), tables: doc.tables, header: doc.header && paragraphs(doc.header.paragraphs), page: doc.page, columns: doc.columns, notes: doc.notes, footnotes: doc.footnotes?.map((note) => [note.id, paragraphs(note.paragraphs)]), textBoxes: doc.textBoxes?.map((box) => [box.id, paragraphs(box.paragraphs)]) };
 }
 
 const texts = (doc: Doc) => doc.paragraphs.map(paragraphText);
@@ -53,6 +62,9 @@ function meet(doc: Doc, a: (doc: Doc) => Doc, b: (doc: Doc) => Doc): { first: Do
   return { first: apply(one.doc, second), second: apply(two.doc, first) };
 }
 
+/** The document with a section ending at paragraph `at`, as it was before the change. */
+const sectioned = (doc: Doc, at = 0): Doc => ({ ...doc, paragraphs: doc.paragraphs.map((p, i) => (i === at ? { ...p, section: { page: doc.page, start: 'continuous' as const } } : p)) });
+
 describe('diff and apply', () => {
   const cases: [string, (doc: Doc) => Doc][] = [
     ['typing', (doc) => insertText(doc, { para: 1, offset: 3 }, 'XY').doc],
@@ -67,6 +79,22 @@ describe('diff and apply', () => {
     ['a table', (doc) => insertTable(doc, { para: 1, offset: 3 }, 2, 2).doc],
     ['the page', (doc) => ({ ...doc, page: { ...doc.page, marginLeft: 40 } })],
     ['a header', (doc) => withStory(doc, 'header', { paragraphs: [createParagraph('arriba')] })],
+    ['columns, in sections of their own', (doc) => setColumns(doc, { from: { para: 1, offset: 0 }, to: { para: 1, offset: 2 } }, { count: 2, space: 36 })],
+    ['the columns of the last section', (doc) => setColumns(doc, { from: { para: 2, offset: 0 }, to: { para: 2, offset: 0 } }, { count: 3, space: 20 })],
+    ['the page and the header of a section', (doc) => withStory(setOwnStories(setSectionPage(sectioned(doc), 0, { width: 800 }), 0, true), 'header@0', { paragraphs: [createParagraph('propio')] })],
+    ['a new paragraph in one that ends a section', (doc) => splitParagraph(sectioned(doc), { para: 0, offset: 3 }).doc],
+    ['a note at the foot of the page', (doc) => insertFootnote(doc, { para: 1, offset: 3 }, 'al pie').doc],
+    ['the text of a note', (doc) => {
+      const made = stampIds(insertFootnote(doc, { para: 1, offset: 3 }, 'al pie').doc);
+      return withStory(made, 'footnote:1', { paragraphs: [...made.footnotes![0].paragraphs, createParagraph('y más')] });
+    }],
+    ['a text box, and its text', (doc) => {
+      const made = stampIds(insertTextBox(doc, { para: 1, offset: 2 }, { text: 'en el cuadro' }).doc);
+      const box = made.textBoxes![0];
+      return withStory(made, `textbox:${box.id}`, { paragraphs: [...box.paragraphs, createParagraph('y otra línea')] });
+    }],
+    ['tracked changes, and tracking them', (doc) => ({ ...trackEdit(doc, deleteRange(insertText(doc, { para: 0, offset: 2 }, 'XY').doc, { from: { para: 1, offset: 6 }, to: { para: 2, offset: 0 } }), { author: 'Ana', date: '2026-10-18T10:00:00Z' }).doc, trackRevisions: true })],
+    ['joining one that ends a section to the one before', (doc) => deleteRange(sectioned(doc, 1), { from: { para: 0, offset: 7 }, to: { para: 1, offset: 0 } })],
   ];
   for (const [name, change] of cases) {
     it(`leads to the same document: ${name}`, () => {
@@ -78,6 +106,20 @@ describe('diff and apply', () => {
     });
   }
 
+  it('sends going back to a version as the changes it makes, its pictures with them', () => {
+    const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
+    // The version is a file of its own, with the picture in its package.
+    const version = importDocx(exportDocx(insertImage(createDoc([createParagraph('primero'), createParagraph('con foto ')]), { para: 1, offset: 9 }, { bytes: PNG, type: 'image/png', width: 8, height: 8 }).doc));
+    const doc = stampIds(importDocx(exportDocx(createDoc([createParagraph('primero'), createParagraph('segundo'), createParagraph('tercero')]))));
+    const made = edit(doc, 'n', (d) => restoreVersion(d, version));
+    // The paragraph that is the same is not sent again.
+    expect(made.ops.some((op) => 'id' in op && op.id === doc.paragraphs[0].id)).toBe(false);
+    const theirs = apply(doc, made.ops);
+    expect(texts(theirs)).toEqual(texts(version));
+    const picture = theirs.paragraphs[1].runs.find((run) => run.props.object)!;
+    expect(docImage(theirs, picture.props.object!)?.bytes).toEqual(PNG);
+  });
+
   it('writes a keystroke as one small change', () => {
     const doc = base('primero', 'segundo');
     const { ops } = edit(doc, 'n', (d) => insertText(d, { para: 1, offset: 3 }, 'X').doc);
@@ -87,7 +129,7 @@ describe('diff and apply', () => {
   it('writes Enter as a cut, and Backspace at the start of a paragraph as a join', () => {
     const doc = base('primero', 'segundo');
     const cut = edit(doc, 'n', (d) => splitParagraph(d, { para: 0, offset: 3 }).doc);
-    expect(cut.ops).toEqual([{ t: 'split', id: 'p0', at: 3, newId: 'n0' }]);
+    expect(cut.ops).toEqual([{ t: 'split', id: 'p0', at: 3, newId: 'n0', props: {} }]);
     const joined = edit(doc, 'n', (d) => deleteRange(d, { from: { para: 0, offset: 7 }, to: { para: 1, offset: 0 } }));
     expect(joined.ops).toEqual([{ t: 'join', id: 'p0', next: 'p1', at: 7 }]);
   });
@@ -142,6 +184,24 @@ describe('two people at once', () => {
     expect(texts(out)).toEqual(['A hola mundo B']);
   });
 
+  it('keeps the page given to a section when someone cuts the paragraph that ends it', () => {
+    const doc = sectioned(base('primero', 'segundo'));
+    const out = same(doc, (d) => setSectionPage(d, 0, { width: 800 }), (d) => splitParagraph(d, { para: 0, offset: 3 }).doc);
+    expect(texts(out)).toEqual(['pri', 'mero', 'segundo']);
+    expect(out.paragraphs.map((p) => p.section?.page.width)).toEqual([undefined, 800, undefined]);
+  });
+
+  it('keeps what both wrote in a note at the foot of the page', () => {
+    const doc = stampIds(insertFootnote(base('primero', 'segundo'), { para: 0, offset: 3 }, 'nota').doc);
+    const note = (d: Doc) => d.footnotes![0].paragraphs.map(paragraphText).join('|');
+    const out = same(
+      doc,
+      (d) => withStory(d, 'footnote:1', { paragraphs: [insertText({ ...d, paragraphs: d.footnotes![0].paragraphs }, { para: 0, offset: 1 }, 'A ').doc.paragraphs[0]] }),
+      (d) => withStory(d, 'footnote:1', { paragraphs: [insertText({ ...d, paragraphs: d.footnotes![0].paragraphs }, { para: 0, offset: 6 }, ' B').doc.paragraphs[0]] }),
+    );
+    expect(note(out)).toBe('\u2060A  nota B');
+  });
+
   it('puts what both typed at the same place one after the other', () => {
     const doc = base('ab');
     const out = same(doc, (d) => insertText(d, { para: 0, offset: 1 }, 'X').doc, (d) => insertText(d, { para: 0, offset: 1 }, 'Y').doc);
@@ -183,6 +243,82 @@ describe('two people at once', () => {
     const doc = base('uno', 'dos', 'tres');
     const out = same(doc, (d) => deleteRange(d, { from: { para: 0, offset: 3 }, to: { para: 2, offset: 0 } }), (d) => insertText(d, { para: 2, offset: 4 }, '!').doc);
     expect(texts(out)).toEqual(['unotres!']);
+  });
+
+  describe('a paragraph one deletes while the other writes in it', () => {
+    const doc = base('uno', 'dos', 'tres');
+    const gone = (d: Doc) => deleteRange(d, { from: { para: 0, offset: 3 }, to: { para: 1, offset: 3 } });
+    /** Both ways round: whichever got to the server first, everybody ends with the same. */
+    /** Both ways round: whichever got to the server first, everybody ends with the same text. */
+    const both = (b: (doc: Doc) => Doc) => {
+      const one = same(doc, gone, b);
+      expect(texts(same(doc, b, gone))).toEqual(texts(one));
+      return one;
+    };
+    /** What someone does in steps, each sent as it is made, as the editor sends them. */
+    const steps = (start: Doc, tag: string, ...changes: ((doc: Doc) => Doc)[]) => {
+      let now = start;
+      const ops: Op[] = [];
+      for (const change of changes) {
+        const made = edit(now, `${tag}${ops.length}.`, change);
+        now = made.doc;
+        ops.push(...made.ops);
+      }
+      return { doc: now, ops };
+    };
+
+    it('keeps what was written, in the paragraph it was written in', () => {
+      const out = both((d) => insertText(d, { para: 1, offset: 2 }, 'XX').doc);
+      expect(texts(out)).toEqual(['uno', 'XX', 'tres']);
+      expect(out.paragraphs[1].id).toBe(doc.paragraphs[1].id);
+    });
+
+    it('keeps everything written in it at once, in its order', () => {
+      const out = both((d) => insertText(insertText(d, { para: 1, offset: 0 }, 'A').doc, { para: 1, offset: 4 }, 'B').doc);
+      expect(texts(out)).toEqual(['uno', 'AB', 'tres']);
+    });
+
+    it('lets the one writing go on writing there', () => {
+      const { first: deleted } = meet(doc, gone, (d) => insertText(d, { para: 1, offset: 3 }, 'X').doc);
+      const more = same(deleted, (d) => d, (d) => insertText(d, { para: 1, offset: 1 }, 'YZ').doc);
+      expect(texts(more)).toEqual(['uno', 'XYZ', 'tres']);
+    });
+
+    it('keeps a paragraph made with Enter and written in, and not what it had', () => {
+      const one = edit(doc, 'a', gone);
+      const two = steps(doc, 'b', (d) => splitParagraph(d, { para: 1, offset: 1 }).doc, (d) => insertText(d, { para: 2, offset: 0 }, 'nuevo ').doc);
+      for (const [x, y] of [[one, two], [two, one]]) {
+        const { second, first } = transform(y.ops, x.ops);
+        expect(shape(apply(y.doc, first))).toEqual(shape(apply(x.doc, second)));
+        expect(texts(apply(x.doc, second))).toEqual(['uno', 'nuevo ', 'tres']);
+      }
+    });
+
+    it('does not bring it back for formatting given to its text', () => {
+      const out = both((d) => applyRunProps(d, { from: { para: 1, offset: 0 }, to: { para: 1, offset: 3 } }, { bold: true }));
+      expect(texts(out)).toEqual(['uno', 'tres']);
+    });
+
+    it('does not bring it back for a cut with nothing written', () => {
+      expect(texts(both((d) => splitParagraph(d, { para: 1, offset: 1 }).doc))).toEqual(['uno', 'tres']);
+    });
+
+    it('keeps the next paragraph, brought up to the end of it', () => {
+      expect(texts(both((d) => deleteRange(d, { from: { para: 1, offset: 3 }, to: { para: 2, offset: 0 } })))).toEqual(['uno', 'tres']);
+    });
+
+    it('takes its text out of the paragraph before, when it was brought up to it', () => {
+      expect(texts(both((d) => deleteRange(d, { from: { para: 0, offset: 3 }, to: { para: 1, offset: 0 } })))).toEqual(['uno', 'tres']);
+    });
+
+    it('drops what was written, as before, when the deletion does not say what it took out', () => {
+      const one = edit(doc, 'a', gone);
+      const two = edit(doc, 'b', (d) => insertText(d, { para: 1, offset: 2 }, 'XX').doc);
+      const old = one.ops.map((op) => (op.t === 'delete' ? { ...op, para: undefined } : op));
+      const { second, first } = transform(two.ops, old);
+      expect(texts(apply(one.doc, second))).toEqual(['uno', 'tres']);
+      expect(shape(apply(two.doc, first))).toEqual(shape(apply(one.doc, second)));
+    });
   });
 
   it('gives two tables made at once a place each', () => {

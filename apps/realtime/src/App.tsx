@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DocsEditor } from '@rebodocs/react'
-import { type Room, type StoredFile, createDoc, enterRoom, listDocs } from './api'
+import { type Room, type StoredFile, createDoc, enterRoom, listDocs, versionsOf } from './api'
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -37,6 +37,7 @@ export function App() {
   const [name, setName] = useState(firstName)
   // The document open, and the room it is worked on in; the ticket is for one name.
   const [open, setOpen] = useState<{ key: string; as: string; room: Room }>()
+  const versions = useMemo(() => (open ? versionsOf(open.key) : undefined), [open?.key])
   const [live, setLive] = useState<{ state: string; people: Person[] }>({ state: 'off', people: [] })
   const [note, setNote] = useState<{ text: string; bad?: boolean }>({ text: '' })
   const fail = (problem: unknown) => setNote({ text: messageOf(problem), bad: true })
@@ -163,6 +164,8 @@ Every document is a room. It opens when the first person comes in and closes whe
               key={open.room.ticket}
               className="fill"
               collab={open.room}
+              // Kept by the backend: one when everybody leaves, and one whenever someone keeps it from the side panel.
+              versions={versions}
               locale="en"
               onCollab={(state, peers) => {
                 setLive({ state, people: peers.map((peer) => ({ name: peer.name || 'Someone', color: peer.color })) })

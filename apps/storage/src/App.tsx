@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
-import { DocsEditor } from '@rebodocs/react'
-import { type BucketFile, type MadePdf, listFiles, makePdf, readFile, readUrl, variablesOf, writeFile } from './api'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DocsEditor, type Versions } from '@rebodocs/react'
+import { type BucketFile, type MadePdf, listFiles, listVersions, makePdf, readFile, readUrl, saveVersion, variablesOf, writeFile } from './api'
 
 const isDocx = (key: string) => /\.docx$/i.test(key)
 const sizeOf = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`)
@@ -109,12 +109,24 @@ export function App() {
     say(`${key} goes to the bucket when you save it.`)
   }
 
+  // Each save keeps a version too, beside the document: the panel lists them, compares them and goes back to one.
+  const versions = useMemo<Versions | undefined>(
+    () =>
+      open && {
+        list: () => listVersions(open.key),
+        load: (id) => readFile(id),
+        save: (docx, meta) => saveVersion(open.key, docx, meta),
+      },
+    [open?.key],
+  )
+
   async function save(docx: Uint8Array) {
     if (!open) return
     try {
       say(`Saving ${open.key}…`)
       await writeFile(open.key, docx)
-      say(`${open.key} saved, ${sizeOf(docx.length)}.`)
+      await saveVersion(open.key, docx)
+      say(`${open.key} saved, ${sizeOf(docx.length)}, and kept as a version.`)
       void refresh()
     } catch (problem) {
       fail(problem)
@@ -160,7 +172,7 @@ export function App() {
         <div className="editor">
           {open ? (
             // Made again for another document: the key is its place in the bucket.
-            <DocsEditor key={open.key} className="fill" docx={open.docx} name={open.key.split('/').pop()} locale="en" onSave={(docx) => void save(docx)} onError={(message) => fail(new Error(message))} />
+            <DocsEditor key={open.key} className="fill" docx={open.docx} name={open.key.split('/').pop()} locale="en" versions={versions} onSave={(docx) => save(docx)} onError={(message) => fail(new Error(message))} />
           ) : (
             <p className="empty">Nothing open.</p>
           )}

@@ -9,9 +9,42 @@
 
 import {
   cellOfTable,
+  drawnTextBoxes,
+  insertTextBox,
+  textBoxOf,
+  textBoxPart,
+  type RevisionView,
+  acceptRevisions,
+  comparePositions,
+  decideAllRevisions,
+  rejectRevisions,
+  revisionNow,
+  revisionsOf,
+  trackDocEdit,
+  compareDocs,
+  describeChange,
+  importDocx,
+  type Change,
   type Doc,
+  type BasePart,
   type StoryPart,
+  footnoteNumbers,
+  footnoteOf,
+  footnotePart,
+  footnoteReferenceId,
+  footnoteReferences,
+  hasOwnFirstPage,
+  insertFootnote,
+  hasOwnStories,
+  pageAt,
+  sectionCount,
+  sectionMarks,
+  sectionPart,
+  setOwnFirstPage,
+  setOwnStories,
+  setSectionPage,
   storyKind,
+  storySource,
   storyOf,
   withStory,
   type PageNumberFormat,
@@ -20,6 +53,7 @@ import {
   type Align,
   type Paragraph,
   type ParagraphProps,
+  type TabStop,
   type Position,
   type Range,
   type RunProps,
@@ -101,6 +135,8 @@ export interface ToolContext {
   fixedTables?: number;
   /** Who the notes it writes are by, when the assistant does not say. */
   author?: string;
+  /** Who the changes it makes are by while they are tracked: "Assistant" when not said. */
+  reviser?: string;
   now?: Date;
 }
 
@@ -171,18 +207,34 @@ function afterIndex(doc: Doc, args: Args): number {
 // --- Reading the document -------------------------------------------------------
 
 /** The text of a paragraph as a person reads it: without the marks that take no room, a picture as a word. */
-const shown = (p: Paragraph): string =>
-  p.runs
-    .map((run) => (run.props.anchor ? '' : run.props.object ? '[image]'.repeat(run.text.length) : run.text))
-    .join('')
-    .replace(/\f/g, '[page break]')
-    .replace(/\t/g, ' → ');
+/** The text of a paragraph as an assistant reads it; with the numbers of the notes, their references as [^n]. */
+/** A paragraph as the assistant reads it: tracked changes as {+put in+} and [-taken out-], and its mark too when it is one. */
+const shown = (p: Paragraph, notes?: Map<string, number>): string => {
+  let out = '';
+  let open = '';
+  const close = () => (open === 'insert' ? '+}' : open === 'delete' ? '-]' : '');
+  for (const run of p.runs) {
+    const note = notes && footnoteReferenceId(run.props.object);
+    const text =
+      note !== undefined && notes?.has(note) ? `[^${notes.get(note)}]`.repeat(run.text.length) : run.props.anchor ? '' : run.props.object ? '[image]'.repeat(run.text.length) : run.text;
+    if (!text) continue;
+    const revision = run.props.revision ?? '';
+    if (revision !== open) {
+      out += close() + (revision === 'insert' ? '{+' : revision === 'delete' ? '[-' : '');
+      open = revision;
+    }
+    out += text;
+  }
+  out += close();
+  if (p.props.markRevision) out += p.props.markRevision === 'insert' ? '{+¶+}' : '[-¶-]';
+  return out.replace(/\f/g, '[page break]').replace(/\t/g, ' → ');
+};
 
 const words = (doc: Doc): number => doc.paragraphs.reduce((sum, p) => sum + (shown(p).match(/\S+/g)?.length ?? 0), 0);
 
 const styleNames = (doc: Doc): string => paragraphStyles(doc).map((style) => style.id).join(', ');
 
-function line(doc: Doc, index: number, labels: ReturnType<typeof listLabels>): string {
+function line(doc: Doc, index: number, labels: ReturnType<typeof listLabels>, notes?: Map<string, number>): string {
   const p = doc.paragraphs[index];
   const style = styleIdAt(doc, index);
   const at = p.cell ? locateCell(doc, index) : undefined;
@@ -193,7 +245,7 @@ function line(doc: Doc, index: number, labels: ReturnType<typeof listLabels>): s
   ].filter(Boolean);
   // The bullet of a list is a sign of a symbol font: here it is said as one that reads anywhere.
   const label = listKindAt(doc, index) === 'bullet' ? '•' : labels[index]?.text;
-  return `[${index + 1}]${tags.length ? ` (${tags.join('; ')})` : ''} ${label ? `${label} ` : ''}${shown(p)}`;
+  return `[${index + 1}]${tags.length ? ` (${tags.join('; ')})` : ''} ${label ? `${label} ` : ''}${shown(p, notes)}`;
 }
 
 /** The lines of the paragraphs from `from` to `to`, as `read_document` gives them. */
@@ -333,6 +385,23 @@ function mainLooks(doc: Doc, para: number): RunProps {
 const cm = (points: number) => `${Math.round((points / CM) * 100) / 100} cm`;
 
 /** The look of a paragraph in words: where it sits, its indents and the room around it. */
+/** The tab stops a tool was given, in order; undefined when it was given none. */
+function tabStops(given: unknown): TabStop[] | undefined {
+  if (given === undefined) return undefined;
+  const list: unknown[] = Array.isArray(given) ? given : fail('"tab_stops" must be a list of stops, each with "at_cm".');
+  return list
+    .map((stop): TabStop => {
+      const at = Number((stop as { at_cm?: unknown })?.at_cm);
+      if (!Number.isFinite(at) || at < 0 || at > 60) fail('Each tab stop needs "at_cm", from 0 to 60.');
+      const align = (stop as { align?: string }).align ?? 'left';
+      if (!['left', 'center', 'right', 'decimal'].includes(align)) fail('A tab stop\'s "align" must be "left", "center", "right" or "decimal".');
+      const leader = (stop as { leader?: string }).leader ?? 'none';
+      if (!['none', 'dot', 'hyphen', 'underscore'].includes(leader)) fail('A tab stop\'s "leader" must be "none", "dot", "hyphen" or "underscore".');
+      return defined<TabStop>({ pos: Math.round(at * CM * 100) / 100, align: align as TabStop['align'], leader: leader === 'none' ? undefined : (leader as TabStop['leader']) });
+    })
+    .sort((a, b) => a.pos - b.pos);
+}
+
 function sayParagraph(doc: Doc, para: number): string {
   const r = resolveParagraph(doc.paragraphs[para].props);
   const parts = [`style ${styleIdAt(doc, para)}`, `align ${r.align}`];
@@ -343,6 +412,7 @@ function sayParagraph(doc: Doc, para: number): string {
   parts.push(`space before ${r.spacingBefore} pt, after ${r.spacingAfter} pt`, `line spacing ${Math.round(r.lineHeight * 100) / 100}`);
   const list = listKindAt(doc, para);
   if (list) parts.push(`${list} list, level ${r.listLevel + 1}`);
+  if (r.tabs.length) parts.push(`tab stops ${r.tabs.map((tab) => `${tab.align}${tab.leader ? ` with ${tab.leader}s` : ''} at ${cm(tab.pos)}`).join(', ')}`);
   if (r.keepNext) parts.push('kept with the next');
   if (r.pageBreakBefore) parts.push('starts a page');
   return parts.join('; ');
@@ -419,6 +489,36 @@ function dress(doc: Doc, para: number, start: number, base: RunProps, segments: 
   return next;
 }
 
+const cmOf = (points: number) => Math.round((points / CM) * 100) / 100;
+
+/** A page as its size and margins say it. */
+function pageSaid(page: PageSetup): string {
+  return `The page is ${cmOf(page.width)} × ${cmOf(page.height)} cm, with margins of ${cmOf(page.marginTop)} cm above, ${cmOf(page.marginBottom)} below, ${cmOf(page.marginLeft)} left and ${cmOf(page.marginRight)} right.`;
+}
+
+/** The sections of a document of several: their paragraphs, their page and their header and footer. Nothing for one of one. */
+function sectionsSaid(doc: Doc): string {
+  const ends = sectionMarks(doc);
+  if (!ends.length) return '';
+  const story = (part: StoryPart) => {
+    const body = (storyOf(doc, part)?.paragraphs ?? []).map((p) => shown(p)).filter((value) => value.trim()).join(' / ');
+    return body ? `"${body}"` : 'empty';
+  };
+  const lines = [...ends, doc.paragraphs.length - 1].map((end, k) => {
+    const from = k ? ends[k - 1] + 1 : 0;
+    const page = pageAt(doc, end);
+    const last = k === ends.length;
+    const own = hasOwnStories(doc, k);
+    const parts = [
+      `${cmOf(page.width)} × ${cmOf(page.height)} cm, margins ${cmOf(page.marginTop)} / ${cmOf(page.marginBottom)} / ${cmOf(page.marginLeft)} / ${cmOf(page.marginRight)} cm (top / bottom / left / right)`,
+      last ? 'its header and footer are the document\'s' : own ? `header ${story(sectionPart('header', k))}, footer ${story(sectionPart('footer', k))} of its own` : 'shows the document\'s header and footer',
+      hasOwnFirstPage(doc, k) ? `its first page has its own: header ${story(sectionPart('firstHeader', last ? undefined : k))}, footer ${story(sectionPart('firstFooter', last ? undefined : k))}` : '',
+    ];
+    return `${k + 1}. Paragraphs ${from + 1} to ${end + 1}: ${parts.filter(Boolean).join('; ')}.`;
+  });
+  return `Sections (each with its own page; "section" in set_page_setup, and with "area", says one):\n${lines.join('\n')}`;
+}
+
 /** The stretches of paragraphs set in columns. */
 function columnsSaid(doc: Doc): string {
   const out: string[] = [];
@@ -465,18 +565,24 @@ export const TOOLS: Tool[] = [
       const headings = outline(doc).map((item) => `${'  '.repeat(Math.max(item.level - 1, 0))}- ${item.text} [${item.para + 1}]`);
       const names = variableNames(doc);
       const story = (name: string, part: Doc['header']) => {
-        const body = (part?.paragraphs ?? []).map(shown).filter((value) => value.trim()).join(' / ');
+        const body = (part?.paragraphs ?? []).map((p) => shown(p)).filter((value) => value.trim()).join(' / ');
         return body ? `${name}: ${body}` : '';
       };
       return {
         text: [
           `${doc.paragraphs.length} paragraphs, ${words(doc)} words, ${(doc.tables ?? []).filter((table) => table.rows.length).length} tables, ${doc.notes?.length ?? 0} notes.`,
           tocRange(doc) ? 'It has a table of contents.' : '',
+          footnoteNumbers(doc).size ? `It has ${footnoteNumbers(doc).size} notes at the foot of the page, shown as [^n] in read_document.` : '',
+          textBoxesSaid(doc),
+          doc.trackRevisions || revisionsOf(doc).length
+            ? `${doc.trackRevisions ? 'Changes are tracked: what you change stays marked for the person to accept or reject.' : 'Changes are not tracked.'} ${revisionsOf(doc).length} tracked changes, shown in read_document as {+put in+} and [-taken out-] (list_changes).`
+            : '',
           story('Header', doc.header),
           story('Footer', doc.footer),
-          doc.firstPage ? 'The first page has a header and a footer of its own ("first_header", "first_footer").' : '',
+          doc.firstPage ? `The first page${sectionMarks(doc).length ? ' of the last section' : ''} has a header and a footer of its own ("first_header", "first_footer").` : '',
           story('First page header', doc.firstPage?.header),
           story('First page footer', doc.firstPage?.footer),
+          sectionsSaid(doc),
           headings.length ? `Headings (with their paragraph):\n${headings.join('\n')}` : 'It has no headings.',
           names.length ? `Template variables: ${names.join(', ')}` : '',
           `Paragraph styles: ${styleNames(doc)}`,
@@ -502,17 +608,22 @@ export const TOOLS: Tool[] = [
       const to = paragraphIndex(doc, args, 'to', doc.paragraphs.length);
       if (to < from) fail('"to" is before "from".');
       const labels = listLabels(doc);
+      const numbers = footnoteNumbers(doc);
       const out: string[] = [];
       let size = 0;
       let i = from;
       for (; i <= to; i++) {
-        const next = line(doc, i, labels);
+        const next = line(doc, i, labels, numbers);
         if (out.length && size + next.length > READ_LIMIT) break;
         out.push(next);
         size += next.length + 1;
       }
       const more = i <= to ? `\n… ${to - i + 1} more paragraphs: read on with from=${i + 1}.` : '';
-      return { text: out.join('\n') + more };
+      // The notes at the foot of the page the paragraphs read refer to.
+      const cited = [...new Set(footnoteReferences(doc).filter((ref) => ref.para >= from && ref.para < i && numbers.has(ref.id)).map((ref) => ref.id))];
+      const notes = cited.map((id) => `[^${numbers.get(id)}] ${footnoteOf(doc, id)!.paragraphs.map((p) => shown(p)).join(' / ').trim()}`);
+      const footer = notes.length ? `\nNotes at the foot of the page (area "footnote" with area_footnote reads or changes one):\n${notes.join('\n')}` : '';
+      return { text: out.join('\n') + more + footer };
     },
   },
   {
@@ -540,6 +651,45 @@ export const TOOLS: Tool[] = [
       }
       const more = i <= to ? `\n… ${to - i + 1} more paragraphs: read on with from=${i + 1}.` : '';
       return { text: out.join('\n') + more };
+    },
+  },
+  {
+    name: 'compare_documents',
+    description:
+      'What changed between this document and another version of it in a .docx file ("path"): the paragraphs put in, taken out and changed, of the text and of its headers, footers and notes at the foot of the page, with what was taken out as [-…-] and what was put in as {+…+}. By default the file is the earlier version; with "file_is" "later", it is the later one.',
+    properties: {
+      path: { type: 'string', description: 'The path of the other version, a .docx file.' },
+      file_is: { type: 'string', enum: ['earlier', 'later'], description: 'Whether the file is the earlier version (the default) or the later one.' },
+    },
+    required: ['path'],
+    writes: false,
+    run(doc, args) {
+      // The file is read by whoever runs the tool, which gives its bytes here: a page cannot open a path.
+      const data = optionalText(args, 'data') ?? fail('The file could not be read.');
+      let other: Doc;
+      try {
+        other = importDocx(Uint8Array.from(atob(data), (c) => c.charCodeAt(0)));
+      } catch {
+        return fail('The file is not a Word document that can be read.');
+      }
+      const later = optionalText(args, 'file_is') === 'later';
+      const { changes } = later ? compareDocs(doc, other) : compareDocs(other, doc);
+      if (!changes.length) return { text: 'There is no difference in the text, the headers, the footers or the notes.' };
+      /** Where a change is, by the numbers of this document when it has the paragraph. */
+      const where = (change: Change) => {
+        const mine = later ? change.before : change.after;
+        const theirs = later ? change.after : change.before;
+        const place = mine !== undefined ? `[${mine + 1}]` : `(only in the file, its paragraph ${theirs! + 1})`;
+        if (!change.part) return place;
+        const note = change.part.startsWith('footnote:') ? footnoteNumbers(later ? doc : other).get(change.part.slice(9)) ?? footnoteNumbers(later ? other : doc).get(change.part.slice(9)) : undefined;
+        return `${note !== undefined ? `Note ${note}` : storyKind(change.part) === 'header' ? 'Header' : 'Footer'} ${place}`;
+      };
+      const WORDS = { added: 'put in', removed: 'taken out', changed: 'changed', formatted: 'same text, another look' } as const;
+      const MOST = 200;
+      const lines = changes.slice(0, MOST).map((change) => `${where(change)} ${WORDS[change.kind]}: ${describeChange(change)}`);
+      if (changes.length > MOST) lines.push(`…and ${changes.length - MOST} more.`);
+      const head = `${changes.length} ${changes.length === 1 ? 'change' : 'changes'} from the ${later ? 'document' : 'file'} to the ${later ? 'file' : 'document'}; the numbers in brackets are those of this document's paragraphs:`;
+      return { text: `${head}\n${lines.join('\n')}` };
     },
   },
   {
@@ -771,7 +921,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'format_paragraphs',
     areas: true,
-    description: 'Changes how paragraphs sit on the page: their alignment, indents, the room before and after them, their line spacing, and whether they keep with the next one. Give only what is to change.',
+    description: 'Changes how paragraphs sit on the page: their alignment, indents, the room before and after them, their line spacing, their tab stops, and whether they keep with the next one. Give only what is to change.',
     properties: {
       from: { type: 'integer', description: 'The first paragraph.' },
       to: { type: 'integer', description: 'The last one. The same as "from" when left out.' },
@@ -783,6 +933,19 @@ export const TOOLS: Tool[] = [
       space_after_pt: { type: 'number', description: 'Room below the paragraph, in points.' },
       line_spacing: { type: 'number', description: 'Of the lines: 1 single, 1.15, 1.5, 2 double.' },
       keep_with_next: { type: 'boolean', description: 'Keep it on the same page as the next paragraph, as a heading.' },
+      tab_stops: {
+        type: 'array',
+        description: 'All the tab stops the paragraphs are to have, in place of the ones they have; [] for none. A tab in the text goes to the next one; past them, every 1.27 cm.',
+        items: {
+          type: 'object',
+          properties: {
+            at_cm: { type: 'number', description: 'From the left margin, in centimetres.' },
+            align: { type: 'string', enum: ['left', 'center', 'right', 'decimal'], description: 'Whether the text after the tab starts there, is centred on it, ends there or has its decimal point there.' },
+            leader: { type: 'string', enum: ['none', 'dot', 'hyphen', 'underscore'], description: 'What fills the room of the tab, as the dots of an index.' },
+          },
+          required: ['at_cm'],
+        },
+      },
     },
     required: ['from'],
     writes: true,
@@ -805,8 +968,9 @@ export const TOOLS: Tool[] = [
         spacingAfter: number(args, 'space_after_pt', 0, 1000),
         lineHeight: number(args, 'line_spacing', 0.5, 5),
         keepNext: optionalFlag(args, 'keep_with_next'),
+        tabs: tabStops(args.tab_stops),
       });
-      if (!Object.keys(patch).length) fail('Say what to change: align, indent_left_cm, indent_right_cm, first_line_cm, space_before_pt, space_after_pt, line_spacing or keep_with_next.');
+      if (!Object.keys(patch).length) fail('Say what to change: align, indent_left_cm, indent_right_cm, first_line_cm, space_before_pt, space_after_pt, line_spacing, tab_stops or keep_with_next.');
       const next = setParagraphProps(doc, from, to, patch);
       return { text: `Paragraphs ${from + 1} to ${to + 1}: ${sayParagraph(next, from)}.`, doc: next, reveal: { para: from, offset: 0 } };
     },
@@ -895,6 +1059,58 @@ export const TOOLS: Tool[] = [
       if (next === doc) fail(`There is no note "${id}": list_notes gives their ids.`);
       return { text: `Note ${id} removed.`, doc: next };
     },
+  },
+  {
+    name: 'track_changes',
+    description:
+      'Switches tracked changes on or off, as Word\'s "Track changes". While on, every change made to the text, by any tool, stays marked for a person to accept or reject: what was put in as {+…+} and what was taken out as [-…-] in read_document.',
+    properties: { on: { type: 'boolean', description: 'True to track the changes from now on, false to stop. What was tracked stays.' } },
+    required: ['on'],
+    writes: true,
+    run(doc, args) {
+      const on = optionalFlag(args, 'on') ?? fail('"on" must be true or false.');
+      if (on === !!doc.trackRevisions) return { text: on ? 'Changes were already being tracked.' : 'Changes were not being tracked.' };
+      const { trackRevisions: _, ...rest } = doc;
+      return { text: on ? 'Changes are tracked from now on: what you change stays marked for the person to accept or reject.' : 'Changes are no longer tracked.', doc: on ? { ...doc, trackRevisions: true } : rest };
+    },
+  },
+  {
+    name: 'list_changes',
+    description: 'The tracked changes of the document, numbered: who made each, whether it put text in or took it out, the text, and the paragraph it is in. accept_changes and reject_changes take these numbers.',
+    properties: {},
+    writes: false,
+    run(doc) {
+      const list = revisionsOf(doc);
+      const state = doc.trackRevisions ? 'Changes are being tracked.' : 'Changes are not being tracked.';
+      if (!list.length) return { text: `${state} There are no tracked changes.` };
+      const notes = footnoteNumbers(doc);
+      const where = (r: RevisionView) => {
+        const at = `paragraph ${r.range.from.para + 1}`;
+        if (!r.part) return at;
+        const note = r.part.startsWith('footnote:') ? notes.get(r.part.slice(9)) : undefined;
+        return `${note !== undefined ? `note ${note}` : storyKind(r.part as Exclude<StoryPart, `footnote:${string}`>)}, ${at}`;
+      };
+      const lines = list.map((r, i) => {
+        const what = r.text.replace(/[\u2060\uFFFC]/g, '');
+        const text = what === '¶' ? 'a paragraph break' : `"${what.replace(/¶$/, '')}"${what.endsWith('¶') ? ' and the paragraph break after it' : ''}`;
+        return `${i + 1}. ${r.author || 'Someone'} ${r.type === 'insert' ? 'put in' : 'took out'} ${text} (${where(r)}${r.date ? `, ${r.date.slice(0, 16).replace('T', ' ')}` : ''})`;
+      });
+      return { text: `${state} ${list.length} tracked ${list.length === 1 ? 'change' : 'changes'}:\n${lines.join('\n')}` };
+    },
+  },
+  {
+    name: 'accept_changes',
+    description: 'Accepts tracked changes: what was put in stays, unmarked, and what was taken out goes. With "changes", the ones of those numbers in list_changes; without, all of them.',
+    properties: { changes: { type: 'array', items: { type: 'integer' }, description: 'The numbers of the changes, from list_changes. All of them when left out.' } },
+    writes: true,
+    run: (doc, args) => decideChanges(doc, args, true),
+  },
+  {
+    name: 'reject_changes',
+    description: 'Rejects tracked changes: what was put in goes, and what was taken out comes back. With "changes", the ones of those numbers in list_changes; without, all of them.',
+    properties: { changes: { type: 'array', items: { type: 'integer' }, description: 'The numbers of the changes, from list_changes. All of them when left out.' } },
+    writes: true,
+    run: (doc, args) => decideChanges(doc, args, false),
   },
   {
     name: 'list_variables',
@@ -1011,10 +1227,10 @@ export const TOOLS: Tool[] = [
     name: 'edit_table',
     areas: true,
     description:
-      'Changes the shape or the look of a table that is there. "paragraph" is any paragraph of the cell to act on (read_document says which cell each is in). Actions: insert_row_above, insert_row_below, insert_column_left, insert_column_right, delete_row, delete_column, merge_cells (from "paragraph" to "to_paragraph"), split_cell (undoes a merge), set_column_widths (with "widths_cm", one for each column), set_row_height (with "height_cm", 0 for as tall as it holds, and "exact"), header_row_on and header_row_off (the rows down to this one repeat at the top of each page), align_cells_top, align_cells_center, align_cells_bottom, shade_cells (with "shade"), cell_lines (with "line_style", "line_width_pt" and "line_color"; "line_style" none takes them away), show_borders, hide_borders (the whole table) and delete_table. The actions on cells take "to_paragraph" for several. The text of a cell is changed with replace_text and insert_paragraphs.',
+      'Changes the shape or the look of a table that is there. "paragraph" is any paragraph of the cell to act on (read_document says which cell each is in). Actions: insert_row_above, insert_row_below, insert_column_left, insert_column_right, delete_row, delete_column, merge_cells (from "paragraph" to "to_paragraph"), split_cell (undoes a merge), set_column_widths (with "widths_cm", one for each column), set_row_height (with "height_cm", 0 for as tall as it holds, and "exact"), header_row_on and header_row_off (the rows down to this one repeat at the top of each page), align_cells_top, align_cells_center, align_cells_bottom, text_level, text_up and text_down (the text of the cells set level, or vertically to read from the bottom up or from the top down; its lines are as long as the row is tall), shade_cells (with "shade"), cell_lines (with "line_style", "line_width_pt" and "line_color"; "line_style" none takes them away), show_borders, hide_borders (the whole table) and delete_table. The actions on cells take "to_paragraph" for several. The text of a cell is changed with replace_text and insert_paragraphs.',
     properties: {
       paragraph: { type: 'integer', description: 'A paragraph of the cell to act on.' },
-      action: { type: 'string', enum: ['insert_row_above', 'insert_row_below', 'insert_column_left', 'insert_column_right', 'delete_row', 'delete_column', 'merge_cells', 'split_cell', 'set_column_widths', 'set_row_height', 'header_row_on', 'header_row_off', 'align_cells_top', 'align_cells_center', 'align_cells_bottom', 'shade_cells', 'cell_lines', 'show_borders', 'hide_borders', 'delete_table'] },
+      action: { type: 'string', enum: ['insert_row_above', 'insert_row_below', 'insert_column_left', 'insert_column_right', 'delete_row', 'delete_column', 'merge_cells', 'split_cell', 'set_column_widths', 'set_row_height', 'header_row_on', 'header_row_off', 'align_cells_top', 'align_cells_center', 'align_cells_bottom', 'text_level', 'text_up', 'text_down', 'shade_cells', 'cell_lines', 'show_borders', 'hide_borders', 'delete_table'] },
       height_cm: { type: 'number', description: 'For set_row_height: in centimetres, without the margins of the cells; 0 for as tall as what it holds.' },
       exact: { type: 'boolean', description: 'For set_row_height: the row is that tall whatever it holds.' },
       line_style: { type: 'string', enum: ['single', 'double', 'dashed', 'dotted', 'none'], description: 'For cell_lines: the line all round the cells.' },
@@ -1029,7 +1245,7 @@ export const TOOLS: Tool[] = [
     run(doc, args, context) {
       const para = paragraphIndex(doc, args, 'paragraph');
       const at = locateCell(doc, para) ?? fail(`Paragraph ${para + 1} is not in a table.`);
-      if (at.tableIndex < (context.fixedTables ?? 0) && !['shade_cells', 'cell_lines', 'align_cells_top', 'align_cells_center', 'align_cells_bottom', 'show_borders', 'hide_borders'].includes(String(args.action))) {
+      if (at.tableIndex < (context.fixedTables ?? 0) && !['shade_cells', 'cell_lines', 'align_cells_top', 'align_cells_center', 'align_cells_bottom', 'text_level', 'text_up', 'text_down', 'show_borders', 'hide_borders'].includes(String(args.action))) {
         fail('A table the header or the footer of the file came with cannot be given another shape here: change the text of its cells, or make a new table.');
       }
       const other = whole(args, 'to_paragraph') === undefined ? para : paragraphIndex(doc, args, 'to_paragraph');
@@ -1101,6 +1317,11 @@ export const TOOLS: Tool[] = [
         case 'align_cells_center':
         case 'align_cells_bottom':
           next = setCellProps(doc, para, other, { valign: action.slice('align_cells_'.length) as 'top' | 'center' | 'bottom' });
+          break;
+        case 'text_level':
+        case 'text_up':
+        case 'text_down':
+          next = setCellProps(doc, para, other, { direction: action.slice('text_'.length) as 'level' | 'up' | 'down' });
           break;
         case 'cell_lines': {
           const style = text(args, 'line_style');
@@ -1284,42 +1505,111 @@ export const TOOLS: Tool[] = [
     },
   },
   {
-    name: 'set_page_setup',
-    description: 'Changes the size of the paper, its orientation, or its margins. Give only what is to change.',
+    name: 'insert_footnote',
+    description:
+      'Puts a note at the foot of the page: its number goes in the text right after a text found with "find" (or at the end of paragraph "at_paragraph"), and the note says "text". Notes are numbered by where they are in the text.',
+    properties: { ...PLACE, at_paragraph: { type: 'integer', description: 'Instead of "find": the paragraph at whose end the number goes.' }, text: { type: 'string', description: 'What the note says.' } },
+    required: ['text'],
+    writes: true,
+    run(doc, args) {
+      const said = text(args, 'text');
+      let pos: Position;
+      if (args.find !== undefined) pos = places(doc, args)[0].to;
+      else {
+        const para = paragraphIndex(doc, args, 'at_paragraph');
+        pos = { para, offset: paragraphLength(doc.paragraphs[para]) };
+      }
+      const result = insertFootnote(doc, pos, said);
+      const number = footnoteNumbers(result.doc).get(result.id);
+      return { text: `Note ${number} is at the foot of the page of paragraph ${pos.para + 1}.`, doc: result.doc, reveal: result.pos };
+    },
+  },
+  {
+    name: 'insert_text_box',
+    description:
+      'Puts a text box in: a box with a thin black line, anchored to a paragraph (at the end of "after_paragraph"; 1 when left out), at the left of the column, with the text of that paragraph going round it. It is as tall as its text. Its text is "text"; each line of it a paragraph. Change it later with area "textbox".',
     properties: {
+      text: { type: 'string', description: 'What the box says; a new line starts another paragraph.' },
+      at_paragraph: { type: 'integer', description: 'The paragraph it is anchored to. 1 when left out.' },
+      width_cm: { type: 'number', description: 'How wide it is, in centimetres. 6 when left out.' },
+    },
+    required: ['text'],
+    writes: true,
+    run(doc, args) {
+      const said = text(args, 'text');
+      const para = args.at_paragraph === undefined || args.at_paragraph === null ? 0 : paragraphIndex(doc, args, 'at_paragraph');
+      const asked = args.width_cm === undefined || args.width_cm === null ? 6 : typeof args.width_cm === 'number' && args.width_cm > 0 ? args.width_cm : fail('"width_cm" must be a number above 0.');
+      const room = doc.page.width - doc.page.marginLeft - doc.page.marginRight;
+      const made = insertTextBox(doc, { para, offset: 0 }, { width: Math.min(asked * CM, room), height: 30 });
+      const story = textBoxOf(made.doc, made.id)!;
+      const like = story.paragraphs[0];
+      const paragraphs = said.split('\n').map((line) => ({ ...like, runs: [{ text: line, props: like.runs[0].props }] }));
+      const next = withStory(made.doc, textBoxPart(made.id), { paragraphs });
+      const number = drawnTextBoxes(next).indexOf(made.id) + 1;
+      return { text: `Text box ${number} is anchored to paragraph ${para + 1}.`, doc: next, reveal: made.pos };
+    },
+  },
+  {
+    name: 'set_page_setup',
+    description:
+      'Changes the size of the paper, its orientation, or its margins; and, for one section of a document of several, whether it has a header and footer of its own and whether its first page has its own. Give only what is to change. Without "section", the page of every section changes.',
+    properties: {
+      section: { type: 'integer', description: 'Only this section, counting from 1: get_overview lists them. Every section when left out.' },
       paper: { type: 'string', enum: ['letter', 'a4', 'legal'], description: 'Letter (21.59 × 27.94 cm), A4 (21 × 29.7 cm) or legal (21.59 × 35.56 cm).' },
       orientation: { type: 'string', enum: ['portrait', 'landscape'] },
       margin_top_cm: { type: 'number' },
       margin_bottom_cm: { type: 'number' },
       margin_left_cm: { type: 'number' },
       margin_right_cm: { type: 'number' },
+      different_first_page: { type: 'boolean', description: 'Whether the first page (of the section, with "section") has a header and a footer of its own ("first_header", "first_footer"), which start empty.' },
+      own_header_footer: {
+        type: 'boolean',
+        description: 'With "section", for one before the last: true gives it a header and a footer of its own, copies of the document\'s to begin with; false has it show the document\'s, which are the last section\'s.',
+      },
     },
     writes: true,
     run(doc, args) {
-      const page: PageSetup = { ...doc.page };
+      const count = sectionCount(doc);
+      const asked = whole(args, 'section');
+      if (asked !== undefined && (asked < 1 || asked > count)) fail(`"section" must be from 1 to ${count}: the document has ${count === 1 ? 'one section' : `${count} sections`}.`);
+      const ends = [...sectionMarks(doc), doc.paragraphs.length - 1];
+      const which = asked === undefined ? ends.map((_, k) => k) : [asked - 1];
       const paper = optionalText(args, 'paper');
       const orientation = optionalText(args, 'orientation');
-      if (paper !== undefined) {
-        const size = PAPERS[paper] ?? fail('"paper" must be "letter", "a4" or "legal".');
-        const wide = page.width > page.height;
-        page.width = wide ? size.height : size.width;
-        page.height = wide ? size.width : size.height;
+      if (paper !== undefined && !PAPERS[paper]) fail('"paper" must be "letter", "a4" or "legal".');
+      if (orientation !== undefined && orientation !== 'portrait' && orientation !== 'landscape') fail('"orientation" must be "portrait" or "landscape".');
+      const margins = (
+        [
+          ['margin_top_cm', 'marginTop'],
+          ['margin_bottom_cm', 'marginBottom'],
+          ['margin_left_cm', 'marginLeft'],
+          ['margin_right_cm', 'marginRight'],
+        ] as const
+      ).map(([name, key]) => [key, number(args, name, 0, 10)] as const);
+      let next = doc;
+      for (const k of which) {
+        const page: PageSetup = { ...pageAt(next, ends[k]) };
+        if (paper !== undefined) {
+          const size = PAPERS[paper];
+          const wide = page.width > page.height;
+          page.width = wide ? size.height : size.width;
+          page.height = wide ? size.width : size.height;
+        }
+        if (orientation !== undefined && (orientation === 'landscape') !== page.width > page.height) [page.width, page.height] = [page.height, page.width];
+        for (const [key, value] of margins) if (value !== undefined) page[key] = value * CM;
+        if (page.width - page.marginLeft - page.marginRight < 2 * CM || page.height - page.marginTop - page.marginBottom < 2 * CM) fail('Those margins leave less than 2 cm for the text.');
+        next = setSectionPage(next, ends[k], page);
       }
-      if (orientation !== undefined) {
-        if (orientation !== 'portrait' && orientation !== 'landscape') fail('"orientation" must be "portrait" or "landscape".');
-        if ((orientation === 'landscape') !== page.width > page.height) [page.width, page.height] = [page.height, page.width];
+      const first = optionalFlag(args, 'different_first_page');
+      if (first !== undefined) for (const k of which) next = setOwnFirstPage(next, k, first);
+      const own = optionalFlag(args, 'own_header_footer');
+      if (own !== undefined) {
+        if (asked === undefined) return fail('"own_header_footer" is said of one section: give "section".');
+        if (asked === count) fail(`Section ${count} is the last: its header and footer are the document's, which the sections without their own show.`);
+        next = setOwnStories(next, asked - 1, own);
       }
-      for (const [name, key] of [['margin_top_cm', 'marginTop'], ['margin_bottom_cm', 'marginBottom'], ['margin_left_cm', 'marginLeft'], ['margin_right_cm', 'marginRight']] as const) {
-        const value = number(args, name, 0, 10);
-        if (value !== undefined) page[key] = value * CM;
-      }
-      if (page.width - page.marginLeft - page.marginRight < 2 * CM || page.height - page.marginTop - page.marginBottom < 2 * CM) fail('Those margins leave less than 2 cm for the text.');
-      if ((Object.keys(page) as (keyof PageSetup)[]).every((key) => page[key] === doc.page[key])) return { text: 'Nothing changed: the page was already like that.' };
-      const say = (points: number) => Math.round((points / CM) * 100) / 100;
-      return {
-        text: `The page is ${say(page.width)} × ${say(page.height)} cm, with margins of ${say(page.marginTop)} cm above, ${say(page.marginBottom)} below, ${say(page.marginLeft)} left and ${say(page.marginRight)} right.`,
-        doc: { ...doc, page },
-      };
+      if (next === doc) return { text: 'Nothing changed: the page was already like that.' };
+      return { text: sectionsSaid(next) || pageSaid(pageAt(next, 0)), doc: next };
     },
   },
   {
@@ -1406,17 +1696,28 @@ const BY_NAME = new Map(TOOLS.map((tool) => [tool.name, tool]));
 
 export const findTool = (name: string): Tool | undefined => BY_NAME.get(name);
 
-const AREAS: Record<string, StoryPart> = { header: 'header', footer: 'footer', first_header: 'firstHeader', first_footer: 'firstFooter' };
+const AREAS: Record<string, BasePart> = { header: 'header', footer: 'footer', first_header: 'firstHeader', first_footer: 'firstFooter' };
 
 export const AREA = {
   type: 'string',
-  enum: ['body', 'header', 'footer', 'first_header', 'first_footer'],
+  enum: ['body', 'header', 'footer', 'first_header', 'first_footer', 'footnote', 'textbox'],
   description:
-    'Which part of the document: its text ("body", when left out), the header or the footer every page shows, or the ones the first page has to itself when the document gives it its own ("first_header", "first_footer": get_overview says whether it does). Each has paragraphs numbered from 1 of its own.',
+    'Which part of the document: its text ("body", when left out), the header or the footer every page shows, the ones the first page has to itself when the document gives it its own ("first_header", "first_footer": get_overview says whether it does), a note at the foot of the page ("footnote", with area_footnote), or a text box ("textbox", with area_textbox). Each has paragraphs numbered from 1 of its own.',
+};
+
+export const AREA_TEXTBOX = { type: 'integer', description: 'With area "textbox": the number of the text box, as get_overview lists them.' };
+
+export const AREA_FOOTNOTE = { type: 'integer', description: 'With area "footnote": the number of the note, as read_document shows it in [^n].' };
+
+export const AREA_SECTION = {
+  type: 'integer',
+  description:
+    'With "area", in a document of several sections: the section, from 1, whose own header or footer it is (get_overview says which have their own). Left out, the document\'s: those of the last section, which every section without its own shows.',
 };
 
 /** The properties of the arguments of a tool, with the part of the document where it can be told one. */
-export const toolProperties = (tool: Tool): Record<string, unknown> => (tool.areas ? { ...tool.properties, area: AREA } : tool.properties);
+export const toolProperties = (tool: Tool): Record<string, unknown> =>
+  tool.areas ? { ...tool.properties, area: AREA, area_section: AREA_SECTION, area_footnote: AREA_FOOTNOTE, area_textbox: AREA_TEXTBOX } : tool.properties;
 
 /**
  * Runs a tool on a document. Throws a `ToolError` for what the assistant got
@@ -1424,23 +1725,96 @@ export const toolProperties = (tool: Tool): Record<string, unknown> => (tool.are
  * as if it were the document.
  */
 export function runTool(doc: Doc, name: string, args: Args = {}, context: ToolContext = {}): ToolResult {
+  const result = runOne(doc, name, args, context);
+  // While changes are tracked, what a tool changes is tracked too, by the assistant: word by word, as it changes at once.
+  if (!doc.trackRevisions || !result.doc || result.doc === doc || UNTRACKED.has(name)) return result;
+  const by = { author: context.reviser ?? 'Assistant', date: revisionNow(context.now) };
+  return { ...result, doc: trackDocEdit(doc, result.doc, by) };
+}
+
+function runOne(doc: Doc, name: string, args: Args, context: ToolContext): ToolResult {
   const tool = BY_NAME.get(name) ?? fail(`There is no tool "${name}".`);
-  const { area = 'body', ...rest } = args;
+  const { area = 'body', area_section: section = null, area_footnote: footnote = null, area_textbox: textbox = null, ...rest } = args;
   if (area === 'body' || area === null) return tool.run(doc, rest, context);
-  const part = typeof area === 'string' ? AREAS[area] : undefined;
-  if (!part) return fail('"area" must be "body", "header", "footer", "first_header" or "first_footer".');
+  if (area === 'textbox') {
+    const ids = drawnTextBoxes(doc).filter((id) => textBoxOf(doc, id));
+    const id = Number.isInteger(textbox) ? ids[(textbox as number) - 1] : undefined;
+    if (id === undefined) return fail(ids.length ? `"area_textbox" must be the number of a text box, from 1 to ${ids.length}.` : 'The document has no text boxes: put one in with insert_text_box.');
+    if (name === 'add_note') return fail('A note cannot go in a text box. Put it on the text of the document.');
+    if (!tool.areas) return fail(`${name} only works on the text of the document, not on a text box.`);
+    return inStory(doc, tool, textBoxPart(id), rest, context);
+  }
+  if (area === 'footnote') {
+    const numbers = footnoteNumbers(doc);
+    const id = [...numbers].find(([, n]) => n === footnote)?.[0];
+    if (id === undefined) return fail(numbers.size ? `"area_footnote" must be the number of a note, from 1 to ${numbers.size}.` : 'The document has no notes at the foot of the page: put one in with insert_footnote.');
+    if (name === 'add_note') return fail('A note cannot go in a note at the foot of the page. Put it on the text of the document.');
+    if (!tool.areas) return fail(`${name} only works on the text of the document, not on a note at the foot of the page.`);
+    return inStory(doc, tool, footnotePart(id), rest, context);
+  }
+  const base = typeof area === 'string' ? AREAS[area] : undefined;
+  if (!base) return fail('"area" must be "body", "header", "footer", "first_header", "first_footer" or "footnote".');
   const named = String(area).replace('_', ' ');
-  if (part !== storyKind(part) && !doc.firstPage) return fail('The first page of this document has no header and footer of its own: it shows the ones of every page, which are "header" and "footer".');
+  const count = sectionCount(doc);
+  if (section !== null && (!Number.isInteger(section) || (section as number) < 1 || (section as number) > count)) return fail(`"area_section" must be from 1 to ${count}.`);
+  // The last section's are the document's.
+  const k = section === null || section === count ? undefined : (section as number) - 1;
+  const part = sectionPart(base, k);
+  if (k !== undefined && base === storyKind(base) && !hasOwnStories(doc, k))
+    return fail(`Section ${k + 1} shows the document's header and footer: leave "area_section" out to change those, or give it its own first with set_page_setup (own_header_footer).`);
+  if (base !== storyKind(base) && !hasOwnFirstPage(doc, k ?? count - 1))
+    return fail(`The first page ${k === undefined ? 'of this document' : `of section ${k + 1}`} has no header and footer of its own: give it them with set_page_setup (different_first_page), or use "header" and "footer".`);
   // Word has no comments in a header or a footer, so there is nowhere in the file for a note there.
   if (name === 'add_note') return fail(`A note cannot go in the ${named}: Word has no comments there. Put it on the text of the document.`);
   if (!tool.areas) return fail(`${name} only works on the text of the document, not on its ${named}.`);
   const story: Story | undefined = storyOf(doc, part);
   if (!story?.paragraphs.length && !tool.writes) return { text: `The document has no ${named}.` };
+  return inStory(doc, tool, part, rest, context);
+}
+
+/** The text boxes of the document, numbered as "area_textbox" takes them, with their text. */
+function textBoxesSaid(doc: Doc): string {
+  const ids = drawnTextBoxes(doc).filter((id) => textBoxOf(doc, id));
+  if (!ids.length) return '';
+  const lines = ids.map((id, i) => `${i + 1}. ${textBoxOf(doc, id)!.paragraphs.map((p) => shown(p)).filter((t) => t.trim()).join(' / ') || '(empty)'}`);
+  return `Text boxes (read and change one with area "textbox" and its number in area_textbox):\n${lines.join('\n')}`;
+}
+
+/** Accepts or rejects tracked changes, by their numbers in list_changes, or all of them. */
+function decideChanges(doc: Doc, args: Args, accept: boolean): ToolResult {
+  const list = revisionsOf(doc);
+  if (!list.length) return { text: 'There are no tracked changes.' };
+  const given = args.changes;
+  if (given === undefined || given === null) {
+    return { text: `${accept ? 'Accepted' : 'Rejected'} all ${list.length} tracked ${list.length === 1 ? 'change' : 'changes'}.`, doc: decideAllRevisions(doc, accept) };
+  }
+  if (!Array.isArray(given) || !given.length || !given.every((n) => Number.isInteger(n) && n >= 1 && n <= list.length))
+    return fail(`"changes" must be numbers of changes from list_changes, from 1 to ${list.length}.`);
+  const chosen = [...new Set(given as number[])].map((n) => list[n - 1]);
+  // The last first, so that taking one out does not move the ones before it.
+  chosen.sort((a, b) => (a.part ?? '').localeCompare(b.part ?? '') || comparePositions(b.range.from, a.range.from));
+  let next = doc;
+  for (const r of chosen) {
+    if (!r.part) next = accept ? acceptRevisions(next, r.range) : rejectRevisions(next, r.range);
+    else {
+      const story = storyOf(next, r.part)!;
+      next = withStory(next, r.part, { ...story, paragraphs: (accept ? acceptRevisions(story, r.range) : rejectRevisions(story, r.range)).paragraphs });
+    }
+  }
+  return { text: `${accept ? 'Accepted' : 'Rejected'} ${chosen.length} tracked ${chosen.length === 1 ? 'change' : 'changes'}. The numbers of the others may have moved: list_changes again before using one.`, doc: next };
+}
+
+/** Tools that settle tracked changes, or switch them: what they do is not itself a change to track. */
+const UNTRACKED = new Set(['track_changes', 'accept_changes', 'reject_changes']);
+
+/** Runs a tool on a header, a footer or a note at the foot of the page as if it were the document. */
+function inStory(doc: Doc, tool: Tool, part: StoryPart, rest: Args, context: ToolContext): ToolResult {
+  const story: Story | undefined = storyOf(doc, part);
   // An empty one to write in, in the font of the document.
   const paragraphs = story?.paragraphs.length ? story.paragraphs : [{ props: {}, runs: [{ text: '', props: defined({ fontFamily: propsAt(doc, { para: 0, offset: 0 }).fontFamily }) }] }];
   const view: Doc = { ...doc, paragraphs, tables: story?.tables, header: undefined, footer: undefined, firstPage: undefined, notes: undefined };
   // The tables the part came with from its file are written back as they were, cell by cell: only their text can change.
-  const fixedTables = doc.source?.[`${part}Source`]?.story.tables?.length ?? 0;
+  const fixedTables = storySource(doc, part)?.story.tables?.length ?? 0;
   const result = tool.run(view, rest, { ...context, fixedTables });
   if (!result.doc) return result;
   const made: Story = result.doc.tables ? { paragraphs: result.doc.paragraphs, tables: result.doc.tables } : { paragraphs: result.doc.paragraphs };

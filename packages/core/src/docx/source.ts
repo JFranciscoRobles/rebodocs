@@ -102,9 +102,21 @@ export interface DocxSource {
   firstFooterSource?: StorySource;
   headerSource?: StorySource;
   footerSource?: StorySource;
+  /**
+   * The headers and footers the sections before the last were read with, when
+   * not the document's: by the `origin` of the paragraph that ends the section.
+   */
+  sectionStories?: Record<number, Partial<Record<BasePart, StorySource>>>;
+  /** The part the notes at the foot of the pages were read from, and what each was read as, by its id. */
+  footnotesPath?: string;
+  footnoteSources?: Map<string, StorySource>;
   /** The part the notes were read from, and the notes as they were read: export writes it again when they are not the same. */
   notesPath?: string;
   notes?: Note[];
+  /** What the text of each text box was read as, by its id: its `w:txbxContent` in the part its drawing is in. */
+  textBoxSources?: Map<string, StorySource>;
+  /** Whether the settings of the file said its changes were tracked. */
+  trackRevisions?: boolean;
   /** Relationships of each part that was asked for them, by part path and then by id. */
   relationships?: Map<string, Map<string, string>>;
 }
@@ -151,17 +163,34 @@ const IMAGE_TYPES: Record<string, string> = {
   svg: 'image/svg+xml',
 };
 
-/** A part of the package that is not its main one: the header or the footer of every page, or those of the first page alone. */
-export type StoryPart = 'header' | 'footer' | 'firstHeader' | 'firstFooter';
+/** A header or a footer of the document: of every page, or of the first page alone. */
+export type BasePart = 'header' | 'footer' | 'firstHeader' | 'firstFooter';
+
+/**
+ * A part of the package that is not its main one: a header or a footer of the
+ * document's, or with `@` and the index of a section that has its own, that section's;
+ * or the text of a note at the foot of the page.
+ */
+export type StoryPart = BasePart | `${BasePart}@${number}` | FootnotePart | TextBoxPart;
+
+/** The text of a text box, by the id of its drawing. */
+export type TextBoxPart = `textbox:${string}`;
+
+/** The text of a note at the foot of the page, by its id. */
+export type FootnotePart = `footnote:${string}`;
 
 /** The picture an object embeds, when it is in a format browsers can show. `part` is where the object lives. */
 export function objectImage(
   source: DocxSource,
   xml: string,
-  part?: StoryPart,
+  part?: BasePart,
 ): { bytes: Uint8Array; type: string } | undefined {
+  return imageInPart(source, xml, part ? source[`${part}Path`] : source.mainPath);
+}
+
+/** The picture an object of the part at `partPath` embeds, when it is in a format browsers can show. */
+export function imageInPart(source: DocxSource, xml: string, partPath: string | undefined): { bytes: Uint8Array; type: string } | undefined {
   const id = /\br:embed="([^"]+)"/.exec(xml)?.[1];
-  const partPath = part ? source[`${part}Path`] : source.mainPath;
   const path = id && partPath ? relationships(source, partPath).get(id) : undefined;
   const bytes = path ? source.files[path] : undefined;
   const type = IMAGE_TYPES[path?.slice(path.lastIndexOf('.') + 1).toLowerCase() ?? ''];

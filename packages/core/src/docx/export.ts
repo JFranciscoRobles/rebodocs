@@ -12,12 +12,14 @@ import {
   type CellLines,
   type Columns,
   type Doc,
+  type Footnote,
   type Note,
   type Paragraph,
   type Story,
   type Table,
   type TableCell,
   type TableRow,
+  type TabStop,
   type ParagraphProps,
   type ParagraphStyle,
   type ResolvedRunProps,
@@ -31,16 +33,18 @@ import {
   resolveRun,
   sameCell,
 } from '../model';
-import { STORY_PARTS as ALL_STORIES, type StoryPart, storyKind, storyOf } from '../stories';
+import { STORY_PARTS as ALL_STORIES, type BasePart, type StoryPart, sectionEnds, sectionPart, storyKind, storyOf, storySource } from '../stories';
 import type { ListLevel, Numbering } from '../numbering';
 import { paragraphStyles } from '../styles';
 import { imageExtension, mediaKey } from '../images';
 import { noteKey, noteMark, pruneNotes } from '../notes';
 import { isFieldMark } from '../toc';
 import { isColumnBreak } from '../layout';
-import { CUSTOM_PROPERTIES_PATH, HIGHLIGHTS, NOTE_COLORS_PROPERTY, parseRunProps, resolveStyle, val } from './import';
-import type { DocxSource, SourceSlot, StorySource } from './source';
-import { type XmlNode, child, childrenOf, createNode, escapeXml, parseElement, serializeXml } from './xml';
+import { footnoteReferenceId, footnoteReferences, isFootnoteMark } from '../footnotes';
+import { textBoxId, textBoxOf } from '../textboxes';
+import { CUSTOM_PROPERTIES_PATH, HIGHLIGHTS, NOTE_COLORS_PROPERTY, mergeTabs, parseRunProps, resolveStyle, val } from './import';
+import { type DocxSource, type EmbeddedFont, type SourceSlot, type StorySource, relationships } from './source';
+import { type XmlNode, child, childrenOf, createNode, escapeXml, parseElement, parseXml, serializeXml } from './xml';
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const XML_HEADER = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
@@ -221,6 +225,139 @@ function writeMedia(doc: Doc, files: Record<string, Uint8Array>, mainPath: strin
     return `r:embed="${id}"`;
   });
 }
+
+// --- Fonts carried in the file ----------------------------------------------------
+
+/**
+ * Whether a font file may go inside a document: TrueType outlines, the kind
+ * Word embeds, and a licence that lets it. A font that says it may not be
+ * embedded, or only as bitmaps, stays out.
+ */
+function embeddable(bytes: Uint8Array): boolean {
+  if (bytes.length < 12) return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const version = view.getUint32(0);
+  if (version !== 0x00010000 && version !== 0x74727565) return false;
+  for (let i = 0; i < view.getUint16(4); i++) {
+    const record = 12 + i * 16;
+    if (String.fromCharCode(bytes[record], bytes[record + 1], bytes[record + 2], bytes[record + 3]) !== 'OS/2') continue;
+    const fsType = view.getUint16(view.getUint32(record + 8) + 8);
+    // Of the licence bits, the least strict one that is set holds: 'restricted' alone keeps it out.
+    return (fsType & 0x0200) === 0 && (fsType & 0x000f) !== 0x0002;
+  }
+  return true;
+}
+
+/** A key of the kind a font is obfuscated with, as a GUID: {XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}. */
+function fontKey(): string {
+  const bytes = new Uint8Array(16);
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(bytes);
+  else for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0').toUpperCase()).join('');
+  return `{${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}}`;
+}
+
+/** The kinds of face of a font, as the font table names the file of each. */
+const EMBEDS = [
+  ['w:embedRegular', false, false],
+  ['w:embedBold', true, false],
+  ['w:embedItalic', false, true],
+  ['w:embedBoldItalic', true, true],
+] as const;
+
+/**
+ * Puts the faces of `fonts` the file does not carry yet into it, as Word does
+ * when it embeds fonts: each file obfuscated with a key of its own (its first
+ * 32 bytes XOR the key), named in the font table, and the setting that says
+ * the document carries its fonts.
+ */
+function writeFonts(files: Record<string, Uint8Array>, mainPath: string, fonts: EmbeddedFont[]): void {
+  const faces = fonts.filter((font) => font.family && embeddable(font.bytes));
+  if (!faces.length) return;
+  const slash = mainPath.lastIndexOf('/') + 1;
+  const dir = mainPath.slice(0, slash);
+  const tablePath = `${dir}fontTable.xml`;
+  if (!files[tablePath]) {
+    addPart(files, mainPath, 'fontTable.xml', `${R_NS}/fontTable`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml', `${XML_HEADER}<w:fonts xmlns:w="${W_NS}" xmlns:r="${R_NS}"/>`);
+  }
+  const table = parseElement(strFromU8(files[tablePath]));
+  if (!table) return;
+  table.attrs['xmlns:r'] ??= R_NS;
+  const relsPath = `${dir}_rels/fontTable.xml.rels`;
+  let rels = files[relsPath] ? strFromU8(files[relsPath]) : `${XML_HEADER}<Relationships xmlns="${RELS_NS}"/>`;
+  let added = false;
+  for (const face of faces) {
+    let font = childrenOf(table, 'w:font').find((f) => f.attrs['w:name']?.toLowerCase() === face.family.toLowerCase());
+    if (!font) {
+      font = createNode('w:font', { 'w:name': face.family });
+      table.children.push(font);
+    }
+    const kind = EMBEDS.find(([, bold, italic]) => bold === face.bold && italic === face.italic)!;
+    if (child(font, kind[0])) continue;
+    const key = fontKey();
+    const hex = key.replace(/[^0-9A-F]/g, '');
+    const bytes = face.bytes.slice();
+    for (let i = 0; i < 32; i++) bytes[i] ^= parseInt(hex.slice(30 - 2 * (i % 16), 32 - 2 * (i % 16)), 16);
+    let n = 1;
+    while (files[`${dir}fonts/dxfont${n}.odttf`]) n++;
+    files[`${dir}fonts/dxfont${n}.odttf`] = bytes;
+    let r = 1;
+    while (rels.includes(`"rId${r}"`)) r++;
+    rels = appendToRoot(rels, 'Relationships', `<Relationship Id="rId${r}" Type="${R_NS}/font" Target="fonts/dxfont${n}.odttf"/>`);
+    // The faces of a font go in their order, after what else it says of itself.
+    font.children.push(createNode(kind[0], { 'r:id': `rId${r}`, 'w:fontKey': key }));
+    const order = EMBEDS.map(([name]) => name as string);
+    const rank = (c: XmlNode) => order.indexOf(c.name);
+    font.children.sort((a, b) => (rank(a) < 0 || rank(b) < 0 ? 0 : rank(a) - rank(b)));
+    added = true;
+  }
+  if (!added) return;
+  files[tablePath] = strToU8(XML_HEADER + serializeXml(table));
+  files[relsPath] = strToU8(rels);
+  const types = strFromU8(files['[Content_Types].xml']);
+  if (!/Extension="odttf"/i.test(types)) {
+    files['[Content_Types].xml'] = strToU8(insertBefore(types, /<Override\b/, 'Types', '<Default Extension="odttf" ContentType="application/vnd.openxmlformats-officedocument.obfuscatedFont"/>'));
+  }
+  // Word keeps the fonts in the file it saves only when its settings say the document carries them.
+  const settingsPath = `${dir}settings.xml`;
+  if (!files[settingsPath]) {
+    addPart(files, mainPath, 'settings.xml', `${R_NS}/settings`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml', `${XML_HEADER}<w:settings xmlns:w="${W_NS}"><w:embedTrueTypeFonts/></w:settings>`);
+  } else {
+    const settings = parseElement(strFromU8(files[settingsPath]));
+    if (settings && !child(settings, 'w:embedTrueTypeFonts')) {
+      insertOrdered(settings, SETTINGS_ORDER, createNode('w:embedTrueTypeFonts'));
+      files[settingsPath] = strToU8(XML_HEADER + serializeXml(settings));
+    }
+  }
+}
+
+/** Says in the settings whether changes are tracked, when that is not what the file said. */
+function writeTracking(doc: Doc, files: Record<string, Uint8Array>, mainPath: string, source: DocxSource | undefined): void {
+  const on = !!doc.trackRevisions;
+  if (on === !!source?.trackRevisions) return;
+  const dir = mainPath.slice(0, mainPath.lastIndexOf('/') + 1);
+  const settingsPath = `${dir}settings.xml`;
+  if (!files[settingsPath]) {
+    if (!on) return;
+    addPart(files, mainPath, 'settings.xml', `${R_NS}/settings`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml', `${XML_HEADER}<w:settings xmlns:w="${W_NS}"><w:trackRevisions/></w:settings>`);
+    return;
+  }
+  const settings = parseElement(strFromU8(files[settingsPath]));
+  if (!settings) return;
+  settings.children = settings.children.filter((c) => c.name !== 'w:trackRevisions');
+  if (on) insertOrdered(settings, SETTINGS_ORDER, createNode('w:trackRevisions'));
+  files[settingsPath] = strToU8(XML_HEADER + serializeXml(settings));
+}
+
+/** The first children of the settings, in the order they go in, up to the one that says fonts are embedded. */
+const SETTINGS_ORDER = [
+  'w:writeProtection', 'w:view', 'w:zoom', 'w:removePersonalInformation', 'w:removeDateAndTime', 'w:doNotDisplayPageBoundaries',
+  'w:displayBackgroundShape', 'w:printPostScriptOverText', 'w:printFractionalCharacterWidth', 'w:printFormsData', 'w:embedTrueTypeFonts',
+  'w:embedSystemFonts', 'w:saveSubsetFonts', 'w:saveFormsData', 'w:mirrorMargins', 'w:alignBordersAndEdges', 'w:bordersDoNotSurroundHeader',
+  'w:bordersDoNotSurroundFooter', 'w:gutterAtTop', 'w:hideSpellingErrors', 'w:hideGrammaticalErrors', 'w:activeWritingStyle', 'w:proofState',
+  'w:formsDesign', 'w:attachedTemplate', 'w:linkStyles', 'w:stylePaneFormatFilter', 'w:stylePaneSortMethod', 'w:documentType', 'w:mailMerge',
+  'w:revisionView', 'w:trackRevisions',
+];
 
 /** A note as a comment of the comments part. */
 /**
@@ -523,16 +660,154 @@ function writeStories(doc: Doc, files: Record<string, Uint8Array>, mainPath: str
   return refs;
 }
 
-function textXml(text: string): string {
+const FOOTNOTES_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml';
+const FOOTNOTES_REL = `${R_NS}/footnotes`;
+/** The line above the notes of a page, and the one above the rest of a note that goes on from the page before, as Word writes them. */
+const SEPARATORS =
+  '<w:footnote w:type="separator" w:id="-1"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:separator/></w:r></w:p></w:footnote>' +
+  '<w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>';
+
+/**
+ * Writes the notes at the foot of the pages into their part: those of the
+ * file as they were when untouched, those that changed written again in their
+ * place, the new ones after them. A note no reference names any more goes.
+ */
+function writeFootnotes(doc: Doc, files: Record<string, Uint8Array>, mainPath: string, source: DocxSource | undefined): void {
+  const named = new Set(footnoteReferences(doc).map((ref) => ref.id));
+  const notes = (doc.footnotes ?? []).filter((note) => named.has(note.id));
+  const sources = source?.footnoteSources;
+  const path = source?.footnotesPath;
+  const finish = (at: string, xml: string) => writeLinks(files, at, writeMedia(doc, files, at, xml));
+  const fresh = (note: Footnote) => `<w:footnote w:id="${escapeXml(note.id)}">${blocksXml(storyView(doc, note)) || '<w:p/>'}</w:footnote>`;
+  if (path && sources && files[path]) {
+    const all = [...sources.values()];
+    const same = all.length === notes.length && notes.every((note) => sources.get(note.id)?.story === note);
+    if (same) return;
+    const xml = all[0]?.xml ?? strFromU8(files[path]);
+    const root = child(parseXml(xml), 'w:footnotes');
+    if (!root) return;
+    const byId = new Map(notes.map((note) => [note.id, note]));
+    let inner = '';
+    let cursor = root.openEnd;
+    for (const node of root.children) {
+      if (node.name !== 'w:footnote') continue;
+      const id = node.attrs['w:id'] ?? '';
+      const from = sources.get(id);
+      if (!from) continue;
+      inner += xml.slice(cursor, node.start);
+      cursor = node.end;
+      const note = byId.get(id);
+      byId.delete(id);
+      if (!note) continue;
+      if (note === from.story) inner += xml.slice(node.start, node.end);
+      else {
+        const whole = storyXml(doc, note, from, source!);
+        inner += whole.slice(node.start, whole.length - (xml.length - node.end));
+      }
+    }
+    inner += xml.slice(cursor, root.closeStart) + [...byId.values()].map(fresh).join('');
+    files[path] = strToU8(finish(path, xml.slice(0, root.openEnd) + inner + xml.slice(root.closeStart)));
+    return;
+  }
+  if (!notes.length) return;
+  const dir = mainPath.slice(0, mainPath.lastIndexOf('/') + 1);
+  const xml = `${XML_HEADER}<w:footnotes xmlns:w="${W_NS}" xmlns:r="${R_NS}">${SEPARATORS}${notes.map(fresh).join('')}</w:footnotes>`;
+  addPart(files, mainPath, 'footnotes.xml', FOOTNOTES_REL, FOOTNOTES_TYPE, finish(`${dir}footnotes.xml`, xml));
+}
+
+function textXml(text: string, deleted = false): string {
+  const tag = deleted ? 'w:delText' : 'w:t';
   let content = '';
   for (const part of text.split(/(\t|\n|\f)/)) {
     if (!part) continue;
     if (part === '\t') content += '<w:tab/>';
     else if (part === '\n') content += '<w:br/>';
     else if (part === '\f') content += '<w:br w:type="page"/>';
-    else content += `<w:t xml:space="preserve">${escapeXml(part)}</w:t>`;
+    else content += `<${tag} xml:space="preserve">${escapeXml(part)}</${tag}>`;
   }
   return content;
+}
+
+// --- Text boxes -----------------------------------------------------------------
+
+/** The text boxes of the document being written, while it is: their text is written into their drawings. */
+let boxesOf: Doc | undefined;
+
+/**
+ * The drawing of a text box made here, with its text in it: one read from the
+ * file keeps its own, which is written again in the part it is in when it changed.
+ */
+function freshBoxXml(xml: string): string {
+  const id = textBoxId(xml);
+  if (id === undefined || !boxesOf || boxesOf.source?.textBoxSources?.has(id)) return xml;
+  const box = textBoxOf(boxesOf, id);
+  if (!box) return xml;
+  const content = `<w:txbxContent>${box.paragraphs.map(paragraphXml).join('') || '<w:p/>'}</w:txbxContent>`;
+  return xml.replace(/<w:txbxContent\b[^>]*\/>|<w:txbxContent\b[^>]*>[\s\S]*?<\/w:txbxContent>/g, () => content);
+}
+
+/**
+ * The parts with a text box of the file whose text changed, with it written
+ * again: every copy of it there is, the one Word shows and the one for older
+ * programs, takes its new text. `xmlOf` is the part as written so far.
+ */
+function changedBoxes(doc: Doc, source: DocxSource | undefined): { path: string; from: string; to: string }[] {
+  const out: { path: string; from: string; to: string }[] = [];
+  for (const [id, from] of source?.textBoxSources ?? []) {
+    const box = textBoxOf(doc, id);
+    if (!box || box === from.story) continue;
+    const whole = storyXml(doc, box, from, source!);
+    const content = whole.slice(from.root.start, whole.length - (from.xml.length - from.root.end));
+    out.push({ path: from.path, from: from.xml.slice(from.root.start, from.root.end), to: content });
+  }
+  return out;
+}
+
+const replaceBoxes = (xml: string, path: string, changes: { path: string; from: string; to: string }[]) =>
+  changes.reduce((now, change) => (change.path === path ? now.split(change.from).join(change.to) : now), xml);
+
+// --- Tracked changes ------------------------------------------------------------
+
+/** The ids of the changes written: unique in the file, above the ones it may already have. */
+let revisionIds = 0;
+const FIRST_REVISION_ID = 900000;
+
+/** What a change says of itself: its id, who made it and when. */
+function revisionAttrs(author: string | undefined, date: string | undefined): string {
+  return ` w:id="${FIRST_REVISION_ID + revisionIds++}" w:author="${escapeXml(author || 'Rebodocs')}"${date ? ` w:date="${escapeXml(date)}"` : ''}`;
+}
+
+const revisionTag = (type: string | undefined) => (type === 'insert' ? 'w:ins' : type === 'delete' ? 'w:del' : '');
+
+/** The element a paragraph mark put in or taken out has in the `w:rPr` of its paragraph, or nothing. */
+function markRevisionXml(props: ParagraphProps): string {
+  const tag = revisionTag(props.markRevision);
+  return tag ? `<${tag}${revisionAttrs(props.markAuthor, props.markDate)}/>` : '';
+}
+
+/**
+ * Writes runs inside the changes they are part of: one `w:ins` or `w:del`
+ * around each stretch of the same change, inside the wrapper the runs share.
+ */
+function revisionWriter(): { open(props: RunProps): string; close(): string } {
+  let key = '';
+  let tag = '';
+  return {
+    open(props) {
+      const next = props.revision ? `${props.revision}\u0000${props.revisionAuthor ?? ''}\u0000${props.revisionDate ?? ''}` : '';
+      if (next === key) return '';
+      const out = this.close();
+      key = next;
+      tag = revisionTag(props.revision);
+      return out + (tag ? `<${tag}${revisionAttrs(props.revisionAuthor, props.revisionDate)}>` : '');
+    },
+    close() {
+      const out = tag ? `</${tag}>` : '';
+      key = '';
+      tag = '';
+      return out;
+    },
+  };
 }
 
 // --- New documents ----------------------------------------------------------
@@ -558,25 +833,52 @@ function runPropsXml(props: RunProps): string {
 function runXml(run: Run): string {
   // Objects only make sense inside the package they came from, but for what was put in here: pictures, notes and the marks of a table of contents.
   if (run.props.object) {
-    const ours = mediaKey(run.props.object) !== undefined || !!noteMark(run.props.object) || isFieldMark(run.props.object) || isColumnBreak(run.props.object);
-    return ours ? run.props.object.repeat(run.text.length) : '';
+    const ours =
+      mediaKey(run.props.object) !== undefined ||
+      !!noteMark(run.props.object) ||
+      isFieldMark(run.props.object) ||
+      isColumnBreak(run.props.object) ||
+      footnoteReferenceId(run.props.object) !== undefined ||
+      isFootnoteMark(run.props.object) ||
+      textBoxId(run.props.object) !== undefined;
+    return ours ? freshBoxXml(run.props.object).repeat(run.text.length) : '';
   }
   if (!run.text) return '';
   const rPr = runPropsXml(run.props);
-  if (!run.props.field) return `<w:r>${rPr}${textXml(run.text)}</w:r>`;
+  const deleted = run.props.revision === 'delete';
+  if (!run.props.field) return `<w:r>${rPr}${textXml(run.text, deleted)}</w:r>`;
   // The result of a field, with the marks and the code that make it one.
   const mark = (type: string) => `<w:r>${rPr}<w:fldChar w:fldCharType="${type}"/></w:r>`;
+  const instr = deleted ? 'w:delInstrText' : 'w:instrText';
   return (
     mark('begin') +
-    `<w:r>${rPr}<w:instrText xml:space="preserve"> ${escapeXml(run.props.field)} </w:instrText></w:r>` +
+    `<w:r>${rPr}<${instr} xml:space="preserve"> ${escapeXml(run.props.field)} </${instr}></w:r>` +
     mark('separate') +
-    `<w:r>${rPr}${textXml(run.text)}</w:r>` +
+    `<w:r>${rPr}${textXml(run.text, deleted)}</w:r>` +
     mark('end')
   );
 }
 
 /** A right tab stop with a dotted leader, `at` points from the left edge of the text. */
 const leaderTabXml = (at: number) => `<w:tab w:val="right" w:leader="dot" w:pos="${twips(at)}"/>`;
+
+const sameTab = (a: TabStop, b: TabStop) => Math.abs(a.pos - b.pos) < 0.5 && a.align === b.align && a.leader === b.leader;
+
+/**
+ * The `w:tabs` of a paragraph with its leader tab and these stops, over the
+ * ones its style has: the stops the style lacks, and a clearing one for each
+ * of the style's the paragraph does not have. Empty when there is nothing to say.
+ */
+function tabsXml(leaderTab: number, tabs: TabStop[], style: TabStop[] = []): string {
+  const own = tabs.filter((tab) => !style.some((s) => sameTab(s, tab)));
+  const cleared = style.filter((s) => !tabs.some((tab) => sameTab(s, tab)) && !(leaderTab > 0 && Math.abs(s.pos - leaderTab) < 0.5));
+  const stops = [
+    ...cleared.map((s) => ({ pos: s.pos, xml: `<w:tab w:val="clear" w:pos="${twips(s.pos)}"/>` })),
+    ...own.map((tab) => ({ pos: tab.pos, xml: `<w:tab w:val="${tab.align}"${tab.leader ? ` w:leader="${tab.leader}"` : ''} w:pos="${twips(tab.pos)}"/>` })),
+    ...(leaderTab > 0 ? [{ pos: leaderTab, xml: leaderTabXml(leaderTab) }] : []),
+  ].sort((a, b) => a.pos - b.pos);
+  return stops.length ? `<w:tabs>${stops.map((stop) => stop.xml).join('')}</w:tabs>` : '';
+}
 
 function paragraphXml(para: Paragraph): string {
   const p = resolveParagraph(para.props);
@@ -595,13 +897,13 @@ function paragraphXml(para: Paragraph): string {
     // Widow and orphan control is on unless a paragraph switches it off.
     (p.widowControl ? '' : '<w:widowControl w:val="0"/>') +
     (p.numId ? numPrXml(p.numId, p.listLevel) : '') +
-    (p.leaderTab > 0 ? `<w:tabs>${leaderTabXml(p.leaderTab)}</w:tabs>` : '') +
+    tabsXml(p.leaderTab, p.tabs) +
     `<w:spacing w:before="${twips(p.spacingBefore)}" w:after="${twips(p.spacingAfter)}"` +
     ` w:line="${Math.round(p.lineHeight * 240)}" w:lineRule="auto"/>` +
     `<w:ind w:left="${twips(p.indentLeft)}" w:right="${twips(p.indentRight)}"${firstLine}/>` +
     `<w:jc w:val="${jc}"/>` +
-    // The paragraph mark carries the formatting of an empty paragraph.
-    (isEmpty ? runPropsXml(para.runs[0].props) : '') +
+    // The paragraph mark carries the formatting of an empty paragraph, and the change that put it in or took it out.
+    (isEmpty ? runPropsXml(para.runs[0].props).replace('<w:rPr>', `<w:rPr>${markRevisionXml(para.props)}`) : markRevisionXml(para.props) ? `<w:rPr>${markRevisionXml(para.props)}</w:rPr>` : '') +
     (para.section ? sectionXml(para.section) : '') +
     '</w:pPr>' +
     wrappedRunsXml(para.runs) +
@@ -613,7 +915,8 @@ function paragraphXml(para: Paragraph): string {
 function wrappedRunsXml(runs: Run[]): string {
   let out = '';
   let wrap = '';
-  const close = () => (wrap ? wrap.split(WRAP_SEPARATOR)[1] : '');
+  const revision = revisionWriter();
+  const close = () => revision.close() + (wrap ? wrap.split(WRAP_SEPARATOR)[1] : '');
   for (const run of runs) {
     if (!run.text) continue;
     const next = run.props.wrap ?? '';
@@ -622,7 +925,7 @@ function wrappedRunsXml(runs: Run[]): string {
       wrap = next;
       if (wrap) out += wrap.split(WRAP_SEPARATOR)[0];
     }
-    out += runXml(run);
+    out += revision.open(run.props) + runXml(run);
   }
   return out + close();
 }
@@ -787,6 +1090,10 @@ function tableXml(
         if (cell.valign) insertOrdered(tcPr, TCPR_ORDER, createNode('w:vAlign', { 'w:val': cell.valign }));
         else if (was?.valign) insertOrdered(tcPr, TCPR_ORDER, createNode('w:vAlign', { 'w:val': 'top' }));
       }
+      if (from ? was && was.direction !== cell.direction : cell.direction) {
+        tcPr.children = tcPr.children.filter((c) => c.name !== 'w:textDirection');
+        if (cell.direction) insertOrdered(tcPr, TCPR_ORDER, createNode('w:textDirection', { 'w:val': cell.direction === 'up' ? 'btLr' : 'tbRl' }));
+      }
       if (from ? was && was.shade !== cell.shade : cell.shade) {
         tcPr.children = tcPr.children.filter((c) => c.name !== 'w:shd');
         if (cell.shade) insertOrdered(tcPr, TCPR_ORDER, createNode('w:shd', { 'w:val': 'clear', 'w:color': 'auto', 'w:fill': cell.shade }));
@@ -864,14 +1171,14 @@ function pageSectPr(
   return serializeXml(sectPr);
 }
 
-function newDocumentXml(doc: Doc, refs: StoryRefs = {}): string {
+function newDocumentXml(doc: Doc, refs: StoryRefs = {}, lastSection: (sectPr: string) => string = (x) => x): string {
   const pg = doc.page;
   const blocks = blocksXml(doc);
   return (
     XML_HEADER +
     `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}"><w:body>` +
     blocks +
-    pageSectPr(pg, undefined, refs, false, doc.firstPage ? true : undefined, { columns: doc.columns, start: doc.sectionStart }) +
+    lastSection(pageSectPr(pg, undefined, refs, false, doc.firstPage ? true : undefined, { columns: doc.columns, start: doc.sectionStart })) +
     '</w:body></w:document>'
   );
 }
@@ -887,7 +1194,137 @@ function colsXml(columns: Columns | undefined): string {
 
 /** The properties of a section that is not the last: what it had in the file, with what the model says of its page, its columns and its start. */
 function sectionXml(section: Section): string {
-  return pageSectPr(section.page, section.xml, {}, false, undefined, { columns: section.columns, start: section.start });
+  return sectionProps?.get(section) ?? pageSectPr(section.page, section.xml, {}, false, undefined, { columns: section.columns, start: section.start });
+}
+
+/**
+ * While a document of several sections whose sections changed is written: the
+ * properties each section before the last is written with, every one naming
+ * its header and footer, so that none goes on to show the one before it.
+ */
+let sectionProps: Map<Section, string> | undefined;
+
+/** The ids of the parts a section names, by the part each is. */
+type SectionRefs = Partial<Record<BasePart, string>>;
+
+/** Section properties naming the headers and the footers of `refs` and no others; with `titlePg` for a first page of its own. */
+function withRefs(sectPrXml: string, refs: SectionRefs, titlePg: boolean, declare: boolean): string {
+  const sectPr = parseElement(sectPrXml)!;
+  sectPr.children = sectPr.children.filter((c) => !/^w:(header|footer)Reference$/.test(c.name) && c.name !== 'w:titlePg');
+  const named: XmlNode[] = [];
+  for (const base of ['header', 'footer', 'firstHeader', 'firstFooter'] as const) {
+    const id = refs[base];
+    if (!id) continue;
+    const attrs: Record<string, string> = { 'w:type': base === storyKind(base) ? 'default' : 'first', 'r:id': id };
+    if (declare) attrs['xmlns:r'] = R_NS;
+    named.push(createNode(STORY_PARTS[storyKind(base)].reference, attrs));
+  }
+  sectPr.children.unshift(...named);
+  if (titlePg) insertOrdered(sectPr, SECTPR_ORDER, createNode('w:titlePg'));
+  return serializeXml(sectPr);
+}
+
+/**
+ * For a document of several sections whose sections are not as they were
+ * read: writes the headers and footers the sections have of their own, works
+ * out what each section names, and returns how to write the last one's.
+ * Undefined when the sections can be written as they were.
+ */
+function writeSections(doc: Doc, files: Record<string, Uint8Array>, mainPath: string, source: DocxSource | undefined, refs: StoryRefs): ((sectPr: string) => string) | undefined {
+  const ends = sectionEnds(doc);
+  if (!ends.length) return undefined;
+  if (source) {
+    const read = source.slots.filter((slot) => slot.paragraph.section && !slot.paragraph.cell).length;
+    const same = read === ends.length && ends.every((i) => {
+      const p = doc.paragraphs[i];
+      return p.origin !== undefined && source.slots[p.origin]?.paragraph.section === p.section;
+    });
+    if (same) return undefined;
+  }
+  const dir = mainPath.slice(0, mainPath.lastIndexOf('/') + 1);
+  const ids = new Map<string, string>();
+  if (source) for (const [id, path] of relationships(source)) ids.set(path, id);
+  const finish = (path: string, xml: string) => writeLinks(files, path, writeMedia(doc, files, path, xml));
+  const newPart = (kind: 'header' | 'footer', blocks: string) => {
+    const part = STORY_PARTS[kind];
+    const xml = `${XML_HEADER}<${part.root} xmlns:w="${W_NS}" xmlns:r="${R_NS}">${blocks}${!blocks || blocks.endsWith('</w:tbl>') ? '<w:p/>' : ''}</${part.root}>`;
+    let n = 1;
+    while (files[`${dir}${kind}${n}.xml`]) n++;
+    return addPart(files, mainPath, `${kind}${n}.xml`, part.rel, part.type, finish(`${dir}${kind}${n}.xml`, xml));
+  };
+
+  // The parts of the file that still hold what was read from them, which no changed header may be written over.
+  const kept = new Set<string>();
+  for (const base of ALL_STORIES) {
+    const from = source?.[`${base}Source`];
+    if (from) kept.add(from.path);
+  }
+  ends.forEach((_, k) => {
+    for (const base of ALL_STORIES) {
+      const part = sectionPart(base, k);
+      const from = storySource(doc, part);
+      if (from && from.story === storyOf(doc, part)) kept.add(from.path);
+    }
+  });
+  // The sections' own headers and footers: as they were, written over their part, or in a part of their own.
+  const own = new Map<Story, string>();
+  ends.forEach((_, k) => {
+    for (const base of ALL_STORIES) {
+      const part = sectionPart(base, k);
+      const story = storyOf(doc, part);
+      if (!story?.paragraphs.length || own.has(story)) continue;
+      const from = storySource(doc, part);
+      const id = from && ids.get(from.path);
+      if (from && id && from.story === story) {
+        own.set(story, id);
+      } else if (from && id && !kept.has(from.path) && from.root.openEnd !== from.root.end) {
+        files[from.path] = strToU8(finish(from.path, storyXml(doc, story, from, source!)));
+        kept.add(from.path);
+        own.set(story, id);
+      } else {
+        own.set(story, newPart(storyKind(base), blocksXml(storyView(doc, story))));
+      }
+    }
+  });
+  // The document's: the last section's, which the others without their own show.
+  const docId = (base: BasePart) => {
+    if (!storyOf(doc, base)?.paragraphs.length) return undefined;
+    const path = source?.[`${base}Path`];
+    return refs[base] ?? (path ? ids.get(path) : undefined);
+  };
+  const empties: Partial<Record<'header' | 'footer', string>> = {};
+  const empty = (kind: 'header' | 'footer') => (empties[kind] ??= newPart(kind, ''));
+  /** What a section names; one that shows nothing after one that names something names an empty part, as it would show that one otherwise. */
+  const shown = { header: false, footer: false, firstHeader: false, firstFooter: false };
+  const namesOf = (holder: { header?: Story; footer?: Story; firstPage?: { header?: Story; footer?: Story }; noHeader?: boolean; noFooter?: boolean }, last: boolean): SectionRefs => {
+    const out: SectionRefs = {};
+    for (const kind of ['header', 'footer'] as const) {
+      const mine = last ? undefined : holder[kind];
+      const none = kind === 'header' ? holder.noHeader : holder.noFooter;
+      let id = mine ? own.get(mine) : none ? undefined : docId(kind);
+      if (!id && shown[kind]) id = empty(kind);
+      if (id) shown[kind] = true;
+      out[kind] = id;
+      if (holder.firstPage) {
+        const first = holder.firstPage[kind];
+        const base = kind === 'header' ? 'firstHeader' : 'firstFooter';
+        let firstId = first ? (last ? docId(base) : own.get(first)) : undefined;
+        if (!firstId && shown[base]) firstId = empty(kind);
+        if (firstId) shown[base] = true;
+        out[base] = firstId;
+      }
+    }
+    return out;
+  };
+  const declare = !!source && !/\sxmlns:r=/.test(source.xml.slice(0, source.body.start));
+  sectionProps = new Map();
+  for (const i of ends) {
+    const section = doc.paragraphs[i].section!;
+    const base = pageSectPr(section.page, section.xml, {}, false, undefined, { columns: section.columns, start: section.start });
+    sectionProps.set(section, withRefs(base, namesOf(section, false), !!section.firstPage, declare));
+  }
+  const last = namesOf(doc, true);
+  return (sectPr) => withRefs(sectPr, last, !!doc.firstPage, declare);
 }
 
 const sameColumns = (a: Columns | undefined, b: Columns | undefined) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -1027,9 +1464,12 @@ function patchedParagraphProps(
       insertOrdered(pPr, PPR_ORDER, numPr);
     }
   }
-  if (changed('leaderTab')) {
+  if (changed('leaderTab') || JSON.stringify(now.tabs) !== JSON.stringify(before.tabs)) {
+    // Written again whole, over the stops of the paragraph's style.
     pPr.children = pPr.children.filter((c) => c.name !== 'w:tabs');
-    if (now.leaderTab > 0) insertOrdered(pPr, PPR_ORDER, parseElement(`<w:tabs>${leaderTabXml(now.leaderTab)}</w:tabs>`)!);
+    const styleId = val(child(pPr, 'w:pStyle')) ?? source.sheet.defaultParagraphStyle;
+    const tabs = tabsXml(now.leaderTab, now.tabs, mergeTabs(source.sheet.paragraphDefaults.tabs, resolveStyle(source.sheet, styleId).pPr.tabs));
+    if (tabs) insertOrdered(pPr, PPR_ORDER, parseElement(tabs)!);
   }
   if (changed('spacingBefore')) {
     const set = { 'w:before': String(twips(now.spacingBefore)) };
@@ -1068,7 +1508,7 @@ function patchedParagraphProps(
   pPr.children = pPr.children.filter((c) => c.name !== 'w:sectPr');
   const had = slot.paragraph.section;
   if (para.section) {
-    const same = keepSection && sectPr && had && sameSection(had, para.section);
+    const same = keepSection && sectPr && had && sameSection(had, para.section) && !sectionProps?.has(para.section);
     insertOrdered(pPr, PPR_ORDER, same ? sectPr : parseElement(sectionXml(para.section))!);
   }
 
@@ -1078,13 +1518,23 @@ function patchedParagraphProps(
     pPr.children = pPr.children.filter((c) => c.name !== 'w:rPr');
     if (mark.children.length) insertOrdered(pPr, PPR_ORDER, mark);
   }
+  // And the change that put it in or took it out: the one the model says, the file's gone.
+  const markRPr = child(pPr, 'w:rPr');
+  if (markRPr) markRPr.children = markRPr.children.filter((c) => !MARK_ONLY.has(c.name));
+  const change = markRevisionXml(para.props);
+  if (change) {
+    const into = markRPr ?? createNode('w:rPr');
+    into.children.unshift(parseElement(change)!);
+    if (!markRPr) insertOrdered(pPr, PPR_ORDER, into);
+  } else if (markRPr && !markRPr.children.some((c) => c.name !== '#text')) pPr.children = pPr.children.filter((c) => c !== markRPr);
   return pPr;
 }
 
 function runsXml(source: DocxSource, slot: SourceSlot, runs: Run[]): string {
   let out = '';
   let wrap = '';
-  const close = () => (wrap ? wrap.split(WRAP_SEPARATOR)[1] : '');
+  const revision = revisionWriter();
+  const close = () => revision.close() + (wrap ? wrap.split(WRAP_SEPARATOR)[1] : '');
   /** Set between the marks of a field the file had, which come as objects around its result. */
   let inField = false;
   for (const run of runs) {
@@ -1095,10 +1545,11 @@ function runsXml(source: DocxSource, slot: SourceSlot, runs: Run[]): string {
       wrap = runWrap;
       if (wrap) out += wrap.split(WRAP_SEPARATOR)[0];
     }
+    out += revision.open(run.props);
     if (run.props.object) {
       const mark = /w:fldCharType="(\w+)"/.exec(run.props.object)?.[1];
       if (mark) inField = mark !== 'end';
-      out += run.props.object.repeat(run.text.length);
+      out += freshBoxXml(run.props.object).repeat(run.text.length);
       continue;
     }
     // A field made here has no marks of its own yet: it is written with them.
@@ -1107,7 +1558,7 @@ function runsXml(source: DocxSource, slot: SourceSlot, runs: Run[]): string {
       continue;
     }
     const rPr = patchedRunProps(source, slot.baseRun, run.props, false);
-    out += `<w:r>${rPr.children.length ? serializeXml(rPr) : ''}${textXml(run.text)}</w:r>`;
+    out += `<w:r>${rPr.children.length ? serializeXml(rPr) : ''}${textXml(run.text, run.props.revision === 'delete')}</w:r>`;
   }
   return out + close();
 }
@@ -1128,7 +1579,7 @@ function editedParagraphXml(
   return `${open}${pPr.children.length ? serializeXml(pPr) : ''}${runsXml(source, slot, para.runs)}</w:p>`;
 }
 
-function sourcedDocumentXml(doc: Doc, source: DocxSource, refs: StoryRefs = {}): string {
+function sourcedDocumentXml(doc: Doc, source: DocxSource, refs: StoryRefs = {}, lastSection?: (sectPr: string) => string): string {
   const { xml, slots } = source;
   const slotOf = new Map<XmlNode, number>();
   slots.forEach((slot, i) => slotOf.set(slot.node, i));
@@ -1143,6 +1594,7 @@ function sourcedDocumentXml(doc: Doc, source: DocxSource, refs: StoryRefs = {}):
   const ownFirst = !!doc.firstPage === !!source.titlePage ? undefined : !!doc.firstPage;
   const layoutChanged = !sameColumns(doc.columns, source.columns) || (doc.sectionStart ?? 'nextPage') !== (source.sectionStart ?? 'nextPage');
   const pageChanged =
+    !!lastSection ||
     layoutChanged ||
     Object.keys(refs).length > 0 ||
     ownFirst !== undefined ||
@@ -1274,7 +1726,7 @@ function sourcedDocumentXml(doc: Doc, source: DocxSource, refs: StoryRefs = {}):
       } else if (c.name === 'w:sectPr' && container === source.body) {
         // The properties of the section close the body, wherever its blocks went.
         const section = xml.slice(c.start, c.end);
-        replace(c, pageChanged ? pageSectPr(doc.page, section, refs, declare, ownFirst, lastLayout) : section, Infinity);
+        replace(c, pageChanged ? (lastSection ?? String)(pageSectPr(doc.page, section, refs, declare, ownFirst, lastLayout)) : section, Infinity);
         sectionWritten ||= pageChanged;
       } else if (c.name === 'w:sdt') {
         const content = child(c, 'w:sdtContent');
@@ -1322,7 +1774,7 @@ function sourcedDocumentXml(doc: Doc, source: DocxSource, refs: StoryRefs = {}):
     inner = at < 0 ? inner + tail : inner.slice(0, at) + tail + inner.slice(at);
   }
   // A body that had no section properties gets them when the page was changed.
-  if (pageChanged && !sectionWritten) inner += pageSectPr(doc.page, undefined, refs, declare, ownFirst, lastLayout);
+  if (pageChanged && !sectionWritten) inner += (lastSection ?? String)(pageSectPr(doc.page, undefined, refs, declare, ownFirst, lastLayout));
   return xml.slice(0, body.openEnd) + inner + xml.slice(body.closeStart);
 }
 
@@ -1370,9 +1822,20 @@ function dropUnusedPictures(files: Record<string, Uint8Array>): void {
   for (const path of Object.keys(files)) if (/(^|\/)media\//.test(path) && !used.has(path)) delete files[path];
 }
 
-export function exportDocx(whole: Doc): Uint8Array {
+export interface DocxOptions {
+  /**
+   * Fonts to put in the file, for whoever opens it without them: the faces of
+   * the families its text is in. Only TrueType files whose licence lets them
+   * be embedded go in, and only the faces the file does not carry already.
+   */
+  fonts?: EmbeddedFont[];
+}
+
+export function exportDocx(whole: Doc, options: DocxOptions = {}): Uint8Array {
+  revisionIds = 0;
   // What editing left of notes that are no longer whole does not go into the file.
   const doc = pruneNotes(whole);
+  boxesOf = doc;
   const { source } = doc;
   const mainPath = source?.mainPath ?? 'word/document.xml';
   const files: Record<string, Uint8Array> = source
@@ -1381,9 +1844,24 @@ export function exportDocx(whole: Doc): Uint8Array {
   writeStyles(doc, files, mainPath, source);
   writeNumbering(doc, files, mainPath, source);
   writeNotes(doc, files, mainPath, source);
+  writeFootnotes(doc, files, mainPath, source);
   const refs = writeStories(doc, files, mainPath, source);
-  const xml = source ? sourcedDocumentXml(doc, source, refs) : newDocumentXml(doc, refs);
+  let xml: string;
+  const boxes = changedBoxes(doc, source);
+  try {
+    const lastSection = writeSections(doc, files, mainPath, source, refs);
+    xml = source ? sourcedDocumentXml(doc, source, refs, lastSection) : newDocumentXml(doc, refs, lastSection);
+  } finally {
+    sectionProps = undefined;
+  }
+  // The text boxes of the other parts whose text changed: those parts as they are now, with it.
+  for (const path of new Set(boxes.map((box) => box.path))) {
+    if (path !== mainPath && files[path]) files[path] = strToU8(replaceBoxes(strFromU8(files[path]), path, boxes));
+  }
+  xml = replaceBoxes(xml, mainPath, boxes);
   files[mainPath] = strToU8(writeLinks(files, mainPath, writeMedia(doc, files, mainPath, xml)));
+  if (options.fonts?.length) writeFonts(files, mainPath, options.fonts);
+  writeTracking(doc, files, mainPath, source);
   dropUnusedPictures(files);
   return zipSync(files);
 }

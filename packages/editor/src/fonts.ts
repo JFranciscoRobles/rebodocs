@@ -7,10 +7,11 @@ export interface FontSource {
   /** The name the font goes by: what the document says its text is in. */
   family: string;
   /**
-   * The font file: its address, to fetch, or its bytes. A TrueType file
-   * (.ttf) also goes into the PDFs; any other kind the browser reads is shown
-   * and measured, and a PDF draws its text in a standard font. Left out for a
-   * font the page already loads by itself, with CSS: it is only put in the list.
+   * The font file: its address, to fetch, or its bytes. A TrueType or
+   * OpenType file (.ttf, .otf) also goes into the PDFs; any other kind the
+   * browser reads is shown and measured, and a PDF draws its text in a
+   * standard font. Left out for a font the page already loads by itself, with
+   * CSS: it is only put in the list.
    */
   src?: string | ArrayBuffer | Uint8Array;
   /** Which face of the family the file is. The regular one when neither is set. */
@@ -36,8 +37,8 @@ const same = (a: Pick<Held, 'family' | 'bold' | 'italic'>, b: Pick<Held, 'family
 
 /**
  * Gives the editor a font: the text in it is measured and painted with it
- * from then on, the toolbar offers it, and, when it is a TrueType file, PDFs
- * carry it. A family is given a face at a time: its regular one, its bold...
+ * from then on, the toolbar offers it, and, when it is a TrueType or
+ * OpenType file, PDFs carry it. A family is given a face at a time: its regular one, its bold...
  * Says whether the font could be read. Where there is no browser it does nothing.
  */
 export async function addFont(font: FontSource): Promise<boolean> {
@@ -98,6 +99,11 @@ export function fontFamilies(): string[] {
 export function fontFile(spec: { family: string; bold: boolean; italic: boolean }): Uint8Array | undefined {
   const family = held.filter((font) => font.bytes && font.family.toLowerCase() === spec.family.toLowerCase());
   return (family.find((font) => font.bold === spec.bold && font.italic === spec.italic) ?? family.find((font) => !font.bold && !font.italic))?.bytes;
+}
+
+/** Every face given with its file: what a DOCX can carry. */
+export function fontFaces(): { family: string; bold: boolean; italic: boolean; bytes: Uint8Array }[] {
+  return held.flatMap((font) => (font.bytes ? [{ family: font.family, bold: font.bold, italic: font.italic, bytes: font.bytes }] : []));
 }
 
 /** Calls `listener` when a font is given. Returns how to stop. */

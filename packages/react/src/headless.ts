@@ -47,6 +47,8 @@ const EMPTY: DocsState = {
   canSplitCell: false,
   pictureSelected: false,
   letterhead: false,
+  trackChanges: false,
+  revisionCount: 0,
   area: 'body',
   page: 1,
   pageCount: 1,

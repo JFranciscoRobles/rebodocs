@@ -1,21 +1,32 @@
 // A panel beside the document with what Word has no one place for: the
 // outline of the document, to move about it and reorder its sections, the
-// variables of a template, to fill them in, and the notes on its text. It only uses the public
-// methods of the editor.
+// variables of a template, to fill them in, the notes on its text, and, when
+// the application keeps them, its versions. It only uses the public methods
+// of the editor.
 
-import { type FormatId, NOTE_COLORS, formatText, formatValue, isVariableName } from '@rebodocs/core';
+import { type FormatId, type RevisionView, NOTE_COLORS, defined, formatText, formatValue, isVariableName, revisionColor } from '@rebodocs/core';
 import { recallAuthor, setAuthor } from './author';
 import type { Editor } from './editor';
 import { type MessageKey, getLocale, t } from './i18n';
+import { type VersionInfo, type Versions, UNDO_KEY, createVersionView, restoreVersionOf, sortVersions, versionDate, versionName } from './versions';
 
-export type PanelTab = 'outline' | 'variables' | 'notes';
+export type PanelTab = 'outline' | 'variables' | 'notes' | 'changes' | 'history';
 
 export interface Panel {
   /** Shows the panel, on the tab given or the one it was on. */
   show(tab?: PanelTab): void;
   hide(): void;
   toggle(): void;
+  /** Asks the application for its versions again, as when it kept another one. */
+  refreshVersions(): void;
   destroy(): void;
+}
+
+export interface PanelOptions {
+  /** The versions of the document, where the application keeps them: with them, the panel has a tab to see, compare and restore them. */
+  versions?: Versions;
+  /** Told what went wrong, in the language of the interface; the panel says it itself when left out. */
+  onError?: (message: string) => void;
 }
 
 const STYLE_ID = 'dx-panel-style';
@@ -76,6 +87,23 @@ const CSS = `
 .dx-pn-dot:focus-visible{outline:2px solid #0b57d0;outline-offset:2px}
 .dx-pn-label{display:block;color:#5f6470;font-size:12px}
 .dx-pn-label input{display:block;width:100%;height:30px;margin-top:4px;box-sizing:border-box}
+.dx-pn-add input[type=text]{flex:none}
+.dx-pn-ver{margin-bottom:8px;padding:8px;border:1px solid #e3e6ec;border-radius:6px;background:#fff}
+.dx-pn-ver b{display:block;overflow:hidden;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+.dx-pn-ver small{display:block;padding:2px 0 6px;color:#5f6470;font-size:11px}
+.dx-pn-ver .dx-pn-row{padding:0}
+.dx-pn-ver .dx-pn-btn{flex:1}
+.dx-pn-msg{padding:6px 8px 10px;color:#5f6470;font-size:12px;line-height:1.4}
+.dx-pn-tabs .dx-pn-tab{padding:0 2px;font-size:12.5px}
+.dx-pn-switch{display:flex;align-items:center;gap:8px;padding:4px 2px 10px;cursor:pointer}
+.dx-pn-switch input{margin:0}
+.dx-pn-chg{margin-bottom:8px;padding:8px;border:1px solid #e3e6ec;border-left:3px solid #888;border-radius:6px;background:#fff}
+.dx-pn-chg.dx-on{background:#f6f8fc;box-shadow:0 0 0 1px #c9d6ee}
+.dx-pn-chg .dx-pn-quote{font-style:normal;color:#2b2f38}
+.dx-pn-chg .dx-pn-quote s{color:#b3261e}
+.dx-pn-chg .dx-pn-row{padding:6px 0 0}
+.dx-pn-chg .dx-pn-btn{flex:1;height:26px}
+.dx-pn-msg.dx-pn-bad{color:#b3261e}
 `;
 
 function injectStyle(): void {
@@ -124,7 +152,7 @@ const MARKS: [FormatId, MessageKey, MessageKey, string][] = [
   ['underline', 'mark.underline.letter', 'mark.underline', 'text-decoration:underline'],
 ];
 
-export function createPanel(container: HTMLElement, editor: Editor): Panel {
+export function createPanel(container: HTMLElement, editor: Editor, options: PanelOptions = {}): Panel {
   injectStyle();
   const root = el('div', 'dx-pn');
   const tabs = el('div', 'dx-pn-tabs');
@@ -137,7 +165,8 @@ export function createPanel(container: HTMLElement, editor: Editor): Panel {
   /** What was typed for each variable; it outlives the variable, so undoing a fill brings both back. */
   const values = new Map<string, string>();
 
-  const tabButtons = (['outline', 'variables', 'notes'] as const).map((name) => {
+  const { versions } = options;
+  const tabButtons = (['outline', 'variables', 'notes', 'changes', ...(versions ? (['history'] as const) : [])] as const).map((name) => {
     const node = el('button', 'dx-pn-tab', t(`panel.${name}`));
     node.type = 'button';
     node.dataset.name = name;
@@ -510,6 +539,204 @@ export function createPanel(container: HTMLElement, editor: Editor): Panel {
     }
   };
 
+  // --- Tracked changes ---------------------------------------------------------------
+
+  const trackLabel = el('label', 'dx-pn-switch');
+  const track = el('input', '');
+  track.type = 'checkbox';
+  track.dataset.name = 'changes-track';
+  track.addEventListener('change', () => editor.setTrackChanges(track.checked));
+  trackLabel.append(track, t('review.track'));
+  const acceptAll = el('button', 'dx-pn-btn', t('review.acceptAll'));
+  acceptAll.type = 'button';
+  acceptAll.dataset.name = 'changes-accept-all';
+  acceptAll.addEventListener('click', () => {
+    editor.acceptAllRevisions();
+    editor.focus();
+  });
+  const rejectAll = el('button', 'dx-pn-btn', t('review.rejectAll'));
+  rejectAll.type = 'button';
+  rejectAll.dataset.name = 'changes-reject-all';
+  rejectAll.addEventListener('click', () => {
+    editor.rejectAllRevisions();
+    editor.focus();
+  });
+  const allRow = el('div', 'dx-pn-row');
+  allRow.append(acceptAll, rejectAll);
+
+  const where = (r: RevisionView) => {
+    if (!r.part) return '';
+    if (r.part.startsWith('footnote:')) return t('area.footnote');
+    return t(r.part.startsWith('header') || r.part.startsWith('firstHeader') ? 'area.header' : 'area.footer');
+  };
+  const sameRevision = (a: RevisionView | undefined, b: RevisionView) =>
+    !!a && a.part === b.part && a.range.from.para === b.range.from.para && a.range.from.offset === b.range.from.offset;
+  let shownChanges = '';
+  const renderChanges = () => {
+    track.checked = editor.trackChanges;
+    const list = editor.revisions;
+    acceptAll.disabled = rejectAll.disabled = !list.length;
+    const active = editor.activeRevision;
+    const key = JSON.stringify(list);
+    if (key === shownChanges && body.firstChild) {
+      body.querySelectorAll<HTMLElement>('.dx-pn-chg').forEach((node, i) => node.classList.toggle('dx-on', sameRevision(active, list[i])));
+      return;
+    }
+    shownChanges = key;
+    body.replaceChildren(trackLabel);
+    if (!list.length) {
+      const empty = el('div', 'dx-pn-empty');
+      empty.innerHTML = t('changes.empty');
+      body.appendChild(empty);
+      return;
+    }
+    for (const r of list) {
+      const card = el('div', `dx-pn-chg${sameRevision(active, r) ? ' dx-on' : ''}`);
+      card.style.borderLeftColor = `#${revisionColor(r.author)}`;
+      const text = r.text.replace(/[\u2060\uFFFC]/g, '').replace(/¶$/, '').trim();
+      const quote = el('button', 'dx-pn-quote');
+      quote.type = 'button';
+      quote.title = t('changes.goTo');
+      const what = el(r.type === 'delete' ? 's' : 'span', '', text ? `«${text.length > 80 ? `${text.slice(0, 80)}…` : text}»` : t('changes.paragraph'));
+      quote.append(`${t(r.type === 'insert' ? 'changes.inserted' : 'changes.deleted')} `, what);
+      quote.addEventListener('click', () => {
+        editor.selectRevision(r);
+        editor.focus();
+      });
+      const by = el('div', 'dx-pn-by');
+      by.appendChild(el('span', '', [r.author, day(r.date), where(r)].filter(Boolean).join(' · ')));
+      const row = el('div', 'dx-pn-row');
+      const decide = (accept: boolean) => {
+        editor.selectRevision(r);
+        if (accept) editor.acceptRevision();
+        else editor.rejectRevision();
+        editor.focus();
+      };
+      const yes = el('button', 'dx-pn-btn', t('changes.accept'));
+      yes.type = 'button';
+      yes.dataset.name = 'change-accept';
+      yes.addEventListener('click', () => decide(true));
+      const no = el('button', 'dx-pn-btn', t('changes.reject'));
+      no.type = 'button';
+      no.dataset.name = 'change-reject';
+      no.addEventListener('click', () => decide(false));
+      row.append(yes, no);
+      card.append(quote, by, row);
+      body.appendChild(card);
+    }
+  };
+
+  // --- Versions -------------------------------------------------------------------
+
+  /** What the list of versions says, below what keeps a new one. */
+  const message = el('div', 'dx-pn-msg');
+  message.setAttribute('aria-live', 'polite');
+  const say = (text: string, bad = false) => {
+    message.textContent = text;
+    message.classList.toggle('dx-pn-bad', bad);
+  };
+  const fail = (text: string) => {
+    if (options.onError) options.onError(text);
+    else say(text, true);
+  };
+  const view = versions && createVersionView(editor, versions, { onError: fail, onRestore: () => say(t('history.restored', { undo: UNDO_KEY })) });
+  const label = el('input', '');
+  label.type = 'text';
+  label.placeholder = t('history.label');
+  label.dataset.name = 'version-label';
+  label.setAttribute('aria-label', t('history.label'));
+  const keep = el('button', 'dx-pn-btn dx-pn-main', t('history.save'));
+  keep.type = 'button';
+  keep.dataset.name = 'version-save';
+  keep.title = t('history.saveTitle');
+  keep.style.flex = 'none';
+  const keeper = el('div', 'dx-pn-add');
+  keeper.append(label, keep);
+  const saveVersion = async () => {
+    if (!versions?.save) return;
+    keep.disabled = true;
+    try {
+      await versions.save(editor.exportDocx(), defined({ label: label.value.trim() || undefined, author: editor.author || undefined }));
+      label.value = '';
+      say('');
+      refreshVersions();
+    } catch (error) {
+      fail(t('history.saveFailed', { error: (error as Error).message }));
+    } finally {
+      keep.disabled = false;
+    }
+  };
+  keep.addEventListener('click', () => void saveVersion());
+  label.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    void saveVersion();
+  });
+
+  /** The versions as last listed; undefined while they are asked for. */
+  let listed: VersionInfo[] | undefined;
+  let listing = 0;
+  const refreshVersions = () => {
+    if (!versions) return;
+    const mine = ++listing;
+    listed = undefined;
+    if (isOpen && tab === 'history') renderHistory();
+    versions.list().then(
+      (list) => {
+        if (mine !== listing) return;
+        listed = sortVersions(list);
+        if (isOpen && tab === 'history') renderHistory();
+      },
+      (error: Error) => {
+        if (mine !== listing) return;
+        listed = [];
+        fail(t('history.failed', { error: error.message }));
+        if (isOpen && tab === 'history') renderHistory();
+      },
+    );
+  };
+  const renderHistory = () => {
+    body.replaceChildren(...(versions?.save ? [keeper] : []), message);
+    if (!listed) {
+      body.appendChild(el('div', 'dx-pn-empty', t('history.loading')));
+      return;
+    }
+    if (!listed.length) {
+      body.appendChild(el('div', 'dx-pn-empty', t(versions?.save ? 'history.empty' : 'history.none')));
+      return;
+    }
+    for (const info of listed) {
+      const card = el('div', 'dx-pn-ver');
+      card.dataset.version = info.id;
+      const name = el('b', '', versionName(info));
+      name.title = name.textContent!;
+      const meta = el('small', '', [info.label ? versionDate(info) : '', info.author].filter(Boolean).join(' · '));
+      const row = el('div', 'dx-pn-row');
+      const compare = el('button', 'dx-pn-btn', t('history.compare'));
+      compare.type = 'button';
+      compare.dataset.name = 'version-compare';
+      compare.title = t('history.compareTitle');
+      compare.addEventListener('click', () => void view?.show(info));
+      const back = el('button', 'dx-pn-btn', t('history.restore'));
+      back.type = 'button';
+      back.dataset.name = 'version-restore';
+      back.title = t('history.restoreTitle');
+      back.addEventListener('click', async () => {
+        try {
+          view?.close();
+          await restoreVersionOf(editor, versions!, info);
+          say(t('history.restored', { undo: UNDO_KEY }));
+          editor.focus();
+        } catch (error) {
+          fail(t('history.openFailed', { error: (error as Error).message }));
+        }
+      });
+      row.append(compare, back);
+      card.append(name, ...(meta.textContent ? [meta] : []), row);
+      body.appendChild(card);
+    }
+  };
+
   // --- The panel ------------------------------------------------------------------
 
   /** The tab the foot of the panel was last filled for. */
@@ -526,26 +753,32 @@ export function createPanel(container: HTMLElement, editor: Editor): Panel {
     nextColor.querySelectorAll<HTMLElement>('.dx-pn-dot').forEach((dot) => dot.classList.toggle('dx-on', dot.dataset.color === editor.noteColor));
     if (footFor !== tab) {
       footFor = tab;
-      foot.replaceChildren(...(tab === 'variables' ? [actions, picker, note] : tab === 'notes' ? [authorLabel] : [toc, tocNote]));
+      foot.replaceChildren(...(tab === 'variables' ? [actions, picker, note] : tab === 'notes' ? [authorLabel] : tab === 'changes' ? [allRow] : tab === 'history' ? [] : [toc, tocNote]));
+      foot.hidden = tab === 'history';
     }
     if (tab === 'outline') {
       renderOutline();
       renderToc();
     }
     else if (tab === 'variables') renderVariables();
-    else renderNotes();
+    else if (tab === 'notes') renderNotes();
+    else if (tab === 'changes') renderChanges();
   };
   function show(next: PanelTab = tab): void {
     if (next !== tab) {
       shownOutline = '';
       shownVariables = '';
       shownNotes = '';
+      shownChanges = '';
       body.replaceChildren();
     }
+    const entering = next === 'history' && (tab !== 'history' || !isOpen);
     tab = next;
     isOpen = true;
     root.classList.add('dx-pn-open');
     refresh();
+    // The versions are asked for each time their tab is opened: the application may have kept more.
+    if (entering) refreshVersions();
   }
   const hide = () => {
     isOpen = false;
@@ -560,8 +793,10 @@ export function createPanel(container: HTMLElement, editor: Editor): Panel {
     show,
     hide,
     toggle: () => (isOpen ? hide() : show()),
+    refreshVersions,
     destroy() {
       unsubscribe();
+      view?.destroy();
       root.remove();
     },
   };

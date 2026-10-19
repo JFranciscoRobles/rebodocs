@@ -256,12 +256,16 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
   dialogFoot.append(cancel, accept);
   dialog.append(dialogTop, form, dialogFoot);
   pageScrim.appendChild(dialog);
-  /** The page as it was when the dialog was opened, to go back to on cancelling. */
-  let pageBefore: PageSetup | undefined;
+  /** The page of each section as it was when the dialog was opened, to go back to on cancelling. */
+  let pageBefore: PageSetup[] | undefined;
+  /** Whether what is set goes to every section, and not only to the one being edited. */
+  let everywhere = false;
+  const setPage = (patch: Partial<PageSetup>) => editor.setPage(patch, everywhere);
   const openPageSetup = () => {
     if (pageBefore) return;
     close();
-    pageBefore = editor.doc.page;
+    pageBefore = editor.sectionPages();
+    everywhere = false;
     refresh();
     pageScrim.classList.add('dx-side-open');
     form.querySelector<HTMLElement>('select')?.focus();
@@ -270,7 +274,7 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
     if (!pageBefore) return;
     // A field being typed in is taken before closing.
     (document.activeElement as HTMLElement | null)?.blur();
-    if (!keep && editor.doc.page !== pageBefore) editor.setPage(pageBefore);
+    if (!keep) editor.setSectionPages(pageBefore);
     pageBefore = undefined;
     pageScrim.classList.remove('dx-side-open');
     editor.focus();
@@ -319,7 +323,7 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
     body.appendChild(field(t('language'), language));
   }
 
-  const page = () => editor.doc.page;
+  const page = () => editor.page;
   const upright = () => {
     const { width, height } = page();
     return width > height ? { short: height, long: width, landscape: true } : { short: width, long: height, landscape: false };
@@ -362,6 +366,28 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
   };
   const unit = () => el('em', '', 'cm');
 
+  // In a document of several sections: the one being edited, or all of them.
+  const scope = (label: string, all: boolean) => {
+    const node = el('button', '');
+    node.type = 'button';
+    node.textContent = label;
+    node.dataset.name = all ? 'page-everywhere' : 'page-section';
+    node.addEventListener('click', () => {
+      everywhere = all;
+      refresh();
+    });
+    updates.push(() => {
+      node.classList.toggle('dx-on', everywhere === all);
+      node.setAttribute('aria-pressed', String(everywhere === all));
+    });
+    return node;
+  };
+  const scopes = el('div', 'dx-side-seg');
+  scopes.append(scope(t('pageSetup.thisSection'), false), scope(t('pageSetup.wholeDocument'), true));
+  const scopeField = field(t('pageSetup.applyTo'), scopes);
+  updates.push(() => (scopeField.hidden = editor.sectionCount < 2));
+  form.appendChild(scopeField);
+
   form.appendChild(
     field(
       t('pageSetup.size'),
@@ -371,7 +397,7 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
         (i) => {
           // The paper keeps the way it is turned.
           const [, width, height] = PAPERS[i];
-          editor.setPage(upright().landscape ? { width: height, height: width } : { width, height });
+          setPage(upright().landscape ? { width: height, height: width } : { width, height });
         },
         () => PAPERS.findIndex(([, width, height]) => near(upright().short, width) && near(upright().long, height)),
       ),
@@ -380,8 +406,8 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
   // Any other size is typed in: the least is what the margins need.
   const sizes = el('div', 'dx-side-pair');
   sizes.append(
-    field(t('pageSetup.width'), length('width', () => page().width, (width) => editor.setPage({ width }), () => [page().marginLeft + page().marginRight + MIN_TEXT, 3600]), unit()),
-    field(t('pageSetup.height'), length('height', () => page().height, (height) => editor.setPage({ height }), () => [page().marginTop + page().marginBottom + MIN_TEXT, 3600]), unit()),
+    field(t('pageSetup.width'), length('width', () => page().width, (width) => setPage({ width }), () => [page().marginLeft + page().marginRight + MIN_TEXT, 3600]), unit()),
+    field(t('pageSetup.height'), length('height', () => page().height, (height) => setPage({ height }), () => [page().marginTop + page().marginBottom + MIN_TEXT, 3600]), unit()),
   );
   form.appendChild(sizes);
 
@@ -392,7 +418,7 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
     node.dataset.name = landscape ? 'landscape' : 'portrait';
     node.addEventListener('click', () => {
       const { short, long } = upright();
-      editor.setPage(landscape ? { width: long, height: short } : { width: short, height: long });
+      setPage(landscape ? { width: long, height: short } : { width: short, height: long });
     });
     updates.push(() => {
       const on = upright().landscape === landscape;
@@ -414,7 +440,7 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
         MARGINS.map(([label]) => t(label)),
         (i) => {
           const [, vertical, sides] = MARGINS[i];
-          editor.setPage({ marginTop: vertical, marginBottom: vertical, marginLeft: sides, marginRight: sides });
+          setPage({ marginTop: vertical, marginBottom: vertical, marginLeft: sides, marginRight: sides });
         },
         () => {
           const p = page();
@@ -428,7 +454,7 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
     const other: keyof PageSetup = { marginTop: 'marginBottom', marginBottom: 'marginTop', marginLeft: 'marginRight', marginRight: 'marginLeft' }[key] as keyof PageSetup;
     // A margin goes as far as leaves room for the text against the one across.
     const limits = (): [number, number] => [0, (vertical ? page().height : page().width) - (page()[other] ?? 0) - MIN_TEXT];
-    return field(label, length(key, () => page()[key], (value) => editor.setPage({ [key]: value }), limits), unit());
+    return field(label, length(key, () => page()[key], (value) => setPage({ [key]: value }), limits), unit());
   };
   const margins = el('div', 'dx-side-pair');
   margins.append(margin(t('pageSetup.top'), 'marginTop'), margin(t('pageSetup.bottom'), 'marginBottom'), margin(t('pageSetup.left'), 'marginLeft'), margin(t('pageSetup.right'), 'marginRight'));

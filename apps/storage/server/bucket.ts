@@ -17,8 +17,8 @@ export interface BucketFile {
 }
 
 export interface Bucket {
-  /** The documents and the PDFs in it, the newest first. */
-  list(): Promise<BucketFile[]>;
+  /** The documents and the PDFs in it, or those whose key starts with `prefix`, the newest first. */
+  list(prefix?: string): Promise<BucketFile[]>;
   get(key: string): Promise<Uint8Array | undefined>;
   put(key: string, body: Uint8Array, type: string): Promise<void>;
   /** An address the browser can read the file from, with no keys, for a few minutes. */
@@ -58,11 +58,11 @@ export function openBucket(env: BucketEnv = process.env): Bucket {
   });
 
   return {
-    async list() {
+    async list(prefix) {
       const files: BucketFile[] = [];
       let ContinuationToken: string | undefined;
       do {
-        const page = await client.send(new ListObjectsV2Command({ Bucket, ContinuationToken }));
+        const page = await client.send(new ListObjectsV2Command({ Bucket, ContinuationToken, Prefix: prefix || undefined }));
         for (const item of page.Contents ?? []) {
           if (item.Key && /\.(docx|pdf)$/i.test(item.Key)) files.push({ key: item.Key, size: item.Size ?? 0, modified: (item.LastModified ?? new Date(0)).toISOString() });
         }

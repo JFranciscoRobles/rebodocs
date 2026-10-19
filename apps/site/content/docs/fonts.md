@@ -25,7 +25,7 @@ With that, the font:
 
 - is listed in the toolbar, at the top (headless: `state.fonts`);
 - is used to measure and paint, and open documents are laid out again once it loads, since the width of their text changes;
-- goes into PDFs, cut down to the characters used, when the file is TrueType.
+- goes into PDFs when the file is TrueType (`.ttf`), cut down to the characters used, or OpenType (`.otf`), whole.
 
 ## The source
 
@@ -41,7 +41,7 @@ Fonts belong to the page, not to one document, and stay once given.
 
 ## What to know
 
-- **PDF needs `.ttf`.** A `.woff2` or `.otf` shows and measures fine, but the PDF draws its text in a standard font.
-- **The font is not put inside the DOCX.** Someone who opens it in Word without the font installed sees another in its place. Fonts a DOCX already carries embedded are kept, and used.
+- **PDF needs `.ttf` or `.otf`.** A `.woff2` shows and measures fine, but the PDF draws its text in a standard font.
+- **The font goes inside the DOCX** the editor makes, when the text is in it, the file is TrueType and its licence lets it be embedded: someone who opens it in Word without the font installed sees it all the same. It goes whole, which makes the file larger; `embedFonts: false` (or `editor.embedFonts = false`) leaves it out. Fonts a DOCX already carries embedded are kept, and used.
 - **On a server** fonts are given apart: see [On a server](/docs/server/).
 - If the same family and face is given again with the same source, nothing happens: a component that re-renders does not reload its fonts.

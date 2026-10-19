@@ -1,7 +1,9 @@
 # Storage demo
 
 Documents kept in an S3 bucket: list them, open one in the editor, save it
-back, and have the server fill a template and store the PDF. For Cloudflare
+back (each save keeps a version beside it, to compare and restore from the
+side panel, under `versions/` in the bucket: the real-time demo keeps its
+versions there too, the same way), and have the server fill a template and store the PDF. For Cloudflare
 R2, AWS S3, MinIO, or anything else that speaks S3.
 
 ```bash
@@ -22,7 +24,7 @@ who reaches the server may open and save what is in the bucket.
 | File | What it is |
 | --- | --- |
 | `server/bucket.ts` | The bucket through the S3 API: list, read, write, signed addresses. The one place with the keys. |
-| `server/api.ts` | The five routes the page asks, as a plain Node handler. |
+| `server/api.ts` | The seven routes the page asks, as a plain Node handler, versions among them. |
 | `server/pdf.ts` | A template filled and drawn as a PDF. |
 | `server/dev.ts`, `vite.config.ts` | How the demo runs the pages and the backend in one process. |
 | `src/api.ts` | What the page asks of the backend, and of the bucket. |

@@ -17,6 +17,12 @@ export interface Entry {
   ops: Op[];
 }
 
+/** A session of work on a document: from when someone came into its room to when the last one left. */
+export interface Session {
+  /** What those who changed it are called, in the order they first did. */
+  authors: string[];
+}
+
 /** What there is to keep of a room: the file it started from, and the changes made to it since. */
 export interface Kept {
   name: string;
@@ -32,8 +38,13 @@ export interface RoomStorage {
   /** Whether a room is let go of once nobody is in it: it is kept somewhere else, whole. */
   readonly forgets: boolean;
   load(id: string): Promise<Kept | undefined>;
-  /** A room as it starts, or as it is once its changes were folded into its file. */
-  keep(id: string, room: Kept, folded: boolean): Promise<void>;
+  /**
+   * A room as it starts, or as it is once its changes were folded into its
+   * file. Folded because everybody left, `ended` says who changed it while
+   * they were in it: the end of a session of work, for a storage that keeps
+   * a version of each.
+   */
+  keep(id: string, room: Kept, folded: boolean, ended?: Session): Promise<void>;
   /** One more change to a room. */
   add(id: string, entry: Entry): void;
   /** The document of a room people are working in, as it is now: for the storages that have nothing but that. */
@@ -90,15 +101,18 @@ export interface BackendOptions {
  * for them over HTTP:
  *
  *   GET  url/<id>          the document, as a DOCX; its name in `X-Document-Name` (URL-encoded). 404 when there is none.
- *   PUT  url/<id>          the document as it is now, as a DOCX, to keep.
+ *   PUT  url/<id>          the document as it is now, as a DOCX, to keep. The last one of a session, when
+ *                          everybody left, says so in `X-Rebodocs-Session-End: 1`, and who changed it in
+ *                          `X-Rebodocs-Authors` (each name URL-encoded, separated by commas): when to keep a version.
  *   POST url/<id>/access   `{ "ticket": "…" }`: 200 with `{ "name": "…" }` when whoever has that ticket may edit it.
  */
 export function backendStorage(options: BackendOptions): RoomStorage {
   const url = options.url.replace(/\/+$/, '');
   const auth: Record<string, string> = options.key ? { Authorization: `Bearer ${options.key}` } : {};
   const of = (id: string) => `${url}/${encodeURIComponent(id)}`;
-  const put = async (id: string, docx: Uint8Array) => {
-    const response = await fetch(of(id), { method: 'PUT', headers: { ...auth, 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, body: docx as BodyInit });
+  const put = async (id: string, docx: Uint8Array, ended?: Session) => {
+    const end: Record<string, string> = ended ? { 'X-Rebodocs-Session-End': '1', 'X-Rebodocs-Authors': ended.authors.map(encodeURIComponent).join(',') } : {};
+    const response = await fetch(of(id), { method: 'PUT', headers: { ...auth, ...end, 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, body: docx as BodyInit });
     if (!response.ok) throw new Error(`el sistema respondió ${response.status} al guardar`);
   };
   return {
@@ -117,9 +131,9 @@ export function backendStorage(options: BackendOptions): RoomStorage {
       return { name, epoch: 1, base: new Uint8Array(await response.arrayBuffer()), log: [] };
     },
     // A room that starts is the document the system already has; one that was folded is the document to keep.
-    keep: (id, room, folded) => (folded ? put(id, room.base) : Promise.resolve()),
+    keep: (id, room, folded, ended) => (folded ? put(id, room.base, ended) : Promise.resolve()),
     add: () => {},
-    save: put,
+    save: (id, docx) => put(id, docx),
     async admit(id, ticket) {
       const response = await fetch(`${of(id)}/access`, { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket }) });
       if (!response.ok) return undefined;

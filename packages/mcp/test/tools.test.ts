@@ -313,6 +313,11 @@ describe('tools for an assistant', () => {
     const placed = apply(doc, 'format_paragraphs', { from: 3, align: 'center', first_line_cm: 1.27, space_after_pt: 6, line_spacing: 1.5 });
     expect(placed.paragraphs[2].props).toMatchObject({ align: 'center', indentFirstLine: 36, spacingAfter: 6, lineHeight: 1.5 });
     expect(error(doc, 'format_paragraphs', { from: 3 })).toContain('Say what to change');
+
+    const tabbed = apply(doc, 'format_paragraphs', { from: 3, tab_stops: [{ at_cm: 10, align: 'right', leader: 'dot' }, { at_cm: 2.54 }] });
+    expect(tabbed.paragraphs[2].props.tabs).toEqual([{ pos: 72, align: 'left' }, { pos: 283.46, align: 'right', leader: 'dot' }]);
+    expect(runTool(tabbed, 'read_formatting', { from: 3, to: 3 }).text).toContain('tab stops left at 2.54 cm, right with dots at 10 cm');
+    expect(error(doc, 'format_paragraphs', { from: 3, tab_stops: [{ at_cm: 2, align: 'middle' }] })).toContain('"align" must be');
   });
 
   it('sets text in columns, breaks a column, and changes the page', () => {
@@ -330,6 +335,84 @@ describe('tools for an assistant', () => {
     expect(page.page.width).toBeCloseTo(841.9);
     expect(page.page.marginLeft).toBeCloseTo(56.69, 1);
     expect(error(doc, 'set_page_setup', { margin_left_cm: 10, margin_right_cm: 10 })).toContain('less than 2 cm');
+  });
+
+  it('puts notes at the foot of the page, reads them and changes them', () => {
+    const one = apply(base(), 'insert_footnote', { find: 'el servicio', text: 'Según el anexo A.' });
+    const two = apply(one, 'insert_footnote', { at_paragraph: 2, text: 'Primera nota del texto.' });
+    const read = runTool(two, 'read_document').text;
+    // Numbered by where they are in the text, not by when they were made.
+    expect(read).toContain('[2] (Heading1) Objeto[^1]');
+    expect(read).toContain('contrata el servicio[^2].');
+    expect(read).toMatch(/\[\^1\] Primera nota del texto\.\n\[\^2\] Según el anexo A\./);
+    expect(runTool(two, 'get_overview').text).toContain('2 notes at the foot of the page');
+    const changed = apply(two, 'replace_text', { area: 'footnote', area_footnote: 2, find: 'anexo A', replace: 'anexo B' });
+    expect(runTool(changed, 'read_document', { area: 'footnote', area_footnote: 2 }).text).toContain('Según el anexo B.');
+    expect(error(two, 'read_document', { area: 'footnote', area_footnote: 3 })).toContain('from 1 to 2');
+    // What is written goes into the file, and comes back.
+    expect(runTool(importDocx(exportDocx(changed)), 'read_document').text).toContain('[^2] Según el anexo B.');
+  });
+
+  it('puts a text box in, lists it and changes its text', () => {
+    const doc = apply(base(), 'insert_text_box', { text: 'Precio fijo\nSin IVA', at_paragraph: 5 });
+    const overview = runTool(doc, 'get_overview').text;
+    expect(overview).toContain('Text boxes');
+    expect(overview).toContain('1. Precio fijo / Sin IVA');
+    expect(runTool(doc, 'read_document', { area: 'textbox', area_textbox: 1 }).text).toContain('[2] Sin IVA');
+    const changed = apply(doc, 'replace_text', { area: 'textbox', area_textbox: 1, find: 'Sin IVA', replace: 'IVA incluido' });
+    expect(runTool(importDocx(exportDocx(changed)), 'read_document', { area: 'textbox', area_textbox: 1 }).text).toContain('IVA incluido');
+    expect(error(doc, 'read_document', { area: 'textbox', area_textbox: 2 })).toContain('from 1 to 1');
+  });
+
+  it('tracks what it changes while changes are tracked, and accepts or rejects them', () => {
+    const on = apply(base(), 'track_changes', { on: true });
+    expect(runTool(on, 'get_overview').text).toContain('Changes are tracked');
+    const edited = apply(apply(on, 'replace_text', { find: 'El cliente acepta.', replace: 'El cliente acepta las condiciones.' }), 'delete_paragraphs', { from: 4, to: 4 });
+    const read = runTool(edited, 'read_document').text;
+    expect(read).toContain('[6] El cliente acepta{+ las condiciones+}.');
+    expect(read).toContain('[4] (Heading1) [-Precio-][-¶-]');
+    const listed = runTool(edited, 'list_changes').text;
+    expect(listed).toContain('2 tracked changes');
+    expect(listed).toMatch(/1\. Assistant took out "Precio" and the paragraph break after it \(paragraph 4, 2026-10-12 12:00\)/);
+    expect(listed).toContain('2. Assistant put in " las condiciones"');
+    // One rejected, the other accepted: the heading is back, and the new words stay.
+    const settled = apply(apply(edited, 'reject_changes', { changes: [1] }), 'accept_changes', {});
+    expect(texts(settled)).toEqual(texts(apply(base(), 'replace_text', { find: 'El cliente acepta.', replace: 'El cliente acepta las condiciones.' })));
+    expect(runTool(settled, 'list_changes').text).toContain('There are no tracked changes');
+    // What it writes is Word's tracked changes.
+    expect(runTool(importDocx(exportDocx(edited)), 'list_changes').text).toContain('2 tracked changes');
+  });
+
+  it('says what changed from another version of the document', () => {
+    const earlier = base();
+    const later = apply(apply(earlier, 'replace_text', { find: 'El cliente acepta.', replace: 'El cliente acepta las condiciones.' }), 'delete_paragraphs', { from: 4, to: 4 });
+    const data = btoa(String.fromCharCode(...exportDocx(earlier)));
+    const said = runTool(later, 'compare_documents', { path: 'v1.docx', data }).text;
+    expect(said).toContain('2 changes from the file to the document');
+    expect(said).toContain('(only in the file, its paragraph 4) taken out: [-Precio-]');
+    expect(said).toContain('[5] changed: El cliente acepta{+ las condiciones+}.');
+    // The other way round, the numbers are still this document's.
+    expect(runTool(earlier, 'compare_documents', { path: 'v2.docx', data: btoa(String.fromCharCode(...exportDocx(later))), file_is: 'later' }).text).toContain('[4] taken out: [-Precio-]');
+    expect(runTool(earlier, 'compare_documents', { path: 'v1.docx', data }).text).toContain('There is no difference');
+  });
+
+  it('sets the page and the header of one section of several', () => {
+    const doc = apply(apply(base(), 'set_columns', { from: 3, to: 4, count: 2 }), 'insert_paragraphs', { area: 'header', after_paragraph: 0, paragraphs: [{ text: 'Every page' }] });
+    const middle = apply(doc, 'set_page_setup', { section: 2, orientation: 'landscape', own_header_footer: true });
+    const overview = runTool(middle, 'get_overview').text;
+    expect(overview).toMatch(/1\. Paragraphs 1 to \d+: 21\.59 × 27\.94 cm.*shows the document's header/);
+    expect(overview).toMatch(/2\. Paragraphs \d+ to \d+: 27\.94 × 21\.59 cm.*header "Every page", footer empty of its own/);
+    expect(overview).toMatch(/3\. Paragraphs .*its header and footer are the document's/);
+    // Its own header is written with "area_section"; the document's stays as it was.
+    const written = apply(middle, 'replace_text', { area: 'header', area_section: 2, find: 'Every page', replace: 'Landscape pages' });
+    expect(runTool(written, 'read_document', { area: 'header', area_section: 2 }).text).toContain('Landscape pages');
+    expect(runTool(written, 'read_document', { area: 'header' }).text).toContain('Every page');
+    expect(error(doc, 'read_document', { area: 'header', area_section: 1 })).toContain("shows the document's header");
+    expect(error(doc, 'set_page_setup', { section: 3, own_header_footer: true })).toContain('is the last');
+    expect(error(doc, 'set_page_setup', { section: 9, paper: 'a4' })).toContain('from 1 to 3');
+    // Without "section", every section's page changes.
+    const a4 = apply(written, 'set_page_setup', { paper: 'a4' });
+    expect(runTool(a4, 'get_overview').text.match(/21 × 29\.7 cm|29\.7 × 21 cm/g)).toHaveLength(3);
   });
 
   it('sets the height of a row, its heading rows, and the place and lines of its cells', () => {

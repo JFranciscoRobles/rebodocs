@@ -263,6 +263,11 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
       if (!existsSync(path) || statSync(path).isDirectory()) refuse(`There is no file "${path}".`);
       Object.assign(rest, { type, data: readFileSync(path).toString('base64') });
     }
+    if (name === 'compare_documents') {
+      const path = pathOf(rest.path);
+      if (!existsSync(path) || statSync(path).isDirectory()) refuse(`There is no file "${path}".`);
+      Object.assign(rest, { data: readFileSync(path).toString('base64') });
+    }
     if (!isFile(on)) {
       const answer = await bridge!.call(on.id, name, rest);
       if (!answer.ok) refuse(answer.text);
@@ -300,7 +305,7 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
           return answer({
             protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0],
             capabilities: { tools: {} },
-            serverInfo: { name: 'rebodocs', version: '0.6.2' },
+            serverInfo: { name: 'rebodocs', version: '0.7.0' },
             instructions: INSTRUCTIONS,
           });
         }

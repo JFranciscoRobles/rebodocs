@@ -1,6 +1,6 @@
 import { unzlibSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type TextMeasurer, createDoc, exportPdf, insertTable, insertText, layoutDocument, parseTrueType, setCellProps } from '../src';
+import { type TextMeasurer, FontMeasurer, createDoc, exportPdf, insertTable, insertText, layoutDocument, parseTrueType, readFont, setCellProps } from '../src';
 
 const measurer: TextMeasurer = {
   width: (text, font) => text.length * font.size * 0.5,
@@ -19,6 +19,44 @@ function streams(pdf: Uint8Array): string[] {
     out.push(match[1].includes('/FlateDecode') ? latin1(unzlibSync(data)) : latin1(data));
   }
   return out;
+}
+
+/**
+ * The least of an OpenType file in CFF: three glyphs, 'A' and 'B' the last
+ * two, and a CFF keyed by CID whose charset gives them CIDs 1001 and 1002.
+ */
+function cffFont(): Uint8Array {
+  const u16 = (n: number) => [(n >> 8) & 0xff, n & 0xff];
+  const i32 = (n: number) => [29, (n >>> 24) & 0xff, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+  // CFF: header, Name INDEX, Top DICT INDEX, String and Global Subr INDEXes, charset, CharStrings INDEX.
+  const name = [...'Test'].map((c) => c.charCodeAt(0));
+  const head = [1, 0, 4, 1, ...u16(1), 1, 1, 1 + name.length, ...name];
+  const dictLength = 3 + 2 + 5 + 1 + 5 + 1;
+  const topIndex = 2 + 1 + 2;
+  const charsetAt = head.length + topIndex + dictLength + 2 + 2;
+  const charStringsAt = charsetAt + 5;
+  const top = [139, 139, 139, 12, 30, ...i32(charsetAt), 15, ...i32(charStringsAt), 17];
+  const cff = [...head, ...u16(1), 1, 1, 1 + top.length, ...top, 0, 0, 0, 0, 2, ...u16(1001), ...u16(1), ...u16(3), 1, 1, 2, 3, 4, 14, 14, 14];
+  const headTable = new Array(54).fill(0);
+  headTable.splice(18, 2, ...u16(1000));
+  const hhea = new Array(36).fill(0);
+  hhea.splice(4, 2, ...u16(800));
+  hhea.splice(34, 2, ...u16(3));
+  const hmtx = [...u16(500), 0, 0, ...u16(600), 0, 0, ...u16(700), 0, 0];
+  // A format 4 cmap of one segment, 'A' and 'B' to glyphs 1 and 2, and the one that ends every such map.
+  const sub = [...u16(4), ...u16(32), 0, 0, ...u16(4), ...u16(4), ...u16(1), 0, 0, ...u16(66), ...u16(0xffff), 0, 0, ...u16(65), ...u16(0xffff), ...u16(-64 & 0xffff), ...u16(1), 0, 0, 0, 0];
+  const cmap = [0, 0, ...u16(1), ...u16(3), ...u16(1), 0, 0, 0, 12, ...sub];
+  const tables: [string, number[]][] = [['CFF ', cff], ['cmap', cmap], ['head', headTable], ['hhea', hhea], ['hmtx', hmtx]];
+  const out: number[] = [0x4f, 0x54, 0x54, 0x4f, ...u16(tables.length), 0, 0, 0, 0, 0, 0];
+  let at = 12 + tables.length * 16;
+  const body: number[] = [];
+  for (const [tag, data] of tables) {
+    out.push(...[...tag].map((c) => c.charCodeAt(0)), 0, 0, 0, 0, ...u16(at >>> 16), ...u16(at & 0xffff), ...u16(data.length >>> 16), ...u16(data.length & 0xffff));
+    body.push(...data);
+    while (body.length % 4) body.push(0);
+    at = 12 + tables.length * 16 + body.length;
+  }
+  return Uint8Array.from([...out, ...body]);
 }
 
 describe('PDF export', () => {
@@ -76,6 +114,26 @@ describe('PDF export', () => {
     expect(streams(pdf).some((s) => /q 100 0 0 50 72 [\d.]+ cm \/I1 Do Q/.test(s))).toBe(true);
     const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 1, 0, 2, 1, 0, 0, 0]);
     expect(latin1(exportPdf(layoutDocument(withPicture, measurer), { measurer, image: () => ({ width: 2, height: 1, jpeg }) }))).toContain('/ColorSpace /DeviceGray /Filter /DCTDecode');
+  });
+
+  it('measures with an OpenType file in CFF and puts it in the PDF, its glyphs named by number in every reader', () => {
+    const font = readFont(cffFont(), { family: 'Test', bold: false, italic: false })!;
+    expect(font).toMatchObject({ cff: true, unitsPerEm: 1000 });
+    expect([font.glyph(65), font.glyph(66), font.advance(2)]).toEqual([1, 2, 700]);
+    const measure = new FontMeasurer([font]);
+    expect(measure.width('AB', { family: 'Test', bold: false, italic: false, size: 10 })).toBe(13);
+    const doc = createDoc([{ props: {}, runs: [{ text: 'AB', props: { fontFamily: 'Test' } }] }]);
+    const pdf = exportPdf(layoutDocument(doc, measure), { measurer: measure, font: () => font.bytes });
+    const text = latin1(pdf);
+    expect(text).toContain('/Subtype /CIDFontType0');
+    expect(text).toContain('/FontFile3');
+    expect(text).not.toContain('/CIDToGIDMap');
+    expect(streams(pdf).join('\n')).toContain('<0001> <0041>');
+    // The charset in the PDF gives each glyph its own number as its CID: readers differ on the other kind.
+    const embedded = streams(pdf).find((data) => data.startsWith('OTTO'))!;
+    expect(embedded.length).toBe(font.bytes.length);
+    const at = latin1(font.bytes).indexOf(String.fromCharCode(2, 0x03, 0xe9));
+    expect([...embedded.slice(at, at + 5)].map((c) => c.charCodeAt(0))).toEqual([2, 0, 1, 0, 1]);
   });
 
   it('does not take for a font what is not a TrueType file', () => {

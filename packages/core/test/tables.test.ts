@@ -4,6 +4,7 @@ import {
   type Doc,
   type TextMeasurer,
   adjacentLine,
+  caretRect,
   cellExtent,
   createDoc,
   createParagraph,
@@ -26,6 +27,8 @@ import {
   neighbourCell,
   resizeRow,
   resizeTable,
+  selectionRects,
+  setCellProps,
   setRowHeight,
   splitParagraph,
 } from '../src';
@@ -164,8 +167,98 @@ describe('tables', () => {
     const layout = layoutDocument(doc, measurer);
     // 100pt column less 20pt and 10pt: 14 characters to a line (the space after them hangs), 20pt in and 2pt down.
     expect(layout.lines.filter((l) => l.para === 0).map((l) => [l.x, l.y, l.end])).toEqual([[30, 12, 15], [30, 22, 19]]);
-    expect(layout.lines[2]).toMatchObject({ x: 115, y: 10 });
+    // The margin above the text is the row's: the other cell's text goes 2pt down too, as in Word.
+    expect(layout.lines[2]).toMatchObject({ x: 115, y: 12 });
     expect(layout.pages[0].cells[0].height).toBe(27);
+  });
+
+  it('sets text vertically, its lines as long as the row is tall', () => {
+    const up = tc(p('aaaa bbbb cccc'), '<w:textDirection w:val="btLr"/>');
+    const doc = open(tbl(tr(up + tc(p('x')), '<w:trPr><w:trHeight w:val="800" w:hRule="exact"/></w:trPr>')));
+    expect(doc.tables![0].rows[0].cells[0].direction).toBe('up');
+    const layout = layoutDocument(doc, measurer);
+    // 40pt of row: eight characters to a line, the lines turned about the bottom left corner of what the cell holds.
+    const lines = layout.lines.filter((l) => l.para === 0);
+    expect(lines.map((l) => [l.x, l.y, l.start])).toEqual([[15, 50, 0], [15, 60, 5], [15, 70, 10]]);
+    expect(lines[0].turn).toEqual({ angle: -90, x: 15, y: 50 });
+    expect(layout.pages[0].cells[0].height).toBe(40);
+    // The caret lies across the line, and reads up the page.
+    expect(caretRect(layout, measurer, { para: 0, offset: 2 })).toMatchObject({ x: 15, y: 40, width: 10, height: 0 });
+    expect(selectionRects(layout, measurer, { from: { para: 0, offset: 5 }, to: { para: 0, offset: 7 } })).toEqual([{ page: 0, x: 25, y: 40, width: 10, height: 10 }]);
+    // A click is found in the text as it is before being turned.
+    expect(hitTest(layout, measurer, 0, 30, 45)).toEqual({ para: 0, offset: 6 });
+    // Up and down go from one of its lines to the next, across the cell.
+    expect(adjacentLine(layout, lines[0], 20, 1)).toBe(lines[1]);
+  });
+
+  it('sets text from the top down at the right of its cell, and to the far edge when set at the bottom', () => {
+    const down = tc(p('ab'), '<w:textDirection w:val="tbRl"/><w:vAlign w:val="bottom"/>');
+    const layout = layoutDocument(open(tbl(tr(down + tc(p('x') + p('y') + p('z'))))), measurer);
+    const [line] = layout.lines;
+    // The row is as tall as the other cell, its three lines and the space after each, the text not making it taller;
+    // at the bottom it goes to the left edge of the cell, its margin left out as in Word, but for the 5pt after the paragraph.
+    expect(layout.pages[0].cells[0].height).toBe(45);
+    expect(line.turn).toEqual({ angle: 90, x: 105, y: 10 });
+    expect(line.y).toBe(90);
+  });
+
+  it('gives a row of text set vertically alone the height of one line of it', () => {
+    const up = tc(p('a long text'), '<w:textDirection w:val="btLr"/>');
+    const layout = layoutDocument(open(tbl(tr(up + up))), measurer);
+    expect(layout.pages[0].cells[0].height).toBe(10);
+  });
+
+  it('writes the direction of the text of a cell, and changes it', () => {
+    const doc = open(tbl(tr(tc(p('a')) + tc(p('b')))));
+    const turned = setCellProps(doc, 0, 1, { direction: 'down' });
+    expect(turned.tables![0].rows[0].cells.map((c) => c.direction)).toEqual(['down', 'down']);
+    const xml = strFromU8(unzipSync(exportDocx(turned))['word/document.xml']);
+    expect(xml.match(/<w:textDirection w:val="tbRl"\/>/g)).toHaveLength(2);
+    const back = importDocx(exportDocx(setCellProps(importDocx(exportDocx(turned)), 0, 0, { direction: 'level' })));
+    expect(back.tables![0].rows[0].cells.map((c) => c.direction)).toEqual([undefined, 'down']);
+  });
+
+  it('makes a row of an exact height taller by the margin below its text, and gives every cell the row\'s margins', () => {
+    const margins = '<w:tcMar><w:top w:w="100" w:type="dxa"/><w:bottom w:w="200" w:type="dxa"/></w:tcMar>';
+    const layout = layoutDocument(open(tbl(tr(tc(p('a'), margins) + tc(p('b')), '<w:trPr><w:trHeight w:val="600" w:hRule="exact"/></w:trPr>'))), measurer);
+    expect(layout.pages[0].cells[0].height).toBe(40);
+    expect(layout.lines.map((l) => l.y)).toEqual([15, 15]);
+  });
+
+  it('breaks a table in a cell across pages between its rows, and lays out a cell that starts with one', () => {
+    const inner = tbl(Array.from({ length: 8 }, (_, i) => tr(tc(p(`n${i}`)) + tc(p(`m${i}`)))).join(''), '<w:tblStyle w:val="TableGrid"/>', [900, 900]);
+    const layout = layoutDocument(open(tbl(tr(tc(inner + p('after')) + tc(p('b'))))), measurer);
+    const at = (text: string) => layout.lines.find((l) => l.fragments.some((f) => f.text === text))!;
+    // 80pt of page and 15pt rows: five rows of the inner table on the first page, the others on the next, from its top.
+    expect(['n0', 'n4', 'n5', 'n7', 'after', 'b'].map((text) => [at(text).page, at(text).y])).toEqual([[0, 10], [0, 70], [1, 10], [1, 40], [1, 55], [0, 10]]);
+    // The cell around it goes on in the next page too, ending on the first right under the text, as in Word;
+    // each of its lines is in a box of its own page.
+    expect(layout.pages.map((page) => page.cells.filter((c) => c.table === 0).map((c) => c.height))).toEqual([[75, 75], [60, 60]]);
+    for (const line of layout.lines) expect(layout.pages[line.page].cells[line.cell!]).toBeDefined();
+    expect(layout.pages[1].cells[at('n5').cell!]).toMatchObject({ table: 1, row: 5, y: 10 });
+  });
+
+  it('keeps a row of a table in a cell whole when it must be, and breaks it between its lines otherwise', () => {
+    const rows = (cant: boolean) =>
+      Array.from({ length: 3 }, (_, i) => tr(tc(p(`n${i}`)) + tc(p(`m${i}`)))).join('') +
+      tr(tc(p('t1') + p('t2') + p('t3')) + tc(p('m')), cant ? '<w:trPr><w:cantSplit/></w:trPr>' : '');
+    const lay = (cant: boolean) => layoutDocument(open(tbl(tr(tc(p('top') + tbl(rows(cant), '<w:tblStyle w:val="TableGrid"/>', [900, 900])) + tc(p('b'))))), measurer);
+    const where = (cant: boolean) => {
+      const layout = lay(cant);
+      return ['t1', 't2', 't3'].map((text) => layout.lines.find((l) => l.fragments.some((f) => f.text === text))!).map((l) => [l.page, l.y]);
+    };
+    // The row starts 70pt down a page of 80pt: its first line fits, its second does not.
+    expect(where(true)).toEqual([[1, 10], [1, 25], [1, 40]]);
+    expect(where(false)).toEqual([[0, 70], [1, 10], [1, 25]]);
+  });
+
+  it('moves a row of a table in a cell whose text fits on the page but not its end to the next, whole, as Word does', () => {
+    const pad = '<w:tcMar><w:bottom w:w="300" w:type="dxa"/></w:tcMar>';
+    const rows = Array.from({ length: 2 }, (_, i) => tr(tc(p(`n${i}`)) + tc(p(`m${i}`)))).join('') + tr(tc(p('t1') + p('t2'), pad) + tc(p('m')));
+    const layout = layoutDocument(open(tbl(tr(tc(p('top') + tbl(rows, '<w:tblStyle w:val="TableGrid"/>', [900, 900])) + tc(p('b'))))), measurer);
+    // The row starts 55pt down: its two lines fit in the 80pt of the page, the 15pt below them do not.
+    const at = (text: string) => layout.lines.find((l) => l.fragments.some((f) => f.text === text))!;
+    expect(['n1', 't1', 't2'].map((text) => [at(text).page, at(text).y])).toEqual([[0, 40], [1, 10], [1, 25]]);
   });
 
   it('draws cells merged down as one box', () => {

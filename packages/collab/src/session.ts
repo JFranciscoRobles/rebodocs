@@ -7,8 +7,8 @@
 // Undoing takes back what this person did and nothing of what the others did
 // meanwhile: it is kept as changes, not as the document as it was.
 
-import { type Doc, type Paragraph, type Position, type StoryPart, STORY_PARTS, importDocx, noteMark, paragraphLength, storyOf } from '@rebodocs/core';
-import { type Anchor, type Op, type Renamed, apply, decode, diff, encode, ensureIds, mapAnchor, renameTable, stampIds, toBase64, transform } from './changes';
+import { type Doc, type Paragraph, type Position, type StoryPart, importDocx, noteMark, paragraphLength, storyOf, withStory } from '@rebodocs/core';
+import { type Anchor, type Op, type Renamed, apply, decode, diff, digest, encode, ensureIds, mapAnchor, renameTable, stampIds, storyPartsOf, toBase64, transform } from './changes';
 
 export const DEFAULT_COLLAB_PORT = 7420;
 
@@ -88,6 +88,8 @@ export interface Session {
   readonly name: string;
   /** Changes made here the server has not taken yet. */
   readonly pending: number;
+  /** How many times the document here was found not to be the room's, and was loaded again. */
+  readonly resyncs: number;
   rename(name: string): void;
   /** Stops working with the others. The document stays as it is. */
   leave(): void;
@@ -188,6 +190,11 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
   const mint = () => `${me.slice(0, 6)}.${(minted++).toString(36)}`;
   let applying = false;
   const stop = new AbortController();
+  /** The stream being listened to: let go of, it is listened to again. */
+  let stream: AbortController | undefined;
+  /** What was made here and not taken by the server, to make again on the room as it is, once it is loaded again. */
+  let carry: { ops: Op[]; seq: number; sent: number } | undefined;
+  let resyncs = 0;
   const changed = () => options.onChange?.();
 
   // --- Places ---------------------------------------------------------------------
@@ -325,13 +332,11 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
         return out ?? paragraphs;
       };
       doc = { ...doc, paragraphs: fix(doc.paragraphs) };
-      for (const part of STORY_PARTS) {
+      for (const part of storyPartsOf(doc)) {
         const story = storyOf(doc, part);
         if (!story) continue;
         const paragraphs = fix(story.paragraphs);
-        if (paragraphs === story.paragraphs) continue;
-        if (part === 'header' || part === 'footer') doc = { ...doc, [part]: { ...story, paragraphs } };
-        else doc = { ...doc, firstPage: { ...doc.firstPage, [part === 'firstHeader' ? 'header' : 'footer']: { ...story, paragraphs } } };
+        if (paragraphs !== story.paragraphs) doc = withStory(doc, part, { ...story, paragraphs });
       }
     };
     if (after.media !== before.media) {
@@ -492,6 +497,13 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
         throw new Error('out of step');
       }
       for (const entry of hello.entries) doc = apply(doc, entry.ops);
+      // Loaded again because it was not the room's: what was made here and is not in the room yet, and what was
+      // typed while it was being loaded, is made again on it. What was sent and got there is in it already.
+      const kept = carry;
+      carry = undefined;
+      if (kept) syncLocal();
+      const arrived = kept && kept.sent && hello.entries.some((entry) => entry.by === me && entry.seq === kept.seq);
+      const mine = kept ? [...kept.ops.slice(arrived ? kept.sent : 0), ...buffer] : [];
       confirmed = doc;
       epoch = hello.epoch;
       rev = hello.entries.length;
@@ -502,14 +514,22 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
       redo = [];
       applying = true;
       try {
-        shadow = doc;
-        host.load(doc);
+        if (kept) {
+          const sel = here();
+          shadow = mine.length ? apply(doc, mine) : doc;
+          host.replace(shadow, selectionIn(shadow, sel));
+        } else {
+          shadow = doc;
+          host.load(doc);
+        }
       } finally {
         applying = false;
       }
+      buffer = mine;
       seenCommits = host.commits;
       seenSteps = host.steps;
       state = 'on';
+      if (mine.length) flush();
     } else {
       state = 'on';
       for (const entry of hello.entries) take(entry);
@@ -525,14 +545,35 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
     changed();
   };
 
+  /** The document here is not the room's: it is loaded again, from the room's file and every change made to it. */
+  const resync = () => {
+    syncLocal();
+    // What was sent may be in the room already: then it is not made again.
+    carry = { ops: [...(inflight ?? []), ...buffer], seq, sent: inflight?.length ?? 0 };
+    resyncs++;
+    console.warn(`[collab] ${room}: el documento no era el de la sala; se carga de nuevo`);
+    confirmed = undefined;
+    epoch = 0;
+    rev = 0;
+    inflight = undefined;
+    buffer = [];
+    // Nothing goes to the room until it is loaded again; what is typed meanwhile waits.
+    state = 'connecting';
+    stream?.abort();
+  };
+
   const run = async () => {
     let wait = 500;
     /** Events are taken one at a time, in the order they came: the first of them waits for the file of the room. */
     let queue = Promise.resolve();
     while (state !== 'closed') {
+      const listening = new AbortController();
+      stream = listening;
+      const leaving = () => listening.abort();
+      stop.signal.addEventListener('abort', leaving);
       try {
         const query = `client=${me}&name=${encodeURIComponent(name)}&epoch=${epoch}&from=${rev}${options.ticket ? `&ticket=${encodeURIComponent(options.ticket)}` : ''}`;
-        await listen(`${url}/collab/rooms/${room}/events?${query}`, stop.signal, (event, data) => {
+        await listen(`${url}/collab/rooms/${room}/events?${query}`, listening.signal, (event, data) => {
           queue = queue.then(async () => {
             if (state === 'closed') return;
             if (event === 'hello') {
@@ -546,6 +587,9 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
               peers.set(peer.client, peer);
               showPeers();
               changed();
+            } else if (event === 'check') {
+              const check = decode<{ epoch: number; rev: number; digest: string }>(data);
+              if (confirmed && check.epoch === epoch && check.rev === rev && digest(confirmed) !== check.digest) resync();
             } else if (event === 'leave') {
               peers.delete(decode<{ client: string }>(data).client);
               showPeers();
@@ -561,8 +605,12 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
           state = 'closed';
           break;
         }
+      } finally {
+        stop.signal.removeEventListener('abort', leaving);
       }
       if ((state as CollabState) === 'closed') break;
+      // Let go of to load the room again: at once, without saying it went.
+      if (carry && !confirmed) continue;
       state = 'offline';
       peers.clear();
       host.setPeers([]);
@@ -595,7 +643,10 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
       return name;
     },
     get pending() {
-      return (inflight?.length ?? 0) + buffer.length;
+      return (inflight?.length ?? 0) + buffer.length + (carry?.ops.length ?? 0);
+    },
+    get resyncs() {
+      return resyncs;
     },
     rename(next: string) {
       name = next;

@@ -49,6 +49,8 @@ element and mounts in the browser.
 | `name`, `author`, `locale` | Follow their props without remounting. |
 | `letterhead` | A picture to use as letterhead whatever the document came with; `null` for none. |
 | `fonts`, `locales` | Fonts and languages of the application's own. |
+| `embedFonts` | Whether the DOCX carries the `fonts` its text is in (TrueType, when their licence lets them); on unless `false`. |
+| `versions` | `{ list, load, save? }`: the versions the application keeps. The side panel gets a tab to compare the document with one and go back to it, and with `save` each save keeps one. |
 | `features` | What is switched on: `menu`, `panel`, `ruler`, `statusBar`, `find`, `title`, `responsive` (on by default); `files`, `language`, `assistant`, `share` (off by default). |
 | `onChange`, `onCollab`, `onError` | Notifications. |
 | `onReady` / `ref` | The handle: `exportDocx()`, `dirty`, `editor`, `collab`. |
@@ -76,7 +78,10 @@ function Toolbar() {
 `state` is a plain snapshot (formatting at the selection, page, zoom, what can
 be undone…) that is the same object until something in it changes.
 `commands` are the editor's methods, and give the keyboard back to the
-document after each one.
+document after each one: among them `insertFootnote`, `insertTextBox`,
+`restoreVersion`, and `setTrackChanges`, `acceptRevision`,
+`rejectRevision` and the rest for tracked changes, whose state is in
+`state.trackChanges` and `state.revisionCount`.
 
 | Hook | Gives |
 | --- | --- |

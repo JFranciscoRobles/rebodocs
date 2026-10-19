@@ -39,7 +39,7 @@ The element given to the editor needs a height.
 | `new Editor(element)` | The pages. Holds the document, the selection and the history. |
 | `createToolbar(el, editor, options)` | One row of formatting. What does not fit folds into a tray. |
 | `createSidebar(editor, options)` | The document menu, as a drawer: open, save, export, page, letterhead, language. |
-| `createPanel(el, editor)` | Side panel: outline, template variables, comments. |
+| `createPanel(el, editor, { versions? })` | Side panel: outline, template variables, comments, tracked changes, and versions when given. |
 | `createStatusBar(el, editor, options)` | Pages, words, view, zoom, who is on the document. |
 | `createBubble(editor)` | A bar beside the selection with what can be done to it. |
 | `createFindBar(editor)` | Find and replace. |

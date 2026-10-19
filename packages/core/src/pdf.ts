@@ -2,14 +2,14 @@
 // the layout put it, its table borders and shading, and its pictures.
 //
 // Fonts are the hard part. A font whose file is at hand (the ones a DOCX
-// carries) goes into the PDF whole. For any other, the PDF names one of the
+// carries, TrueType or OpenType) goes into the PDF. For any other, the PDF names one of the
 // three families every reader has (Helvetica, Times, Courier), which have the
 // same widths as Arial, Times New Roman and Courier New. Words are placed one
 // by one where the layout measured them, so lines keep their length whatever
 // the reader draws them with.
 
 import { zlibSync } from 'fflate';
-import { type Band, type FontSpec, type Fragment, type Layout, type LayoutPage, type Line, type TextMeasurer, boxLines } from './layout';
+import { type Band, type FontSpec, type Fragment, type Layout, type LayoutPage, type Line, type TextBoxBand, type TextMeasurer, boxLines } from './layout';
 import { type Border, DEFAULT_BORDER } from './model';
 import { linkHref } from './links';
 import type { StoryPart } from './docx/source';
@@ -28,7 +28,7 @@ export interface PdfImage {
 export interface PdfResources {
   /** The measurer the layout was made with: words are placed where it says they start. */
   measurer: TextMeasurer;
-  /** The TrueType file of a font, when there is one to put in the PDF. */
+  /** The TrueType or OpenType file of a font, when there is one to put in the PDF. */
   font?(spec: FontSpec): Uint8Array | undefined;
   /** The picture of an object, by its XML and the part it lives in. */
   image?(xml: string, part?: StoryPart): PdfImage | undefined;
@@ -124,15 +124,144 @@ export interface TrueType {
   italicAngle: number;
   glyph(codePoint: number): number;
   advance(glyph: number): number;
+  /** Set for an OpenType file whose outlines are in CFF, not TrueType: it goes into a PDF whole. */
+  cff?: boolean;
 }
 
-/** Reads what a PDF needs to know of a TrueType file. Undefined for anything else, or a file it cannot make sense of. */
+/**
+ * An OpenType file in CFF whose glyphs a PDF can name by their numbers, as
+ * every reader then draws them: one keyed by CID gets a charset where each
+ * glyph's CID is its number, written over the one it had. The file as it is
+ * when it already is so, when it is keyed by glyph name, or when it cannot be
+ * made sense of.
+ */
+function cffByGlyph(bytes: Uint8Array): Uint8Array {
+  try {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let at = -1;
+    for (let i = 0; i < view.getUint16(4); i++) {
+      const record = 12 + i * 16;
+      if (String.fromCharCode(bytes[record], bytes[record + 1], bytes[record + 2], bytes[record + 3]) === 'CFF ') at = view.getUint32(record + 8);
+    }
+    const charset = at < 0 ? undefined : cffCharset(bytes, at);
+    if (!charset || charset.identity) return bytes;
+    // Glyph 0 has no entry. Ranges of glyphs whose CIDs follow their numbers, as few as the room allows.
+    const glyphs = charset.glyphs;
+    const out = bytes.slice();
+    const k = charset.at;
+    if (charset.length >= 5) {
+      out[k] = 2;
+      out[k + 1] = 0;
+      out[k + 2] = 1;
+      out[k + 3] = (glyphs - 2) >> 8;
+      out[k + 4] = (glyphs - 2) & 0xff;
+    } else {
+      out[k] = 1;
+      let p = k + 1;
+      for (let first = 1; first < glyphs; first += 256) {
+        const left = Math.min(255, glyphs - 1 - first);
+        out[p] = first >> 8;
+        out[p + 1] = first & 0xff;
+        out[p + 2] = left;
+        p += 3;
+      }
+      if (p > k + charset.length) return bytes;
+    }
+    return out;
+  } catch {
+    return bytes;
+  }
+}
+
+/**
+ * Where the charset of a CFF font keyed by CID is, how long it is and how
+ * many glyphs it covers, and whether each glyph's CID is its own number.
+ * Undefined for a font keyed by glyph name.
+ */
+function cffCharset(bytes: Uint8Array, at: number): { at: number; length: number; glyphs: number; identity: boolean } | undefined {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  /** The items of an INDEX, as where each starts and ends, and where the INDEX ends. */
+  const index = (start: number): { items: [number, number][]; end: number } => {
+    const count = view.getUint16(start);
+    if (!count) return { items: [], end: start + 2 };
+    const size = bytes[start + 2];
+    const offset = (k: number) => {
+      let value = 0;
+      for (let b = 0; b < size; b++) value = value * 256 + bytes[start + 3 + k * size + b];
+      return value;
+    };
+    const base = start + 2 + (count + 1) * size;
+    const items: [number, number][] = [];
+    for (let k = 0; k < count; k++) items.push([base + offset(k), base + offset(k + 1)]);
+    return { items, end: base + offset(count) };
+  };
+  const names = index(at + bytes[at + 2]);
+  const [top] = index(names.end).items;
+  if (!top) return undefined;
+  // The operators of the top DICT, with the last number before each.
+  const ops = new Map<number, number>();
+  let operand = 0;
+  for (let k = top[0]; k < top[1]; ) {
+    const b = bytes[k];
+    if (b === 12) {
+      ops.set(1200 + bytes[k + 1], operand);
+      k += 2;
+    } else if (b <= 21) {
+      ops.set(b, operand);
+      k++;
+    } else if (b === 28) {
+      operand = view.getInt16(k + 1);
+      k += 3;
+    } else if (b === 29) {
+      operand = view.getInt32(k + 1);
+      k += 5;
+    } else if (b === 30) {
+      // A real number, of no use here: skipped to the nibble that ends it.
+      k++;
+      while (k < top[1] && (bytes[k] & 0x0f) !== 0x0f && (bytes[k] >> 4) !== 0x0f) k++;
+      k++;
+    } else if (b <= 246) {
+      operand = b - 139;
+      k++;
+    } else if (b <= 250) {
+      operand = (b - 247) * 256 + bytes[k + 1] + 108;
+      k += 2;
+    } else {
+      operand = -(b - 251) * 256 - bytes[k + 1] - 108;
+      k += 2;
+    }
+  }
+  // ROS, the operator only a font keyed by CID has.
+  if (!ops.has(1230) || !ops.has(15) || !ops.has(17)) return undefined;
+  const glyphs = index(at + ops.get(17)!).items.length;
+  const charset = at + ops.get(15)!;
+  const format = bytes[charset];
+  let identity = true;
+  let k = charset + 1;
+  if (format === 0) {
+    for (let g = 1; g < glyphs; g++, k += 2) identity &&= view.getUint16(k) === g;
+  } else if (format === 1 || format === 2) {
+    for (let g = 1; g < glyphs; ) {
+      const first = view.getUint16(k);
+      const left = format === 1 ? bytes[k + 2] : view.getUint16(k + 2);
+      k += format === 1 ? 3 : 4;
+      identity &&= first === g;
+      g += left + 1;
+    }
+  } else {
+    return undefined;
+  }
+  return { at: charset, length: k - charset, glyphs, identity };
+}
+
+/** Reads what a PDF needs to know of a TrueType or OpenType file. Undefined for anything else, or a file it cannot make sense of. */
 export function parseTrueType(bytes: Uint8Array): TrueType | undefined {
   try {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const version = view.getUint32(0);
-    // TrueType outlines only: 'OTTO' fonts hold another kind, which goes into a PDF another way.
-    if (version !== 0x00010000 && version !== 0x74727565) return undefined;
+    // TrueType outlines, or CFF ones in an OpenType file ('OTTO').
+    const cff = version === 0x4f54544f;
+    if (version !== 0x00010000 && version !== 0x74727565 && !cff) return undefined;
     const tables = new Map<string, number>();
     for (let i = 0; i < view.getUint16(4); i++) {
       const at = 12 + i * 16;
@@ -223,6 +352,7 @@ export function parseTrueType(bytes: Uint8Array): TrueType | undefined {
     }
     const macStyle = view.getUint16(head + 44);
     return {
+      ...(cff ? { cff } : {}),
       family,
       bold: (macStyle & 1) !== 0,
       italic: (macStyle & 2) !== 0,
@@ -411,7 +541,9 @@ const uriString = (href: string) => `(${href.replace(/[^\x21-\x7e]/g, (c) => enc
 
 export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
   const out = new Writer();
-  const { width, height } = layout.page;
+  /** The size of a page: its section's. The page being drawn is `height` tall, which PDF counts up from its bottom. */
+  const sizeOf = (index: number) => layout.pages[index]?.setup ?? layout.page;
+  let { width, height } = layout.page;
   const fonts = new Map<string, PdfFont>();
   const images = new Map<string, { name: string; id: number } | null>();
 
@@ -549,6 +681,13 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
       if (f.props.strike) rule(line.baseline - size * 0.3);
     };
     for (const { band, part } of bands) {
+      // A text box: what fills it and the line round it, under its text.
+      const frame = (band as TextBoxBand).frame;
+      if (frame) {
+        const { look } = band as TextBoxBand;
+        if (look.fill) ops += `${rgb(look.fill)} rg ${rect(frame.x, frame.y, frame.width, frame.height)} f\n`;
+        if (look.line) ops += `q ${rgb(look.line.color)} RG ${num(look.line.width)} w ${rect(frame.x, frame.y, frame.width, frame.height)} S Q\n`;
+      }
       // The pictures that go under the text first; the ones over it, once it is drawn.
       for (const float of band.floats) if (float.behind) picture(float.xml, float.x, float.y, float.width, float.height, float.part);
       for (const cell of band.cells) {
@@ -563,17 +702,30 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
         if (lines.right) ops += stroke(lines.right, x + w, y, x + w, y + h);
       }
       for (const rule of (band as LayoutPage).rules ?? []) ops += stroke(COLUMN_RULE, rule.x, rule.top, rule.x, rule.bottom);
+      const notesRule = (band as LayoutPage).footnotes?.rule;
+      if (notesRule) ops += `0 0 0 rg ${rect(notesRule.x, notesRule.y, notesRule.width, notesRule.height)} f\n`;
       for (const line of band.lines) {
+        const box = line.turn && line.cell !== undefined ? band.cells[line.cell] : undefined;
+        if (line.turn && box) {
+          // Text set vertically: cut to its cell, and turned about its corner. PDF turns the other way, its y going up.
+          const a = line.turn.x;
+          const b = height - line.turn.y;
+          const turn = line.turn.angle < 0 ? `0 1 -1 0 ${num(a + b)} ${num(b - a)}` : `0 -1 1 0 ${num(a - b)} ${num(b + a)}`;
+          ops += `q ${rect(box.x, box.y, box.width, box.height)} W n ${turn} cm\n`;
+        }
         if (line.label) text(line.label, line);
         for (const f of line.fragments) {
           if (f.kind === 'text') text(f, line);
+          // The number of a note: smaller, and raised.
+          else if (f.mark) text({ ...f, kind: 'text', text: f.mark.text, font: f.mark.font, wordSpacing: 0, props: { ...f.props, underline: false, strike: false, highlight: '' } }, { ...line, baseline: line.baseline - f.mark.rise });
           else if (f.leader) text({ ...f, kind: 'text', ...f.leader, wordSpacing: 0 }, line);
           else if (f.kind === 'object' && f.width > 0) picture(f.props.object, f.x, line.baseline - f.ascent, f.width, f.ascent, part);
-          // The whole of an entry of a table of contents is its link: its dots and its page too.
-          if (f.kind !== 'break' && f.width > 0) noteLink(f, line);
+          // The whole of an entry of a table of contents is its link: its dots and its page too. A turned one is not marked.
+          if (f.kind !== 'break' && f.width > 0 && !line.turn) noteLink(f, line);
           const mark = !part && f.kind === 'object' && f.props.anchor ? /<w:bookmarkStart\b[^>]*\bw:name="([^"]*)"/.exec(f.props.object)?.[1] : undefined;
           if (mark !== undefined && !bookmarks.has(mark)) bookmarks.set(mark, { page: pageIndex, y: line.y });
         }
+        if (line.turn && box) ops += 'Q\n';
       }
       for (const float of band.floats) if (!float.behind) picture(float.xml, float.x, float.y, float.width, float.height, float.part);
     }
@@ -587,20 +739,26 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
   const drawn = layout.pages.map((page, index) => {
     // Where the pictures of a band live is said by its floats' own part: the first page may have a header of its own.
     const bands: { band: Band; part?: StoryPart }[] = [];
+    // Text boxes under the text first, the others over it once it is drawn.
+    for (const box of page.textBoxes ?? []) if (box.behind) bands.push({ band: box, part: box.part });
     if (page.header) bands.push({ band: page.header, part: page.header.part ?? 'header' });
     bands.push({ band: page });
     if (page.footer) bands.push({ band: page.footer, part: page.footer.part ?? 'footer' });
+    for (const note of page.footnotes?.notes ?? []) bands.push({ band: note, part: note.part });
+    for (const box of page.textBoxes ?? []) if (!box.behind) bands.push({ band: box, part: box.part });
     links = [];
     pageIndex = index;
+    ({ width, height } = sizeOf(index));
     return { content: out.deflated('<< >>', latin1(pageContent(bands))), links };
   });
   drawn.forEach(({ content, links: boxes }, index) => {
+    ({ width, height } = sizeOf(index));
     const annots: number[] = [];
     for (const box of boxes) {
       const target = box.anchor === undefined ? undefined : bookmarks.get(box.anchor);
       // Where it goes: the top of the line of its bookmark, or an address for the reader to open.
       const action =
-        box.href !== undefined ? `/A << /S /URI /URI ${uriString(box.href)} >>` : target ? `/Dest [${pageIds[target.page]} 0 R /XYZ 0 ${num(height - target.y)} null]` : undefined;
+        box.href !== undefined ? `/A << /S /URI /URI ${uriString(box.href)} >>` : target ? `/Dest [${pageIds[target.page]} 0 R /XYZ 0 ${num(sizeOf(target.page).height - target.y)} null]` : undefined;
       if (!action) continue;
       const rect = `[${num(box.x)} ${num(height - box.y - box.height)} ${num(box.x + box.width)} ${num(height - box.y)}]`;
       annots.push(out.add(`<< /Type /Annot /Subtype /Link /Rect ${rect} /Border [0 0 0] ${action} >>`));
@@ -618,18 +776,22 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
     const scale = 1000 / tt.unitsPerEm;
     const units = (value: number) => Math.round(value * scale);
     const base = `DX${font.name}+Embedded`;
-    // Only the glyphs the document uses go in; a font that cannot be cut down goes whole.
-    const cut = subsetTrueType(bytes, used.keys()) ?? bytes;
-    const file = out.deflated(`<< /Length1 ${cut.length} >>`, cut);
+    // Only the glyphs the document uses go in; a font that cannot be cut down goes whole, as does one in CFF.
+    const file = tt.cff
+      ? out.deflated('<< /Subtype /OpenType >>', cffByGlyph(bytes))
+      : (() => {
+          const cut = subsetTrueType(bytes, used.keys()) ?? bytes;
+          return out.deflated(`<< /Length1 ${cut.length} >>`, cut);
+        })();
     const descriptor = out.add(
       `<< /Type /FontDescriptor /FontName /${base} /Flags ${tt.italicAngle ? 68 : 4} /FontBBox [${tt.bbox.map(units).join(' ')}] /ItalicAngle ${num(tt.italicAngle)}` +
-        ` /Ascent ${units(tt.ascent)} /Descent ${units(tt.descent)} /CapHeight ${units(tt.capHeight)} /StemV 80 /FontFile2 ${file} 0 R >>`,
+        ` /Ascent ${units(tt.ascent)} /Descent ${units(tt.descent)} /CapHeight ${units(tt.capHeight)} /StemV 80 /${tt.cff ? 'FontFile3' : 'FontFile2'} ${file} 0 R >>`,
     );
     const glyphs = [...used.keys()].sort((a, b) => a - b);
     const widths = glyphs.map((glyph) => `${glyph} [${units(tt.advance(glyph))}]`).join(' ');
     const cid = out.add(
-      `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /${base} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>` +
-        ` /FontDescriptor ${descriptor} 0 R /DW 1000 /W [${widths}] /CIDToGIDMap /Identity >>`,
+      `<< /Type /Font /Subtype /${tt.cff ? 'CIDFontType0' : 'CIDFontType2'} /BaseFont /${base} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>` +
+        ` /FontDescriptor ${descriptor} 0 R /DW 1000 /W [${widths}]${tt.cff ? '' : ' /CIDToGIDMap /Identity'} >>`,
     );
     // What each glyph stands for, so the text can be searched and copied.
     const pairs = glyphs.map((glyph) => {

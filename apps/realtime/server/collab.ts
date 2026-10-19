@@ -4,7 +4,8 @@
 // behind one door, this one.
 //
 //   GET  /backend/docs/<room>          the document, as a DOCX
-//   PUT  /backend/docs/<room>          the document as it is now, to keep
+//   PUT  /backend/docs/<room>          the document as it is now, to keep; the last of a session of
+//                                      work also as a version, signed by who changed it
 //   POST /backend/docs/<room>/access   { "ticket": "…" } → { "name": "…" }, or 403
 //
 // Those three are asked by the collaboration server, which shows a key. The
@@ -13,6 +14,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DOCX, type Store } from './store';
+import { VERSIONS, keepVersion } from './versions';
 
 /**
  * The room a document is worked on in. A room is named with letters, digits,
@@ -66,7 +68,7 @@ export function createCollabBackend(store: () => Store, options: CollabBackendOp
   // Which document each room is of. What is not here yet is looked for among the documents.
   const keys = new Map<string, string>();
   const keyOf = async (room: string): Promise<string | undefined> => {
-    if (!keys.has(room)) for (const file of await store().list()) keys.set(roomOf(file.key), file.key);
+    if (!keys.has(room)) for (const file of await store().list()) if (!file.key.startsWith(VERSIONS)) keys.set(roomOf(file.key), file.key);
     return keys.get(room);
   };
   const allowed = (request: IncomingMessage) => {
@@ -118,6 +120,20 @@ export function createCollabBackend(store: () => Store, options: CollabBackendOp
         const file = await read(request, 100_000_000);
         if (!file) return end(413);
         await store().put(key, file, DOCX);
+        // Everybody left: what they did is a version of its own.
+        if (request.headers['x-rebodocs-session-end'] === '1') {
+          const authors = String(request.headers['x-rebodocs-authors'] ?? '')
+            .split(',')
+            .filter(Boolean)
+            .map((name) => {
+              try {
+                return decodeURIComponent(name);
+              } catch {
+                return name;
+              }
+            });
+          await keepVersion(store(), key, file, authors.length ? { author: authors.join(', ') } : {});
+        }
         return end(204);
       }
       return end(405);

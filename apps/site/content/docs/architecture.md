@@ -4,7 +4,7 @@ Four decisions explain most of the code.
 
 ## The document is a value
 
-A `Doc` is plain immutable data: paragraphs of runs, tables, a header and a footer, the page, styles, numbering, media. Nothing mutates one. An operation takes a document and returns another, sharing everything it did not touch:
+A `Doc` is plain immutable data: paragraphs of runs, tables, the sections and their pages, headers and footers, footnotes, text boxes, styles, numbering, media. Headers, footers, footnotes and text boxes are *stories*: paragraphs of their own, edited the same way as the body. Nothing mutates one. An operation takes a document and returns another, sharing everything it did not touch:
 
 ```ts
 const next = insertText(doc, { para: 3, offset: 0 }, 'Hello').doc;
@@ -22,11 +22,13 @@ That one rule gives a lot for free:
 
 The browser is asked one thing: how wide is this piece of text in this font. Everything else is computed by the engine:
 
-- breaking a paragraph into lines, with justification and Word's rule for how far spaces may shrink to take one more word;
+- breaking a paragraph into lines, with justification, tab stops, and Word's rule for how far spaces may shrink to take one more word;
 - paginating: widow and orphan control, keep-with-next, keep-lines-together, page breaks;
-- tables, with rows that split across pages;
+- sections, each with its own page size, margins, columns, header and footer;
+- tables, with rows that split across pages, tables inside cells, and text on its side;
 - headers and footers that take room from the text when they are tall;
-- floating pictures, and the text that goes round them.
+- footnotes at the foot of the page that refers to them;
+- floating pictures and text boxes, and the text that goes round them.
 
 Because the rules are ours, they can be the ones Word documents are written for, and a file looks the same here as there, which a browser's own line breaking would never give. The aim is compatibility, not imitation: the same document, the same pages. And because the only thing asked from outside is a width, the same code runs in Node with font files in place of a browser: that is how PDFs are made on a server.
 
@@ -53,9 +55,11 @@ Opening a file and saving it untouched gives the same XML. That is tested on a s
 
 ## Collaboration
 
-Paragraphs get an id while a document is shared. A change is a list of operations that name paragraphs by id ("in paragraph `k3`, at offset 12, insert `x`"), so it still means the same after someone added a paragraph above.
+Paragraphs get an id while a document is shared. A change is a list of operations that name paragraphs by id ("in paragraph `k3`, at offset 12, insert `x`"), so it still means the same after someone added a paragraph above. Headers, footers, footnotes and text boxes are sent the same way, and tracked changes go along as part of the formatting of their text.
 
 The server puts everyone's changes in one order, rebasing each against the ones its author had not seen yet. A client applies its own changes at once, without waiting, and rebases them when the server's order arrives. Undo sends the inverse of your own step, transformed against what others did since, so it never takes back someone else's work.
+
+Changes carry what they need for the hard cases: a deletion carries the paragraph it takes out, so that what someone was writing in it meanwhile stays; formatting says it is formatting, and is made letter by letter; Enter carries the formatting of the new paragraph. The rules are tested with two people editing at random from thousands of seeds, not proven, so they are not all there is: a moment after the changes stop, the server sends a digest of its document, and an editor whose document is not the same loads the room again, keeping what had not been sent. Rare cases are mended in a couple of seconds, not left until the document is opened again.
 
 ## Where things live
 
@@ -65,6 +69,8 @@ The server puts everyone's changes in one order, rebasing each against the ones 
 | `packages/core/src/ops.ts` and neighbours | The operations. |
 | `packages/core/src/layout.ts` | Lines and pages. |
 | `packages/core/src/docx/` | Reading and writing DOCX. |
+| `packages/core/src/stories.ts`, `footnotes.ts`, `textboxes.ts`, `sections.ts` | Headers, footers, footnotes, text boxes and sections. |
+| `packages/core/src/revisions.ts`, `versions.ts` | Tracked changes; comparing and restoring versions. |
 | `packages/core/src/pdf.ts` | PDF, with font subsetting. |
 | `packages/editor/src/editor.ts` | The pages, the caret, input. |
 | `packages/editor/src/*.ts` | One file per interface piece. |

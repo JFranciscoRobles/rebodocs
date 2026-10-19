@@ -18,13 +18,13 @@ export const SYSTEM_FONTS = [
 /** Families read even when the document does not name them, to stand in for the ones that are missing. */
 export const STAND_INS = ['Arial', 'Times New Roman', 'Courier New', 'Liberation Sans', 'Liberation Serif', 'Liberation Mono', 'DejaVu Sans', 'DejaVu Serif'];
 
-/** Every .ttf under a folder. */
+/** Every .ttf and .otf under a folder. */
 function fontFiles(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) fontFiles(path, out);
-    else if (/\.ttf$/i.test(name)) out.push(path);
+    else if (/\.(ttf|otf)$/i.test(name)) out.push(path);
   }
   return out;
 }

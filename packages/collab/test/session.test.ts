@@ -251,6 +251,86 @@ describe('a room', () => {
     expect(eva.host.texts).toEqual(['unodos!']);
   });
 
+  it('ends with the same document after many edits two people make at once', async () => {
+    server.close();
+    server = createCollabServer({ port: 0, dataDir: dir, idle: 60, checkAfter: 20 });
+    await server.ready;
+    url = `http://127.0.0.1:${server.port}`;
+    const room = await share('uno uno', 'dos dos', 'tres', 'cuatro');
+    const ana = await join_(room, 'Ana');
+    const luis = await join_(room, 'Luis');
+    let seed = 7;
+    const next = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const pos = (doc: Doc) => {
+      const para = Math.floor(next() * doc.paragraphs.length);
+      return { para, offset: Math.floor(next() * (paragraphText(doc.paragraphs[para]).length + 1)) };
+    };
+    const anyEdit = (doc: Doc): Doc => {
+      const kind = next();
+      if (kind < 0.4) return insertText(doc, pos(doc), 'xy').doc;
+      if (kind < 0.75) {
+        let [from, to] = [pos(doc), pos(doc)];
+        if (from.para > to.para || (from.para === to.para && from.offset > to.offset)) [from, to] = [to, from];
+        return deleteRange(doc, { from, to });
+      }
+      return splitParagraph(doc, pos(doc)).doc;
+    };
+    for (let round = 0; round < 30; round++) {
+      // Both at once, a few steps each, before either hears of the other.
+      for (let step = 0; step < 3; step++) {
+        ana.host.edit(anyEdit);
+        luis.host.edit(anyEdit);
+      }
+      await settled(ana, luis);
+      if (ana.host.doc.paragraphs.length < 3) ana.host.edit((doc) => insertText(splitParagraph(doc, { para: 0, offset: 0 }).doc, { para: 0, offset: 0 }, 'más texto').doc);
+      await settled(ana, luis);
+    }
+    // Whatever the transform got wrong, both end with the room's document, ids and all.
+    await until(() => ana.session.pending === 0 && luis.session.pending === 0);
+    await new Promise((done) => setTimeout(done, 100));
+    expect(luis.host.doc.paragraphs.map((p) => [p.id, paragraphText(p)])).toEqual(ana.host.doc.paragraphs.map((p) => [p.id, paragraphText(p)]));
+    const late = await join_(room, 'Eva');
+    expect(late.host.texts).toEqual(ana.host.texts);
+  }, 60000);
+
+  it('loads the room again when its document here turns out not to be the room\'s, keeping what was typed', async () => {
+    server.close();
+    server = createCollabServer({ port: 0, dataDir: dir, idle: 60, checkAfter: 20 });
+    await server.ready;
+    url = `http://127.0.0.1:${server.port}`;
+    const room = await share('uno', 'dos');
+    const ana = await join_(room, 'Ana');
+    // Luis is given a file that is not the room's: his document is not everybody's from the start.
+    const real = globalThis.fetch;
+    let bases = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await real(input, init);
+      if (!String(input).includes('/base?') || bases++ > 0) return response;
+      const wrong = importDocx(new Uint8Array(await response.arrayBuffer()));
+      return new Response(exportDocx({ ...wrong, paragraphs: [wrong.paragraphs[0], { ...wrong.paragraphs[1], runs: [{ text: 'DOS', props: wrong.paragraphs[1].runs[0].props }] }] }) as BodyInit, { headers: response.headers });
+    }) as typeof fetch;
+    try {
+      const luis = await join_(room, 'Luis');
+      expect(luis.host.texts).toEqual(['uno', 'DOS']);
+      // Each goes on working: what Luis types is his, and stays.
+      luis.host.edit((doc) => insertText(doc, { para: 0, offset: 3 }, ' de Luis').doc);
+      ana.host.edit((doc) => insertText(doc, { para: 0, offset: 0 }, 'Ana: ').doc);
+      await until(() => luis.session.resyncs > 0);
+      await settled(ana, luis);
+      expect(luis.host.texts).toEqual(['Ana: uno de Luis', 'dos']);
+      expect(ana.host.texts).toEqual(luis.host.texts);
+      expect(bases).toBe(2);
+      // And then they go on as ever, without loading it again.
+      luis.host.edit((doc) => insertText(doc, { para: 1, offset: 3 }, '!').doc);
+      await settled(ana, luis);
+      await new Promise((done) => setTimeout(done, 100));
+      expect(ana.host.texts).toEqual(['Ana: uno de Luis', 'dos!']);
+      expect(luis.session.resyncs + ana.session.resyncs).toBe(1);
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+
   it('comes back after the server went away, with what was typed meanwhile', async () => {
     const room = await share('uno');
     const ana = await join_(room, 'Ana');
@@ -285,6 +365,8 @@ describe('the documents of another system', () => {
   let system: Server;
   let documents: Map<string, Uint8Array>;
   let puts: number;
+  /** What each PUT said about the session, in order: nothing for those of while people work. */
+  let ends: (string | undefined)[];
   let down: boolean;
   let server: CollabServer;
   let url: string;
@@ -293,6 +375,7 @@ describe('the documents of another system', () => {
   beforeEach(async () => {
     documents = new Map([['contrato-17', exportDocx(createDoc([createParagraph('uno'), createParagraph('dos')]))]]);
     puts = 0;
+    ends = [];
     down = false;
     system = createServer((req, res) => {
       const [, , id, action] = req.url!.split('/');
@@ -313,6 +396,7 @@ describe('the documents of another system', () => {
         if (req.method === 'PUT') {
           documents.set(id, new Uint8Array(Buffer.concat(chunks)));
           puts++;
+          ends.push(req.headers['x-rebodocs-session-end'] === '1' ? String(req.headers['x-rebodocs-authors'] ?? '') : undefined);
           return void res.writeHead(204).end();
         }
         res.writeHead(404).end();
@@ -353,6 +437,27 @@ describe('the documents of another system', () => {
     expect((await enter('contrato-17', 'pase-inventado')).session.state).toBe('closed');
     expect((await enter('contrato-17', '')).session.state).toBe('closed');
     expect((await enter('otro-documento', 'pase-ana')).session.state).toBe('closed');
+  });
+
+  it('says which saving ends a session of work, and who changed the document in it', async () => {
+    const ana = await enter('contrato-17', 'pase-ana');
+    const luis = await enter('contrato-17', 'pase-luis');
+    const eva = await enter('contrato-17', 'pase-ana');
+    ana.host.edit((doc) => insertText(doc, { para: 0, offset: 3 }, ' de Ana').doc);
+    await until(() => ana.session.pending === 0);
+    await server.flush();
+    luis.host.edit((doc) => insertText(doc, { para: 1, offset: 3 }, ', Luis').doc);
+    await until(() => luis.session.pending === 0);
+    // Someone who only looked is not among those who changed it.
+    for (const person of [ana, luis, eva]) person.session.leave();
+    await until(() => puts === 2);
+    expect(ends).toEqual([undefined, `${encodeURIComponent('Ana Ruiz')},${encodeURIComponent('Luis Mora')}`]);
+    expect(kept('contrato-17')).toEqual(['uno de Ana', 'dos, Luis']);
+    // A session where nobody changed anything gives nothing back, and keeps no version.
+    const again = await enter('contrato-17', 'pase-luis');
+    again.session.leave();
+    await new Promise((done) => setTimeout(done, 200));
+    expect(puts).toBe(2);
   });
 
   it('gives its files to nobody who did not come in, and lets nobody start a room of their own', async () => {

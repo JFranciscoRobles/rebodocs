@@ -18,10 +18,11 @@ can take only the ones it wants, or none.
 
 | Piece | What it is |
 | --- | --- |
-| `Editor` | The pages in an element. Holds the document, the selection and the undo history; paints the layout; takes the keyboard, the mouse and touch. The edges of a table's columns and rows, and its bottom right corner, are dragged to resize it. Everything else talks to it through public methods. |
-| `createToolbar` | One row of formatting; what does not fit folds into a "more" tray. Its table menu has rows, columns, merging, heading rows, row height, where the text sits in a cell and the lines around it, and deleting the table; its columns menu sets the text in one, two or three columns. |
+| `Editor` | The pages in an element. Holds the document, the selection and the undo history; paints the layout; takes the keyboard, the mouse and touch. The edges of a table's columns and rows, and its bottom right corner, are dragged to resize it. Headers, footers, footnotes and text boxes are edited in place (a click inside a text box writes in it, one on its edge moves it). Tracks changes (⌘⇧E) and accepts or rejects them; `readOnly` shows a document without letting it change. Everything else talks to it through public methods. |
+| `createToolbar` | One row of formatting; what does not fit folds into a "more" tray. Its table menu has rows, columns, merging, heading rows, row height, where the text sits in a cell and the lines around it, and deleting the table; its columns menu sets the text in one, two or three columns. Insert has footnotes and text boxes; Review turns tracked changes on and goes through them. |
 | `createSidebar` | The document menu: open, save, export, page setup, letterhead, language. |
-| `createPanel` | Side panel: outline, template variables, notes. |
+| `createPanel` | Side panel: outline, template variables, notes, tracked changes, and the versions the application keeps. |
+| `createVersionView` | What changed between two versions, over the document, and going back to one. |
 | `createStatusBar` | Page count, words, view, zoom, who is on the document. Drops what matters least as it gets narrower. |
 | `createBubble` | A small bar beside the selection with what can be done to it: to text, a link, a note, a picture, or a table (deleting it among it). A tap on ⌘ (Ctrl elsewhere) shows it. |
 | `createFindBar`, `createRuler` | Find and replace; the ruler with indents and margins. |
@@ -77,8 +78,10 @@ await addFonts([
 ```
 
 The font is listed in the toolbar, open documents are measured again with
-it, and PDFs embed it when the file is TrueType. For a font the page already
-loads with CSS, `addFont({ family: 'Raleway' })` is enough.
+it, PDFs embed it when the file is TrueType or OpenType, and the DOCX files the
+editor makes carry it when it is TrueType and its licence lets it be embedded
+(`editor.embedFonts = false` leaves it out). For a font the page already loads
+with CSS, `addFont({ family: 'Raleway' })` is enough.
 
 ## How it works
 
@@ -100,7 +103,7 @@ loads with CSS, `addFont({ family: 'Raleway' })` is enough.
 - **Tests.** The interface is checked with scripted runs of headless Chrome
   that are not in the repository. Bringing them in as a browser test suite
   (Playwright) is the single most useful thing to do here.
-- **`editor.ts` is one file of about 3,650 lines.** Input (keyboard, mouse,
+- **`editor.ts` is one file of about 4,200 lines.** Input (keyboard, mouse,
   touch), painting and commands should be split into modules.
 - **Accessibility.** The pages are positioned spans a screen reader cannot
   follow. It needs an accessible mirror of the text, or ARIA live

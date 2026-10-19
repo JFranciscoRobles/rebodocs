@@ -43,6 +43,8 @@ It is safe to render on a server. There it draws an empty element, and mounts on
 | `locale` | Language of the interface: `'es'`, `'en'`, or one you add. |
 | `locales` | More languages, as `{ fr: texts }`. See [languages](/docs/languages/). |
 | `fonts` | Typefaces of your own, as `[{ family, src }]`. See [fonts](/docs/fonts/). |
+| `embedFonts` | Whether the DOCX carries the fonts given in `fonts` that its text is in (TrueType ones whose licence lets them). On unless `false`. |
+| `versions` | Where your application keeps the versions of the document: `{ list, load, save? }`. The side panel then lists, compares and restores them. See [versions](/docs/versions/). |
 | `letterhead` | A picture to use as letterhead, whatever the document came with; `null` for none. See [letterheads](/docs/letterhead/). |
 | `features` | What is switched on. See below. |
 | `onChange` | Called with the editor when the document changes. |
@@ -60,7 +62,7 @@ What an application of its own may not want is off until asked for. What every d
 | Feature | Default | What it is |
 | --- | --- | --- |
 | `menu` | on | The document menu: export, page setup, letterhead. |
-| `panel` | on | The side panel: outline, variables, comments. |
+| `panel` | on | The side panel: outline, variables, comments, tracked changes, and versions when given. |
 | `ruler` | on | The ruler, with indents and margins. |
 | `statusBar` | on | Pages, words, view and zoom. |
 | `find` | on | Find and replace. |

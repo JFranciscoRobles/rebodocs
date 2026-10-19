@@ -49,13 +49,14 @@ To have the button in your own application:
 | Group | Tools |
 | --- | --- |
 | Files | `open_document`, `save_document`, `list_documents` |
-| Reading | `get_overview`, `read_document`, `read_formatting`, `find_text`, `list_links`, `list_notes`, `list_variables` |
+| Reading | `get_overview`, `read_document`, `read_formatting`, `find_text`, `list_links`, `list_notes`, `list_variables`, `compare_documents` |
 | Text | `replace_text`, `rewrite_paragraph`, `insert_paragraphs`, `delete_paragraphs`, `set_style`, `set_list`, `set_link` |
 | Formatting | `format_text` (font, size, bold, italic, underline, strike, colour, highlight), `format_paragraphs` (alignment, indents, spacing, line spacing) |
 | Comments | `add_note`, `remove_note` |
+| Tracked changes | `track_changes`, `list_changes`, `accept_changes`, `reject_changes`: while on, what the other tools change is tracked, signed "Assistant" |
 | Templates | `fill_variables` |
 | Tables and pictures | `insert_table`, `edit_table`, `insert_signatures`, `insert_image`, `edit_image` |
-| Pages and columns | `set_page_setup`, `set_columns`, `insert_column_break`, `set_page_number`, `insert_page_break`, `insert_table_of_contents`, `update_table_of_contents` |
+| Pages and columns | `set_page_setup`, `set_columns`, `insert_column_break`, `set_page_number`, `insert_page_break`, `insert_footnote`, `insert_text_box`, `insert_table_of_contents`, `update_table_of_contents` |
 
 Paragraphs are addressed by number, and each tool that changes text answers with what it did, so the assistant does not have to read the document again after every step.
 
@@ -101,6 +102,6 @@ The answer comes as Claude writes it: the route sends a line of JSON for each pi
 ## What to know
 
 - Paragraph numbers shift after an insertion, so an assistant works best one edit at a time.
-- There is no tool for the letterhead. The page setup changes the last section of the document.
+- There is no tool for the letterhead.
 - It speaks over standard input and output only.
 - In a shared room an assistant works through the editor of the person who asked: the others see its changes as that person's, but not the conversation.

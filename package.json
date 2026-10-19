@@ -1,6 +1,6 @@
 {
   "name": "rebodocs",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "A word processor for the browser, compatible with Word (DOCX) files, with its own engine: layout, editing, collaboration, PDF and templates.",
   "license": "MIT",
   "private": true,

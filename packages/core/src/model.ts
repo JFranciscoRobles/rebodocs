@@ -30,6 +30,15 @@ export interface RunProps {
   objectHeight?: number;
   /** For the result of a field whose value depends on the page: 'PAGE' or 'NUMPAGES'. */
   field?: string;
+  /**
+   * Set on text put in or taken out while changes were tracked: it stays in
+   * the document, marked, until the change is accepted or rejected. Text
+   * taken out is still there, struck through. See `revisions.ts`.
+   */
+  revision?: '' | 'insert' | 'delete';
+  /** Who made the change, and when, as an ISO date. */
+  revisionAuthor?: string;
+  revisionDate?: string;
 }
 
 /** The highlight colours Word offers, in the order of its palette. */
@@ -54,6 +63,19 @@ export interface Run {
 }
 
 export type Align = 'left' | 'center' | 'right' | 'justify';
+
+/**
+ * A tab stop: where the text after a tab starts ('left'), ends ('right'), is
+ * centred ('center') or has its decimal point ('decimal'); a 'bar' one is a
+ * line down the paragraph, not a stop. The gap of the tab may be filled with
+ * a leader: dots, hyphens, a line.
+ */
+export interface TabStop {
+  /** Points from the left edge of the text. */
+  pos: number;
+  align: 'left' | 'center' | 'right' | 'decimal' | 'bar';
+  leader?: 'dot' | 'hyphen' | 'underscore' | 'heavy' | 'middleDot';
+}
 
 export interface ParagraphProps {
   align?: Align;
@@ -84,6 +106,19 @@ export interface ParagraphProps {
    * table of contents. 0 for none.
    */
   leaderTab?: number;
+  /**
+   * The paragraph's tab stops, its style's among them, from left to right.
+   * Past the last one, tabs go to the default stops of the document.
+   */
+  tabs?: TabStop[];
+  /**
+   * Set when the mark that ends the paragraph was put in or taken out while
+   * changes were tracked: a paragraph made by Enter, or one joined to the
+   * next, which shows apart until the change is accepted.
+   */
+  markRevision?: '' | 'insert' | 'delete';
+  markAuthor?: string;
+  markDate?: string;
 }
 
 /** A named look for a paragraph. Its formatting is complete: nothing of what the paragraph had shows through. */
@@ -141,6 +176,12 @@ export interface TableCell {
   shade?: string;
   /** Where its text sits when the cell is taller than it: at the top unless this says otherwise. */
   valign?: 'center' | 'bottom';
+  /**
+   * Text set vertically: read from the bottom up ('up', the first line at the
+   * left), or from the top down ('down', the first line at the right). Its
+   * lines are as long as the row is tall; the row does not grow for them.
+   */
+  direction?: 'up' | 'down';
   /** Thickness of the cell's top and bottom borders, in points; they take room in the row. */
   borderTop?: number;
   borderBottom?: number;
@@ -284,6 +325,14 @@ export interface Section {
    */
   noHeader?: boolean;
   noFooter?: boolean;
+  /**
+   * The section's own header and footer, when it does not show the document's:
+   * the last section's, which every section without its own shows.
+   */
+  header?: Story;
+  footer?: Story;
+  /** Set when the first page of the section has a header and a footer to itself, as `Doc.firstPage` for the last section. */
+  firstPage?: { header?: Story; footer?: Story };
   /** The section's own properties as the file had them, which export writes back with what changed. */
   xml?: string;
 }
@@ -307,6 +356,24 @@ export interface PageSetup {
 export interface Story {
   paragraphs: Paragraph[];
   tables?: Table[];
+}
+
+/**
+ * A note at the foot of the page its reference is on. The reference is a run
+ * of the text holding the `w:footnoteReference` that names it by `id`; the
+ * note's own text starts with a `w:footnoteRef`, which shows its number.
+ */
+/**
+ * The text of a text box: a shape drawn on the page, floating or in a line,
+ * with paragraphs of its own. The shape is the object of a run of the text;
+ * `id` is the one its drawing says (`wp:docPr`), by which each finds the other.
+ */
+export interface TextBox extends Story {
+  id: string;
+}
+
+export interface Footnote extends Story {
+  id: string;
 }
 
 /** A note on a stretch of the text: a comment, in Word. */
@@ -348,15 +415,25 @@ export interface Doc {
    * From 15 on, justified lines may shrink their spaces to take one more word.
    */
   compatMode?: number;
-  /** Shown on every page; read from the file and not editable. */
+  /** Points between the default tab stops, which tabs go to past a paragraph's own; half an inch when not said. */
+  defaultTabStop?: number;
+  /** The header and the footer of the last section, which those before it show too unless they have their own. */
   header?: Story;
   footer?: Story;
   /**
-   * Set when the first page has a header and a footer to itself (a "different
-   * first page" in Word): what it shows in place of the ones above, which may
-   * be nothing. They are shown as the file has them, and not edited.
+   * Set when the first page of the last section has a header and a footer to
+   * itself (a "different first page" in Word): what it shows in place of the
+   * ones above, which may be nothing. In a document of one section, the first page.
    */
   firstPage?: { header?: Story; footer?: Story };
+  /** The notes at the foot of the pages, by their id; those no reference names are not shown, and not written. */
+  footnotes?: Footnote[];
+  /** The text of the text boxes of the document, by the id of their drawing; one no drawing names is not shown, and not written. */
+  textBoxes?: TextBox[];
+  /** The paragraph the line above the notes of a page is drawn in, as the file has it; one of the document's look when not said. */
+  footnoteSeparator?: Paragraph;
+  /** Whether what is typed and taken out is kept as changes to accept or reject, as Word's "Track changes". */
+  trackRevisions?: boolean;
   /** Pictures put in since the document was made or opened, by the key their drawing names. */
   media?: Record<string, Media>;
   /** The notes on stretches of the text, which holds the marks of where each one is. See `notes.ts`. */
@@ -407,6 +484,9 @@ export const DEFAULT_RUN: ResolvedRunProps = {
   objectWidth: 0,
   objectHeight: 0,
   field: '',
+  revision: '',
+  revisionAuthor: '',
+  revisionDate: '',
 };
 
 export const DEFAULT_PARAGRAPH: ResolvedParagraphProps = {
@@ -425,6 +505,10 @@ export const DEFAULT_PARAGRAPH: ResolvedParagraphProps = {
   listLevel: 0,
   styleId: '',
   leaderTab: 0,
+  tabs: [],
+  markRevision: '',
+  markAuthor: '',
+  markDate: '',
 };
 
 /** Drops keys whose value is undefined so spreads never clobber defaults. */
