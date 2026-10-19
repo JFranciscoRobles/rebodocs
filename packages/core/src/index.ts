@@ -30,3 +30,4 @@ export * from './footnotes';
 export * from './versions';
 export * from './revisions';
 export * from './textboxes';
+export * from './clipboard';

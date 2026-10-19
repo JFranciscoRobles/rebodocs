@@ -87,6 +87,7 @@ See [On a server](/docs/server/).
 | `npm run storage` | The demo of documents in an S3 bucket. |
 | `npm run realtime` | The demo of several people on one document. |
 | `npm run assistant` | The demo of Claude in a shared document; needs a key of the Claude API. |
+| `npm run desktop` | The desktop application, with Tauri; needs Rust. |
 | `npm test` | The tests. |
 | `npm run typecheck` | Types, over every package. |
 | `npm run build:react` | Builds and packs `@rebodocs/react`. |

@@ -200,8 +200,16 @@ import {
   insertColumnBreak,
   setColumns,
   setHeaderRow,
+  type Clip,
+  clipHtml,
+  clipOf,
+  clipText,
+  insertClip,
+  parseClip,
+  serializeClip,
 } from '@rebodocs/core';
 import { onLocaleChange, t } from './i18n';
+import { clipFromHtml } from './paste';
 import { fontFaces, fontFile, onFontsChange } from './fonts';
 import { IS_MAC, keyboardInset } from './platform';
 import { CanvasMeasurer, cssFont } from './measurer';
@@ -299,6 +307,8 @@ const INPUT_MARK = '\u200B';
 /** A finger held still this long selects the word under it; one that moves this far, in pixels, is scrolling. */
 const HOLD_MS = 450;
 const TOUCH_SLOP = 10;
+/** What this editor puts on the clipboard for itself: the copied text, whole, with its formatting. */
+const CLIP_TYPE = 'application/x-rebodocs+json';
 /** Taps this close together, in time and in pixels, count as one: the second selects a word, the third a paragraph. */
 const TAP_AGAIN_MS = 350;
 const TAP_AGAIN_PX = 28;
@@ -502,6 +512,8 @@ export class Editor {
   /** Column kept while moving vertically. */
   private goalX: number | null = null;
   private composing = false;
+  /** Set by the keys of a paste without formatting, for the paste that follows them. */
+  private plainPaste = false;
   /** What of the text in the hidden field is already in the document: a word still being composed, as far as it has got. */
   private typed = '';
   /** Where the caret was left by what was typed, which is where the rest of it goes. */
@@ -3760,6 +3772,15 @@ export class Editor {
     const mod = e.metaKey || e.ctrlKey;
     const byWord = e.altKey || (e.ctrlKey && !e.metaKey);
     let handled = true;
+    // Ctrl+Shift+V pastes the text alone, as it pastes in Word and in browsers; the paste itself is the browser's.
+    this.plainPaste = mod && e.shiftKey && e.code === 'KeyV';
+    if (this.plainPaste && IS_MAC && !e.altKey) {
+      // A Mac has no paste for ⌘⇧V: the text is read from the clipboard here.
+      e.preventDefault();
+      this.plainPaste = false;
+      void this.paste({ plain: true });
+      return;
+    }
 
     if (mod && e.altKey && e.code === 'KeyF') {
       // A note at the foot of the page, with the keys Word has for it.
@@ -4121,12 +4142,25 @@ export class Editor {
 
   // --- Clipboard without a keyboard ---------------------------------------
 
-  /** Copies the selected text, for where there are no keys to do it with. */
+  /** The selection, with its formatting, apart from the document. */
+  private selectedClip(): Clip | undefined {
+    return this.collapsed ? undefined : clipOf(this.text, this.range);
+  }
+
+  /** Copies the selection with its formatting, for where there are no keys to do it with. */
   async copy(): Promise<boolean> {
-    if (this.collapsed) return false;
-    const text = textInRange(this.text, this.range);
+    const clip = this.selectedClip();
+    if (!clip) return false;
+    const text = clipText(clip);
     try {
-      await navigator.clipboard.writeText(text);
+      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
+        const html = clipHtml(clip, serializeClip(clip));
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'text/plain': new Blob([text], { type: 'text/plain' }), 'text/html': new Blob([html], { type: 'text/html' }) }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(text);
+      }
       return true;
     } catch {
       // A page not served over HTTPS has no clipboard to write to: the old way still copies from a field.
@@ -4158,9 +4192,20 @@ export class Editor {
     return true;
   }
 
-  /** Puts in what was copied, as text. The browser may ask the person first. */
-  async paste(): Promise<boolean> {
+  /**
+   * Puts in what was copied: with the formatting it had where it was copied
+   * from, or, with `plain`, as text that looks like the text around it. The
+   * browser may ask the person first.
+   */
+  async paste(options: { plain?: boolean } = {}): Promise<boolean> {
     try {
+      if (!options.plain && navigator.clipboard.read) {
+        for (const item of await navigator.clipboard.read()) {
+          if (!item.types.includes('text/html')) continue;
+          const clip = clipFromHtml(await (await item.getType('text/html')).text());
+          if (clip) return this.insertClip(clip);
+        }
+      }
       const text = await navigator.clipboard.readText();
       if (text) this.insertText(text);
       return !!text;
@@ -4169,9 +4214,28 @@ export class Editor {
     }
   }
 
+  /** Writes `clip` over the selection, with its formatting. */
+  insertClip(clip: Clip): boolean {
+    // A header or footer is one piece: it cannot be broken into pages.
+    if (this.area !== 'body') {
+      clip = { paragraphs: clip.paragraphs.map((p) => ({ ...p, runs: p.runs.map((r) => ({ ...r, text: r.text.replace(/\f/g, '') })) })) };
+    }
+    if (!clipText(clip)) return false;
+    const range = this.range;
+    const doc = this.collapsed ? this.text : deleteRange(this.text, range);
+    const result = insertClip(doc, outsideField(doc, range.from), clip);
+    this.commit(result.doc, { anchor: result.pos, focus: result.pos });
+    return true;
+  }
+
   private onCopy = (e: ClipboardEvent): void => {
     e.preventDefault();
-    if (!this.collapsed) e.clipboardData?.setData('text/plain', textInRange(this.text, this.range));
+    const clip = this.selectedClip();
+    if (!clip || !e.clipboardData) return;
+    const data = serializeClip(clip);
+    e.clipboardData.setData('text/plain', clipText(clip));
+    e.clipboardData.setData('text/html', clipHtml(clip, data));
+    e.clipboardData.setData(CLIP_TYPE, data);
   };
 
   private onCut = (e: ClipboardEvent): void => {
@@ -4181,12 +4245,20 @@ export class Editor {
 
   private onPaste = (e: ClipboardEvent): void => {
     e.preventDefault();
-    // A copied picture comes as a file.
-    const picture = [...(e.clipboardData?.files ?? [])].find((file) => imageExtension(file.type));
+    const plain = this.plainPaste;
+    this.plainPaste = false;
+    const data = e.clipboardData;
+    const text = data?.getData('text/plain') ?? '';
+    if (!plain && data) {
+      const clip = parseClip(data.getData(CLIP_TYPE)) ?? (data.types.includes('text/html') ? clipFromHtml(data.getData('text/html')) : undefined);
+      if (clip && this.insertClip(clip)) return;
+    }
+    // A copied picture comes as a file; Word sends one of what was copied along with its text, which is what is wanted then.
+    const picture = text ? undefined : [...(data?.files ?? [])].find((file) => imageExtension(file.type));
     if (picture) {
       void this.insertImageFile(picture);
       return;
     }
-    this.insertText(e.clipboardData?.getData('text/plain') ?? '');
+    this.insertText(text);
   };
 }

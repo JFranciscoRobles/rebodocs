@@ -5,7 +5,7 @@ import { highlight } from '@/lib/docs';
 import { NPM, NPM_ORG, REPO } from '@/lib/site';
 
 const FEATURES = [
-  ['Compatible with Word files', 'It reads and writes DOCX, and lays pages out by the same rules, so a document looks the same here and there. Measured line by line on real files.'],
+  ['Compatible with Word files', 'It reads and writes DOCX, and lays pages out by the same rules, so a document looks the same here and there. Text pasted from Word, Google Docs or the web keeps its look.'],
   ['DOCX in, the same DOCX out', 'What the editor does not understand stays in the file untouched. Nothing is lost by opening and saving.'],
   ['Templates', 'Any text in double braces is a variable. Fill contracts and receipts from the editor, from code or from the command line.'],
   ['Real-time collaboration', 'Several people on one document, each seeing the others’ carets, with undo of their own. Your backend keeps the files, and a version of each session of work.'],
@@ -14,7 +14,7 @@ const FEATURES = [
   ['Whole documents', 'Sections with a page of their own, footnotes, text boxes, tab stops, tables inside cells and text on its side, laid out where Word puts them.'],
   ['Fonts that travel', 'Fonts of your own, TrueType or OpenType, go into the PDF, and into the DOCX when their licence lets them, so it looks the same where they are not installed.'],
   ['PDF without a browser', 'The same layout runs in Node. Generate a PDF with embedded fonts and selectable text on your server.'],
-  ['Works on a phone', 'Pages fit the screen and zoom with two fingers. Taps, selection handles and on-screen keyboards are handled.'],
+  ['On a phone and on the desktop', 'Pages fit the screen and zoom with two fingers. On a computer, a Tauri application opens and saves .docx files of the disk, with a native menu.'],
   ['Yours to style', 'Use the interface that comes with it, or build your own with headless hooks and Tailwind.'],
   ['AI assistants', 'Claude reads and changes the real document, keeping its look: from Claude Desktop through an MCP server, or in a chat beside the editor of your application.'],
 ];
@@ -115,7 +115,7 @@ export default async function Home() {
   return (
     <main>
       <section className="mx-auto max-w-6xl px-4 pb-4 pt-16 text-center sm:px-6 sm:pt-24">
-        <p className="mx-auto mb-5 w-fit rounded-full border border-line bg-soft px-3.5 py-1 text-[13px] font-medium text-muted">Open source · MIT · v0.7.0</p>
+        <p className="mx-auto mb-5 w-fit rounded-full border border-line bg-soft px-3.5 py-1 text-[13px] font-medium text-muted">Open source · MIT · v0.8.0</p>
         <h1 className="mx-auto max-w-[17ch] text-[clamp(38px,6.4vw,68px)] font-extrabold leading-[1.04] tracking-[-0.035em]">
           The document editor you <span className="bg-gradient-to-r from-brand to-accent bg-clip-text text-transparent">build into your app</span>
         </h1>
@@ -202,7 +202,7 @@ export default async function Home() {
         <div className="rounded-2xl bg-soft p-6 sm:p-10">
           <Title>Where it stands</Title>
           <p className="mt-3.5 max-w-[66ch] text-[17px] leading-relaxed text-muted">
-            Rebodocs works and has 388 automated tests, and it has not been used in production yet. Every package is{' '}
+            Rebodocs works and has 394 automated tests, and it has not been used in production yet. Every package is{' '}
             <a href={NPM_ORG} className="font-semibold text-brand hover:underline">
               on npm
             </a>

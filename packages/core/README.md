@@ -44,6 +44,7 @@ tested with plain data.
 | DOCX | `docx/import.ts`, `docx/export.ts`, `docx/source.ts`, `docx/xml.ts` | Reads a DOCX into a `Doc` and writes it back. The original XML is kept, and only what changed is rewritten. |
 | Layout | `layout.ts`, `reflow.ts` | Breaks paragraphs into lines and lines into pages, with a `TextMeasurer` given from outside. Hit testing, caret and selection rectangles. `layoutReflow` sets the same document to the width of a screen. |
 | Output | `pdf.ts`, `render.ts`, `fonts.ts`, `png.ts`, `markdown.ts` | PDF with embedded TrueType (subsetted) and OpenType fonts, measuring from font files where there is no browser, Markdown. |
+| Clipboard | `clipboard.ts` | A piece of a document apart from it, with its formatting (`clipOf`), as HTML for other programs (`clipHtml`), and written back at a position (`insertClip`): lists, styles and links come along, and what the clip does not say is taken from where it lands. |
 | Templates | `variables.ts` | `{{name}}` variables: find, fill, formats (case, dates, numbers, amounts). |
 | Editing aids | `find.ts`, `outline.ts`, `autoformat.ts` | Find and replace, the outline of headings, Markdown-like shortcuts while typing. |
 | Text boxes | `textboxes.ts` | A shape with paragraphs of its own: its text is a story (`Doc.textBoxes`), found by the id of its drawing; how it looks; putting one in. |

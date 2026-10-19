@@ -19,6 +19,7 @@ can take only the ones it wants, or none.
 | Piece | What it is |
 | --- | --- |
 | `Editor` | The pages in an element. Holds the document, the selection and the undo history; paints the layout; takes the keyboard, the mouse and touch. The edges of a table's columns and rows, and its bottom right corner, are dragged to resize it. Headers, footers, footnotes and text boxes are edited in place (a click inside a text box writes in it, one on its edge moves it). Tracks changes (⌘⇧E) and accepts or rejects them; `readOnly` shows a document without letting it change. Everything else talks to it through public methods. |
+| Clipboard | What is copied goes as text, as HTML and whole for another Rebodocs editor. Pasting keeps the formatting of where it comes from (`paste.ts` reads the HTML of Word, Google Docs and web pages, their style sheets among it); Ctrl+Shift+V (⌘⇧V) or `paste({ plain: true })` pastes the text alone. |
 | `createToolbar` | One row of formatting; what does not fit folds into a "more" tray. Its table menu has rows, columns, merging, heading rows, row height, where the text sits in a cell and the lines around it, and deleting the table; its columns menu sets the text in one, two or three columns. Insert has footnotes and text boxes; Review turns tracked changes on and goes through them. |
 | `createSidebar` | The document menu: open, save, export, page setup, letterhead, language. |
 | `createPanel` | Side panel: outline, template variables, notes, tracked changes, and the versions the application keeps. |
@@ -114,9 +115,10 @@ with CSS, `addFont({ family: 'Raleway' })` is enough.
   of a sentence.
 - **Large documents.** Every page is in the DOM. Painting only the pages near
   the window would keep long documents fast.
-- **Editing gaps.** No drag and drop of text, no rich paste (pasting keeps
-  text only), no format painter, no spell check (the hidden field cannot use
-  the browser's).
+- **Editing gaps.** No drag and drop of text, no format painter, no spell
+  check (the hidden field cannot use the browser's). Pasting from elsewhere
+  keeps text formatting, links, lists and headings, but not pictures or
+  tables inside the HTML: a table comes as lines with tabs.
 - **Theming.** A handful of CSS variables; the interface pieces have fixed
   light colours and no dark mode.
 - **English texts** were translated from Spanish and need a native review.

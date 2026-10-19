@@ -38,6 +38,7 @@ In a header or footer, positions are those of its own text: `editor.area` says w
 | Member | What it does |
 | --- | --- |
 | `insertText(text)`, `insertParagraphBreak()`, `insertPageBreak()` | |
+| `copy()`, `cut()`, `paste({ plain? })`, `insertClip(clip)` | The clipboard. What is copied goes as text and as HTML, so Word, Google Docs or a mail keep its formatting, and comes back whole when pasted here. Pasting keeps the formatting of where the text comes from: bold, colours, sizes, fonts, links, lists, headings. `plain`, and ⌘⇧V / Ctrl+Shift+V, paste the text alone, looking like the text around it. |
 | `deleteBackward()`, `deleteForward()` | |
 | `toggleMark('bold' \| 'italic' \| 'underline' \| 'strike')` | |
 | `setRunProps({ fontFamily, fontSize, color, highlight, … })` | Character formatting of the selection, or of what is typed next. |

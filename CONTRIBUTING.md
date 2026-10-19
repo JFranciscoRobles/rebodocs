@@ -12,6 +12,9 @@ npm run typecheck   # tsc, over every package
 Node 22.12 or later. The repository is an npm workspace; packages import each
 other as source, so there is no build step while developing.
 
+`apps/desktop` also needs Rust ([rustup.rs](https://rustup.rs)) to compile
+its Tauri side; nothing else in the repository does.
+
 ## Where things go
 
 - A rule about documents (what a change does, where a line breaks, how

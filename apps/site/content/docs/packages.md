@@ -91,4 +91,5 @@ Besides the packages, the repository has small applications that use them. See [
 | `apps/storage` | Documents in an S3 bucket: open, save, and a PDF made on the server. |
 | `apps/realtime` | Several people on one document, through a backend with its three routes and signed tickets, and a version of each session of work. |
 | `apps/assistant` | Claude in a chat beside a shared document: the page runs the tools, the backend takes the conversation to the Claude API. |
+| `apps/desktop` | The editor as a desktop application, with Tauri: `.docx` files of the disk, a native menu, PDF. |
 | `apps/site` | This website. |

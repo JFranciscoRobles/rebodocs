@@ -18,5 +18,9 @@ apps/site/public/sample.docx
 apps/demo/public/sample.docx
 *.tsbuildinfo
 
+# La aplicación de escritorio: lo que compilan Rust y Tauri.
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/gen
+
 # Notas sueltas.
 /start.md

@@ -4,7 +4,7 @@ Rebodocs is a word processor compatible with Word files. It is not a copy of Wor
 
 ## What is checked
 
-**388 automated tests**, over the engine, the collaboration change format and session, the texts of the interface, the tools for an assistant and its chat (against a Claude of the tests' own), and the backends of the storage and real-time demos: a bucket kept in memory, and two people typing through the three routes.
+**394 automated tests**, over the engine, the collaboration change format and session, the texts of the interface, the tools for an assistant and its chat (against a Claude of the tests' own), copying and pasting with the formatting, and the backends of the storage and real-time demos: a bucket kept in memory, and two people typing through the three routes.
 
 **Compatibility of layout.** Real documents are compared line by line with the PDF Word exports from the same file. On the receipt used as reference, every line is within 0.4 pt of Word's. The comparison is a command, `npm run word-compare -- file.docx`, so any document can be measured.
 
@@ -27,6 +27,8 @@ Touch input was also tried on a real phone.
 - **The demos in a browser.** The storage and real-time demos were checked through their backends and their tests, not by clicking through their pages.
 - **Many documents.** The pagination rules were derived from a few files in Arial with Word for Mac. Other fonts and versions of Word may differ.
 - **Many phones.** One real device. Keyboards differ.
+- **The desktop application outside a Mac.** It was run on a Mac; Windows and Linux compile the same code but are untried, and so is opening a document with a double click in them.
+- **Pasting from every program.** Reading the HTML of the clipboard was checked with samples of Word, Google Docs and web pages, not with automated tests; other programs write HTML of their own.
 - **Claude in the editor with a real key.** The chat and its route were tested against a Claude of the tests' own and the page was opened without a key; a conversation with the real API has not been tried in the repository.
 - **Production.** Nobody has depended on it yet.
 
@@ -49,7 +51,7 @@ Touch input was also tried on a real phone.
 
 **The editor**
 
-- No rich paste: pasting keeps the text only. No drag and drop of text. No spell check.
+- Pasting from Word, Google Docs or a web page keeps the formatting of the text, links, lists and headings, but not the pictures or tables in it: a table comes as lines with tabs. No drag and drop of text. No spell check.
 - The pages are not accessible to screen readers.
 - Every page is in the DOM, so very long documents get slow.
 - The included interface is light only.
@@ -79,7 +81,7 @@ In rough order of how much each would matter.
 3. **Collaboration that scales**: several server processes per room, access checked while connected, a durable log.
 4. **Templates by locale**: dates and currency in the language and currency you choose.
 5. **Accessibility**: a readable mirror of the text for screen readers, and keyboard access to every menu.
-6. **Rich paste** from Word and the web.
+6. **Pasting tables and pictures** from Word and the web.
 
 ## Contributing
 

@@ -27,7 +27,8 @@ npm run demo       # the React package, two ways, at http://localhost:5175
 npm run storage    # documents in an S3 bucket, at http://localhost:5176 (needs apps/storage/.env)
 npm run realtime   # several people on one document, at http://localhost:5177
 npm run assistant  # Claude in a shared document, at http://localhost:5179 (needs an API key)
-npm test           # 388 tests
+npm run desktop    # a desktop application with Tauri (needs Rust)
+npm test           # 394 tests
 npm run typecheck
 ```
 
@@ -54,6 +55,11 @@ npm run typecheck
   set vertically, border lines), pictures, links,
   notes (Word comments), footnotes, text boxes (a click goes into one; its edge
   moves it), table of contents, find and replace, undo and redo.
+- **Copies and pastes with the formatting.** Text pasted from Word, Google
+  Docs or a web page keeps its bold, colours, sizes, fonts, links, lists,
+  headings, alignment and spacing; Ctrl+Shift+V (⌘⇧V) pastes the text
+  alone. What is copied goes out as HTML too, so Word or a mail keep its
+  look, and comes back whole when pasted in another Rebodocs editor.
 - **Tracked changes**, as Word's: what is typed and deleted stays marked
   until it is accepted or rejected, change by change or all at once, in
   the editor, from code or by an assistant. Word opens them as its own.
@@ -77,6 +83,9 @@ npm run typecheck
   to keep a version then.
 - **Works on a phone.** Pages fit the width of the screen and are zoomed with
   two fingers; taps, selection handles and on-screen keyboards are handled.
+- **And on the desktop.** A Tauri application opens and saves `.docx` files
+  of the disk, with a native menu, a window per document, PDF export and
+  "Open with" from the Finder or the Explorer.
 - **AI assistants** can read and change documents, keeping their look: through an MCP server, or as a chat with Claude in your application.
 - **Any language, any font.** The interface ships in Spanish and English and
   takes more as JSON; an application can register its own typefaces.
@@ -95,6 +104,7 @@ npm run typecheck
 | [`apps/storage`](apps/storage) | Documents kept in an S3 bucket (Cloudflare R2, AWS S3, MinIO): open, save, and a PDF made on the server. | Browser and Node |
 | [`apps/realtime`](apps/realtime) | Several people on one document at once: the collaboration server, a backend with its three routes and signed tickets, a version of each session of work, and the page. | Browser and Node |
 | [`apps/assistant`](apps/assistant) | Claude in the editor: a chat beside a shared document that reads and changes it, keeping its look; the key stays on the server. | Browser and Node |
+| [`apps/desktop`](apps/desktop) | A desktop application with Tauri: `.docx` files of the disk, a native menu, a window per document, PDF. | macOS, Windows, Linux |
 | [`apps/site`](apps/site) | [rebodocs.com](https://rebodocs.com): the landing page and the developer documentation. | Static |
 
 Each package has a README saying what it is for, how it is used, and where it
@@ -175,6 +185,7 @@ npx @rebodocs/collab --backend https://my-app.example/api/docs   # key in REBODO
 | `npm run storage` | The demo of documents in an S3 bucket; needs `apps/storage/.env`. |
 | `npm run realtime` | The demo of several people on one document at once. |
 | `npm run assistant` | The demo of Claude in a shared document; needs `apps/assistant/.env`. |
+| `npm run desktop`, `npm run build:desktop` | The desktop application, compiled and opened; and its installer. Needs Rust. |
 | `npm run collab` | The collaboration server; `npx @rebodocs/collab` outside the repository. |
 | `npm run mcp` | The MCP server, over standard input and output; `npx @rebodocs/mcp` outside the repository. |
 | `npm run locale -- fr texts/fr.json` | Starts a translation of the interface, or brings one up to date. |
@@ -193,6 +204,7 @@ each.
 | [`apps/storage`](apps/storage) | `npm run storage` | Documents in Cloudflare R2, AWS S3 or MinIO. The browser opens and saves with addresses signed for a few minutes and never has a key; the server fills a template and stores the PDF. |
 | [`apps/realtime`](apps/realtime) | `npm run realtime` | Every document is a room, there only while someone is in it. The collaboration server keeps nothing: a backend gives it the document, takes it back, and lets each person in with a signed ticket. When everybody leaves, the backend keeps a version, signed by who changed it. |
 | [`apps/assistant`](apps/assistant) | `npm run assistant` | The real-time demo with Claude beside the document. The page holds the conversation and runs the tools on the editor; the server takes it to the Claude API with its key. |
+| [`apps/desktop`](apps/desktop) | `npm run desktop` | The editor as a desktop application, with Tauri. Each window is a `.docx` of the disk; native menu and dialogs, PDF, documents dropped on the window or opened from the system. |
 | [`apps/playground`](apps/playground) | `npm run dev` | Everything wired together without a framework. |
 
 ## Status
@@ -202,9 +214,10 @@ Every package is on npm: `@rebodocs/react`, and `core`, `editor`, `collab` and `
 This is working software that has not been used in production yet. What has
 been checked, and how:
 
-- **388 automated tests** over the engine, the change format, the
+- **394 automated tests** over the engine, the change format, the
   collaboration session, the interface texts, the tools for an assistant and
-  its chat, and the backends of the storage and real-time demos.
+  its chat, copying and pasting with the formatting, and the backends of the
+  storage and real-time demos.
 - **A real bucket.** The backend of the storage demo was run by hand against
   Cloudflare R2: signed addresses, the PDF made on the server, and coming
   into a room whose document is in the bucket.
@@ -218,6 +231,8 @@ been checked, and how:
   toolbar, tables, header and footer, letterhead, collaboration between two
   tabs, the React component inside a Next.js 16 + Tailwind 4 application, and
   a phone-sized screen. Touch input was also tried on a real phone.
+- **The desktop application** was run on a Mac. Windows and Linux compile
+  the same code, but have not been tried.
 
 Known limits:
 
@@ -229,6 +244,10 @@ Known limits:
   seconds, has the editor load the room again; what can be undone starts
   over then. Tables are not in the random tests.
 - Endnotes are not laid out: they are kept in the file.
+- Pasting from elsewhere keeps the formatting of the text, not the pictures
+  or the tables in it: a table comes as lines with tabs. Reading the HTML of
+  the clipboard has no automated tests; it was checked with samples of Word,
+  Google Docs and web pages.
 - Text boxes: only rectangles, unturned, with a plain fill and line; a box
   of a fixed size that its text does not fit loses whole lines, where Word
   cuts one in half. Text boxes only in VML (old files) are kept, not shown.

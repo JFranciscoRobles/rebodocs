@@ -53,6 +53,9 @@ function withLink(wrap: string | undefined, href: string): string {
 
 const linked = (props: RunProps, href: string): RunProps => ({ ...props, wrap: withLink(props.wrap, href), color: LINK_COLOR, underline: true });
 
+/** `props` as those of text that is a link to `href`, looking as links look. */
+export const linkProps = linked;
+
 /** The runs of the paragraphs of `range`, each changed by `change` where it is inside the range. */
 function mapRuns(doc: Doc, range: Range, change: (run: Run, para: number) => Run): Doc {
   const paragraphs = doc.paragraphs.slice();

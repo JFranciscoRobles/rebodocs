@@ -25,7 +25,7 @@ From there the zoom belongs to the person. When the window is wide again, the zo
 | Pinch | Zooms around the fingers: what is under them stays under them. |
 | Two fingers together | Drag the page. |
 
-Selecting by touch brings up a small bar beside the selection, which then also offers Copy, Cut, Paste and Select all, since there are no keys for them. With a mouse none of this shows.
+Selecting by touch brings up a small bar beside the selection, which then also offers Copy, Cut, Paste, Paste as text and Select all, since there are no keys for them. With a mouse none of this shows.
 
 > Paste is only offered on a page served over HTTPS, or on `localhost`. Elsewhere the browser does not let a page read the clipboard.
 

@@ -1,6 +1,6 @@
 # Demos to run
 
-Five applications in the repository use the packages the way yours would. Each is small, and is there to be read and copied from.
+Six applications in the repository use the packages the way yours would. Each is small, and is there to be read and copied from.
 
 ```bash
 git clone https://github.com/JFranciscoRobles/rebodocs && cd rebodocs && npm install
@@ -12,6 +12,7 @@ git clone https://github.com/JFranciscoRobles/rebodocs && cd rebodocs && npm ins
 | [An S3 bucket](#an-s3-bucket) | `npm run storage` | Documents kept in Cloudflare R2, AWS S3 or MinIO: open, save, and a PDF made on the server. |
 | [Real time](#real-time) | `npm run realtime` | Several people on one document at once, through a backend of your own. |
 | [Claude in the editor](#claude-in-the-editor) | `npm run assistant` | A chat beside a shared document that reads and changes it, keeping its look. |
+| [The desktop](#the-desktop) | `npm run desktop` | A desktop application with Tauri: `.docx` files of the disk, a native menu, PDF. |
 | [The playground](#the-playground) | `npm run dev` | Everything wired together without a framework. |
 
 ## The React package
@@ -55,6 +56,17 @@ Open a document, press **Copy link** and open the link in another window. [Real-
 - **The key stays on the server.** The page sends the conversation to its backend, which takes it to the Claude API; the tools run in the page.
 
 [AI assistants](/docs/assistants/#in-your-own-application) has the code to put it in an application.
+
+## The desktop
+
+`apps/desktop`, a window of its own made with [Tauri](https://tauri.app). It needs Rust (`rustup`, from [rustup.rs](https://rustup.rs)); the first `npm run desktop` compiles for a few minutes.
+
+- **Each window is a document**, a `.docx` file of the disk. Open, Save and Save as use the dialogs of the system, and closing a window with changes asks first.
+- **A native menu**: File, Edit, View, with the usual keys. Edit has **Paste as text**.
+- **Export as PDF** to a file of the disk, and the other exports of the side menu.
+- **Documents from the system**: dropped on the window, or opened with a double click in the Finder or the Explorer once the application is built (`npm run build:desktop`).
+
+The pages are the editor without a framework, as in the playground; what Rust adds is small, in `src-tauri/src/lib.rs`: reading and writing files, a window per document, and the documents the system asks to open.
 
 ## The playground
 

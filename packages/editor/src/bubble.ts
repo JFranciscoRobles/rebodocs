@@ -228,13 +228,18 @@ export function createBubble(editor: Editor): Bubble {
   /** What a keyboard has keys for and a finger does not: only offered to a finger. */
   const clipboard = (): Item[] => {
     if (!editor.byTouch) return [];
-    const paste: Action = { label: t('bubble.paste'), title: t('bubble.paste'), closes: true, run: () => void editor.paste() };
+    const paste: Item[] = editor.canPaste
+      ? [
+          { label: t('bubble.paste'), title: t('bubble.paste'), closes: true, run: () => void editor.paste() },
+          { label: t('bubble.pastePlain'), title: t('bubble.pastePlain'), closes: true, run: () => void editor.paste({ plain: true }) },
+        ]
+      : [];
     const all: Action = { label: t('bubble.selectAll'), title: t('bubble.selectAll'), closes: true, run: () => (editor.selectAll(), editor.onTouchSelect?.()) };
-    if (editor.collapsed) return [...(editor.canPaste ? [paste] : []), all, 'sep'];
+    if (editor.collapsed) return [...paste, all, 'sep'];
     return [
       { label: t('bubble.copy'), title: t('bubble.copy'), closes: true, run: () => void editor.copy() },
       { label: t('bubble.cut'), title: t('bubble.cut'), closes: true, run: () => void editor.cut() },
-      ...(editor.canPaste ? [paste] : []),
+      ...paste,
       'sep',
     ];
   };
