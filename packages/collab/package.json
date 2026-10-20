@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/collab",
-  "version": "0.8.0",
+  "version": "0.8.5",
   "description": "Real-time collaboration on documents: the change format, the room server and its browser client.",
   "license": "MIT",
   "private": true,

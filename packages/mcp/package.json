@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/mcp",
-  "version": "0.8.0",
+  "version": "0.8.5",
   "description": "Tools for an AI assistant to read and edit DOCX documents: an MCP server for Claude Desktop and other clients, and Claude in a chat beside the editor.",
   "license": "MIT",
   "type": "module",

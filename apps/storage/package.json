@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/storage-demo",
-  "version": "0.8.0",
+  "version": "0.8.5",
   "description": "Documents kept in an S3 bucket (Cloudflare R2, AWS S3, MinIO): list, open, save, and a PDF made on the server.",
   "license": "MIT",
   "private": true,
