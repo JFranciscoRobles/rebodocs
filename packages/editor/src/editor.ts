@@ -173,6 +173,11 @@ import {
   setParagraphProps,
   setParagraphStyle,
   shiftListLevel,
+  type ListStyle,
+  listStyleAt,
+  setListStyle,
+  restartNumbering,
+  continueNumbering,
   splitCell,
   splitParagraph,
   storyOnPage,
@@ -2436,6 +2441,44 @@ export class Editor {
     if (doc.paragraphs.some((p, i) => p !== this.text.paragraphs[i])) this.commit(doc, this.selection);
   }
 
+  /** How the label of the caret's list level is written; undefined outside a list. */
+  get listStyle(): ListStyle | undefined {
+    return listStyleAt(this.text, this.range.from.para);
+  }
+
+  /**
+   * Writes the labels of the selection's lists another way: "a.-", "1)",
+   * "I.", a "–" for a bullet. Paragraphs outside a list are put in one first,
+   * of numbers or bullets as the style is. As one step to undo.
+   */
+  setListStyle(style: ListStyle): void {
+    const { from, to } = this.range;
+    let doc = this.text;
+    const kind: ListKind = style.format === 'bullet' ? 'bullet' : 'number';
+    for (let i = from.para; i <= to.para; i++) {
+      if (!doc.paragraphs[i].props.numId) {
+        doc = toggleList(doc, from.para, to.para, kind);
+        break;
+      }
+    }
+    doc = setListStyle(doc, from.para, to.para, style);
+    if (doc !== this.text) this.commit(doc, this.selection);
+  }
+
+  /** The caret's list item counts from the start again, and those after it with it. */
+  restartNumbering(): void {
+    const doc = restartNumbering(this.text, this.selection.focus.para);
+    if (doc !== this.text) this.commit(doc, this.selection);
+  }
+
+  /** The caret's list item, and those after it, go on with the numbering of the list before. */
+  continueNumbering(): boolean {
+    const doc = continueNumbering(this.text, this.selection.focus.para);
+    if (doc === this.text) return false;
+    this.commit(doc, this.selection);
+    return true;
+  }
+
   /** Moves the left indent of the selected paragraphs by `delta` points; it never goes past the margin. */
   shiftIndent(delta: number): void {
     const { from, to } = this.range;
@@ -2570,10 +2613,15 @@ export class Editor {
   }
 
   /** True when Tab changes the list level instead of typing a tab: at the start of an item, or over several. */
+  /**
+   * In a list item, Tab and Shift+Tab change its level wherever the caret is
+   * in it, as in Google Docs: going back up after a sublist is one key, not a
+   * trip to the start of the line.
+   */
   private tabChangesLevel(): boolean {
     const { from, to } = this.range;
     for (let i = from.para; i <= to.para; i++) if (!this.text.paragraphs[i].props.numId) return false;
-    return from.para !== to.para || (this.collapsed && from.offset === 0);
+    return true;
   }
 
   undo(): void {

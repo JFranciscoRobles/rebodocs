@@ -15,7 +15,7 @@ import {
   runPropsEqual,
   sameCell,
 } from './model';
-import { type ListKind, MAX_LIST_LEVEL, addList, levelOf, listKind } from './numbering';
+import { type ListKind, type ListLevel, MAX_LIST_LEVEL, type NumFormat, addList, isSymbolFont, levelOf, listKind } from './numbering';
 
 function locate(p: Paragraph, offset: number): { index: number; inner: number } {
   let acc = 0;
@@ -373,6 +373,109 @@ export function toggleList(doc: Doc, fromPara: number, toPara: number, kind: Lis
     paragraphs[i] = { ...p, props: defined({ ...p.props, ...listProps(next, numId, level) }) };
   }
   return { ...next, paragraphs };
+}
+
+/**
+ * How the label of a list level is written: the kind of number (or a bullet)
+ * and the text around it, with `#` where the number goes: `{ format:
+ * 'lowerLetter', text: '#.-' }` is "a.-", "b.-"; a bullet's text is its
+ * character, `{ format: 'bullet', text: '•' }`.
+ */
+export interface ListStyle {
+  format: NumFormat;
+  text: string;
+}
+
+/** The style of the level the paragraph is at in its list; undefined outside a list. */
+export function listStyleAt(doc: Doc, para: number): ListStyle | undefined {
+  const { numId, listLevel } = doc.paragraphs[para]?.props ?? {};
+  const level = listLevel ?? 0;
+  const def = numId && doc.numbering ? levelOf(doc.numbering, numId, level) : undefined;
+  if (!def) return undefined;
+  return { format: def.format, text: def.format === 'bullet' ? def.text : def.text.split(`%${level + 1}`).join('#') };
+}
+
+/** A copy of a list, its own id: a list a DOCX came with is written back as it was, so a changed one gets a new id. */
+function copyList(doc: Doc, numId: number, change: (levels: Map<number, ListLevel>, starts: Map<number, number>) => void): { doc: Doc; numId: number } {
+  const list = doc.numbering?.lists.get(numId);
+  if (!doc.numbering || !list) return { doc, numId };
+  const lists = new Map(doc.numbering.lists);
+  const used = Math.max(0, ...doc.paragraphs.map((p) => p.props.numId ?? 0), ...lists.keys());
+  const copy = { abstractId: list.abstractId, starts: new Map(list.starts), levels: new Map(list.levels) };
+  change(copy.levels, copy.starts);
+  lists.set(used + 1, copy);
+  return { doc: { ...doc, numbering: { ...doc.numbering, lists } }, numId: used + 1 };
+}
+
+/** Moves the paragraphs `from` on that are in list `numId` to list `to`, keeping their levels. */
+function moveToList(doc: Doc, numId: number, to: number, from = 0, until = doc.paragraphs.length - 1): Doc {
+  let changed = false;
+  const paragraphs = doc.paragraphs.map((p, i) => {
+    if (i < from || i > until || p.props.numId !== numId) return p;
+    changed = true;
+    return { ...p, props: { ...p.props, numId: to } };
+  });
+  return changed ? { ...doc, paragraphs } : doc;
+}
+
+/**
+ * Writes the labels of the lists in the range another way: every level used
+ * there, in the whole of its list, as Word changes a list's number format.
+ * Paragraphs of the range outside a list are left alone.
+ */
+export function setListStyle(doc: Doc, fromPara: number, toPara: number, style: ListStyle): Doc {
+  const levels = new Map<number, Set<number>>();
+  for (let i = fromPara; i <= toPara; i++) {
+    const { numId, listLevel } = doc.paragraphs[i].props;
+    if (!numId || !doc.numbering?.lists.has(numId)) continue;
+    if (!levels.has(numId)) levels.set(numId, new Set());
+    levels.get(numId)!.add(listLevel ?? 0);
+  }
+  let next = doc;
+  for (const [numId, used] of levels) {
+    const copied = copyList(next, numId, (defs) => {
+      for (const level of used) {
+        const base = levelOf(next.numbering!, numId, level);
+        if (!base) continue;
+        const bullet = style.format === 'bullet';
+        // A bullet's character is plain text in the paragraph's font; a symbol font would show another one.
+        const run = { ...base.run };
+        if (bullet || isSymbolFont(run.fontFamily)) delete run.fontFamily;
+        defs.set(level, { ...base, format: style.format, text: bullet ? style.text : style.text.split('#').join(`%${level + 1}`), run });
+      }
+    });
+    next = moveToList(copied.doc, numId, copied.numId);
+  }
+  return next;
+}
+
+/** Starts the numbering again at the paragraph: it and the items of its list after it count from the start once more. */
+export function restartNumbering(doc: Doc, para: number): Doc {
+  const { numId, listLevel } = doc.paragraphs[para]?.props ?? {};
+  if (!numId || !doc.numbering?.lists.has(numId)) return doc;
+  const level = listLevel ?? 0;
+  const start = levelOf(doc.numbering, numId, level)?.start ?? 1;
+  const copied = copyList(doc, numId, (_levels, starts) => {
+    for (let i = 0; i <= MAX_LIST_LEVEL; i++) starts.set(i, levelOf(doc.numbering!, numId, i)?.start ?? 1);
+    starts.set(level, start);
+  });
+  return moveToList(copied.doc, numId, copied.numId, para);
+}
+
+/**
+ * Continues the numbering of the list of the same kind before the
+ * paragraph's: it and the items of its list after it join that one. Nothing
+ * happens when there is none before.
+ */
+export function continueNumbering(doc: Doc, para: number): Doc {
+  const { numId } = doc.paragraphs[para]?.props ?? {};
+  const kind = numId ? listKindAt(doc, para) : undefined;
+  if (!numId || !kind) return doc;
+  for (let i = para - 1; i >= 0; i--) {
+    const other = doc.paragraphs[i].props.numId;
+    if (other && other !== numId && listKindAt(doc, i) === kind) return moveToList(doc, numId, other, para);
+  }
+  return doc;
 }
 
 /** Moves the list items in the range `delta` levels deeper (or shallower, when negative). */

@@ -305,7 +305,7 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
           return answer({
             protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0],
             capabilities: { tools: {} },
-            serverInfo: { name: 'rebodocs', version: '0.8.6' },
+            serverInfo: { name: 'rebodocs', version: '0.8.7' },
             instructions: INSTRUCTIONS,
           });
         }

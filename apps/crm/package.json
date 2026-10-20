@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/crm-demo",
-  "version": "0.8.6",
+  "version": "0.8.7",
   "description": "The editor inside a CRM: a property's documents made from a template with its data, edited in its page, saved on their own, with versions, review and an assistant.",
   "license": "MIT",
   "private": true,

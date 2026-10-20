@@ -23,6 +23,10 @@ import {
   splitParagraph,
   symbolText,
   toggleList,
+  setListStyle,
+  listStyleAt,
+  restartNumbering,
+  continueNumbering,
 } from '../src';
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
@@ -300,6 +304,47 @@ describe('editing lists', () => {
     // A list id the paragraphs use is never given to a new list, even if nothing defines it.
     const dangling = createDoc([createParagraph('x', {}, { numId: 7 }), createParagraph('y')]);
     expect(toggleList(dangling, 1, 1, 'bullet').paragraphs[1].props.numId).toBe(8);
+  });
+
+  it('writes the labels of a level another way, in the whole of its list, and keeps it in the DOCX', () => {
+    let doc = toggleList(createDoc(['a', 'b', 'c', 'd'].map((t) => createParagraph(t))), 0, 3, 'number');
+    doc = shiftListLevel(doc, 1, 2, 1);
+    expect(labelsOf(doc)).toEqual(['1.', 'a.', 'b.', '2.']);
+    // The sublevel only, from one of its items: its sibling changes with it, the top level stays.
+    const lettered = setListStyle(doc, 1, 1, { format: 'upperRoman', text: '#)' });
+    expect(labelsOf(lettered)).toEqual(['1.', 'I)', 'II)', '2.']);
+    expect(listStyleAt(lettered, 2)).toEqual({ format: 'upperRoman', text: '#)' });
+    expect(listStyleAt(lettered, 0)).toEqual({ format: 'decimal', text: '#.' });
+    const dashed = setListStyle(lettered, 0, 0, { format: 'lowerLetter', text: '#.-' });
+    expect(labelsOf(dashed)).toEqual(['a.-', 'I)', 'II)', 'b.-']);
+    // A bullet is its character in the paragraph's font; the list is a bulleted one then.
+    const bullets = setListStyle(dashed, 0, 3, { format: 'bullet', text: '–' });
+    expect(labelsOf(bullets)).toEqual(['–', '–', '–', '–']);
+    expect(listKindAt(bullets, 0)).toBe('bullet');
+    // The original is untouched, and the change goes through Word and back.
+    expect(labelsOf(doc)).toEqual(['1.', 'a.', 'b.', '2.']);
+    expect(labelsOf(importDocx(exportDocx(dashed)))).toEqual(['a.-', 'I)', 'II)', 'b.-']);
+    // A list the DOCX came with is written back as it was read: the changed one goes as a list of its own.
+    const opened = importDocx(exportDocx(doc));
+    const changed = setListStyle(opened, 0, 0, { format: 'decimal', text: '#.-' });
+    expect(labelsOf(importDocx(exportDocx(changed)))).toEqual(['1.-', 'a.', 'b.', '2.-']);
+    // Outside a list nothing changes.
+    const plain = createDoc([createParagraph('x')]);
+    expect(setListStyle(plain, 0, 0, { format: 'decimal', text: '#)' })).toBe(plain);
+  });
+
+  it('starts the numbering again at an item, and continues the list before', () => {
+    let doc = toggleList(createDoc(['a', 'b', 'x', 'c', 'd'].map((t) => createParagraph(t))), 0, 1, 'number');
+    doc = toggleList(doc, 3, 4, 'number');
+    expect(labelsOf(doc)).toEqual(['1.', '2.', undefined, '1.', '2.']);
+    const continued = continueNumbering(doc, 3);
+    expect(labelsOf(continued)).toEqual(['1.', '2.', undefined, '3.', '4.']);
+    // From the middle of a list: the items before keep counting, those after start over.
+    const restarted = restartNumbering(continued, 4);
+    expect(labelsOf(restarted)).toEqual(['1.', '2.', undefined, '3.', '1.']);
+    expect(labelsOf(importDocx(exportDocx(restarted)))).toEqual(['1.', '2.', undefined, '3.', '1.']);
+    // Nothing before of its kind: nothing to continue.
+    expect(continueNumbering(doc, 0)).toBe(doc);
   });
 
   it('takes one item out of a list, keeping its indent on request', () => {

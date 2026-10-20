@@ -45,6 +45,8 @@ In a header or footer, positions are those of its own text: `editor.area` says w
 | `setParagraphProps({ align, lineHeight, spacingBefore, indentLeft, … })` | |
 | `setParagraphStyle(id)`, `styles`, `activeStyleId()` | Paragraph styles: Normal, Title, Heading 1… |
 | `toggleList('bullet' \| 'number')`, `shiftListLevel(±1)`, `shiftIndent(points)` | |
+| `setListStyle({ format, text })`, `listStyle` | How the labels of the selection's list level are written: `{ format: 'lowerLetter', text: '#.-' }` is "a.-", `{ format: 'bullet', text: '–' }` a dash. `#` is where the number goes. Every item of that level in the list changes, as in Word. |
+| `restartNumbering()`, `continueNumbering()` | The caret's item and those after it count from 1 again, or go on with the list before of the same kind. |
 | `undo()`, `redo()`, `canUndo`, `canRedo` | |
 | `activeRunProps()`, `activeParagraphProps()` | The formatting at the selection, fully resolved. |
 

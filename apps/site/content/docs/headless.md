@@ -59,7 +59,7 @@ const { state, commands, editor, docs, ready } = useDocs();
 | --- | --- |
 | History | `undo`, `redo` |
 | Text | `toggleMark`, `setRunProps`, `insertText`, `selectAll`, `copy`, `cut`, `paste` |
-| Paragraph | `setParagraphProps`, `setParagraphStyle`, `toggleList`, `shiftListLevel`, `shiftIndent`, `insertPageBreak` |
+| Paragraph | `setParagraphProps`, `setParagraphStyle`, `toggleList`, `shiftListLevel`, `setListStyle`, `restartNumbering`, `continueNumbering`, `shiftIndent`, `insertPageBreak` |
 | Tables | `insertTable`, `insertTableRow`, `insertTableColumn`, `deleteTableRow`, `deleteTableColumn`, `deleteTable`, `mergeTableCells`, `splitTableCell`, `setTableCellProps`, `setTableBorders`, `setTableRowHeight`, `setHeaderRow` |
 | Pictures | `insertImageFile`, `insertImageGrid`, `setPictureWrap`, `fitSelectedPicture` |
 | Templates | `insertVariable`, `fillVariables`, `insertSignatures` |
