@@ -1,6 +1,6 @@
 # Demos to run
 
-Six applications in the repository use the packages the way yours would. Each is small, and is there to be read and copied from.
+Seven applications in the repository use the packages the way yours would. Each is small, and is there to be read and copied from.
 
 ```bash
 git clone https://github.com/JFranciscoRobles/rebodocs && cd rebodocs && npm install
@@ -12,6 +12,7 @@ git clone https://github.com/JFranciscoRobles/rebodocs && cd rebodocs && npm ins
 | [An S3 bucket](#an-s3-bucket) | `npm run storage` | Documents kept in Cloudflare R2, AWS S3 or MinIO: open, save, and a PDF made on the server. |
 | [Real time](#real-time) | `npm run realtime` | Several people on one document at once, through a backend of your own. |
 | [Claude in the editor](#claude-in-the-editor) | `npm run assistant` | A chat beside a shared document that reads and changes it, keeping its look. |
+| [Inside a CRM](#inside-a-crm) | `npm run crm` | A property's contract made from a template with its data, edited in its page, saved on its own, with versions and an assistant. |
 | [The desktop](#the-desktop) | `npm run desktop` | A desktop application with Tauri: `.docx` files of the disk, a native menu, PDF. |
 | [The playground](#the-playground) | `npm run dev` | Everything wired together without a framework. |
 
@@ -56,6 +57,17 @@ Open a document, press **Copy link** and open the link in another window. [Real-
 - **The key stays on the server.** The page sends the conversation to its backend, which takes it to the Claude API; the tools run in the page.
 
 [AI assistants](/docs/assistants/#in-your-own-application) has the code to put it in an application.
+
+## Inside a CRM
+
+`apps/crm`, at `http://localhost:5180`. A made-up real-estate CRM, in Spanish, where the documents never leave the page of their property. Nothing to set up; the assistant needs a key of the Claude API in `apps/crm/.env`.
+
+- **From the record to the contract.** **Documentos → Generar contrato de mediación** fills a template with the record's data and opens it in the page, as its first version.
+- **Saved on its own.** A moment after each change; the bar says when. Leaving the document keeps a version, signed by who worked on it.
+- **Review.** Change who you are, top right, to the lawyer, and turn on tracked changes: what he changes stays marked with his name.
+- **The assistant** beside the document, as in the demo above, without the rooms.
+
+The documents are kept in the browser, in IndexedDB: in a CRM of your own, `src/store.ts` is the file that becomes calls to your backend. Its README says what to change.
 
 ## The desktop
 

@@ -167,6 +167,7 @@ const COMMANDS = [
   'setTableRowHeight',
   'setColumns',
   'insertColumnBreak',
+  'insertSectionBreak',
   'insertImageFile',
   'insertImageGrid',
   'setPictureWrap',

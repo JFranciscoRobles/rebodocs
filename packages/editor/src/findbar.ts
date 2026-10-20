@@ -1,6 +1,7 @@
 // Find and replace: a small panel over the top right corner of the editor.
 // It only uses the public methods of the editor.
 
+import { installRegionKeys, markRegion } from './a11y';
 import type { Editor } from './editor';
 import { getLocale, t } from './i18n';
 import { IS_MAC } from './platform';
@@ -51,6 +52,10 @@ export function createFindBar(editor: Editor): FindBar {
   const bar = document.createElement('div');
   bar.className = 'dx-fb';
   bar.setAttribute('role', 'search');
+  bar.setAttribute('aria-label', t('a11y.find'));
+  // F6 goes to it from the document while it is open, and back.
+  markRegion(bar, 'find', () => (isOpen ? query : null));
+  installRegionKeys();
   let isOpen = false;
   let matchCase = false;
   let wholeWord = false;

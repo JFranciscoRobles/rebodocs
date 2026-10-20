@@ -8,6 +8,7 @@ import { type FormatId, type RevisionView, NOTE_COLORS, defined, formatText, for
 import { recallAuthor, setAuthor } from './author';
 import type { Editor } from './editor';
 import { type MessageKey, getLocale, t } from './i18n';
+import { colorName, installRegionKeys, markRegion } from './a11y';
 import { type VersionInfo, type Versions, UNDO_KEY, createVersionView, restoreVersionOf, sortVersions, versionDate, versionName } from './versions';
 
 export type PanelTab = 'outline' | 'variables' | 'notes' | 'changes' | 'history';
@@ -152,6 +153,9 @@ const MARKS: [FormatId, MessageKey, MessageKey, string][] = [
   ['underline', 'mark.underline.letter', 'mark.underline', 'text-decoration:underline'],
 ];
 
+/** How many panels were made, so that the ids of each are its own. */
+let panels = 0;
+
 export function createPanel(container: HTMLElement, editor: Editor, options: PanelOptions = {}): Panel {
   injectStyle();
   const root = el('div', 'dx-pn');
@@ -160,6 +164,23 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
   const body = el('div', 'dx-pn-body');
   const foot = el('div', 'dx-pn-foot');
   root.append(tabs, body, foot);
+  root.setAttribute('role', 'region');
+  root.setAttribute('aria-label', t('a11y.panel'));
+  body.setAttribute('role', 'tabpanel');
+  body.id = `dx-pn-body-${++panels}`;
+  // The tabs are one stop of Tab; the arrows go from one to the next, as in a list of tabs of the system.
+  tabs.addEventListener('keydown', (e) => {
+    const at = tabButtons.indexOf(e.target as HTMLButtonElement);
+    if (at < 0) return;
+    const to = e.key === 'ArrowRight' ? at + 1 : e.key === 'ArrowLeft' ? at - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? tabButtons.length - 1 : undefined;
+    if (to === undefined) return;
+    const next = tabButtons[(to + tabButtons.length) % tabButtons.length];
+    show(next.dataset.name as PanelTab);
+    next.focus();
+    e.preventDefault();
+  });
+  markRegion(root, 'panel', () => (isOpen ? tabButtons.find((node) => node.dataset.name === tab) : undefined));
+  installRegionKeys();
   let tab: PanelTab = 'outline';
   let isOpen = false;
   /** What was typed for each variable; it outlives the variable, so undoing a fill brings both back. */
@@ -170,7 +191,9 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
     const node = el('button', 'dx-pn-tab', t(`panel.${name}`));
     node.type = 'button';
     node.dataset.name = name;
+    node.id = `dx-pn-tab-${panels}-${name}`;
     node.setAttribute('role', 'tab');
+    node.setAttribute('aria-controls', body.id);
     node.addEventListener('click', () => show(name));
     tabs.appendChild(node);
     return node;
@@ -457,7 +480,8 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
       const dot = el('button', 'dx-pn-dot');
       dot.type = 'button';
       dot.dataset.color = color;
-      dot.title = t('note.color');
+      dot.title = colorName(color);
+      dot.setAttribute('aria-label', colorName(color));
       dot.setAttribute('role', 'radio');
       dot.style.background = `#${color}`;
       dot.addEventListener('click', () => {
@@ -747,7 +771,9 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
       const on = node.dataset.name === tab;
       node.classList.toggle('dx-on', on);
       node.setAttribute('aria-selected', String(on));
+      node.tabIndex = on ? 0 : -1;
     });
+    body.setAttribute('aria-labelledby', tabButtons.find((node) => node.dataset.name === tab)?.id ?? '');
     // The name may have been given elsewhere, where a note was made.
     if (document.activeElement !== author) author.value = editor.author;
     nextColor.querySelectorAll<HTMLElement>('.dx-pn-dot').forEach((dot) => dot.classList.toggle('dx-on', dot.dataset.color === editor.noteColor));

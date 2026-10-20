@@ -5,6 +5,7 @@
 import { type Doc, docText } from '@rebodocs/core';
 import { type Editor, type ViewMode, type ZoomFit, MAX_ZOOM, MIN_ZOOM } from './editor';
 import { getLocale, t } from './i18n';
+import { installRegionKeys, markRegion } from './a11y';
 
 export interface StatusBar {
   /** Brings the bar in step with what is not the editor's to tell: whether an assistant is connected. */
@@ -90,7 +91,7 @@ const CSS = `
 .dx-sb-people{margin:0 0 10px;padding:0;list-style:none}
 .dx-sb-people li{display:flex;align-items:center;gap:8px;padding:3px 0}
 .dx-sb-people .dx-sb-dot{margin:0;border-color:#fff}
-.dx-sb-none{color:#80868b}
+.dx-sb-none{color:#5f6470}
 @keyframes dx-sb-pulse{50%{opacity:.3}}
 @media (pointer:coarse){
 .dx-sb{min-height:40px}
@@ -136,7 +137,11 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
   injectStyle();
   const bar = document.createElement('div');
   bar.className = 'dx-sb';
-  bar.setAttribute('role', 'status');
+  // A region, not a live one: the count of words would be read out at every letter typed.
+  bar.setAttribute('role', 'region');
+  bar.setAttribute('aria-label', t('a11y.statusBar'));
+  markRegion(bar, 'status', () => bar.querySelector<HTMLElement>('button, select, input'));
+  installRegionKeys();
   const updates: (() => void)[] = [];
 
   const info = (name: string, text: () => string) => {

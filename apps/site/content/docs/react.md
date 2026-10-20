@@ -92,6 +92,7 @@ const docs = useRef<DocsHandle>(null);
 | --- | --- |
 | `exportDocx()` | The document as a DOCX, as it is now. |
 | `dirty` | Whether it changed since it was opened or last saved. |
+| `save()` | Gives the document to `onSave`, as ⌘S does, and clears `dirty`: what an application that saves on its own calls, a moment after each change. |
 | `editor` | The `Editor` itself. See [Editor API](/docs/editor-api/). |
 | `collab` | The session with the others, while there is one. |
 | `setName`, `setAuthor`, `setLocale`, `setLetterhead` | Change what the props set. |

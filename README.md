@@ -28,7 +28,7 @@ npm run storage    # documents in an S3 bucket, at http://localhost:5176 (needs 
 npm run realtime   # several people on one document, at http://localhost:5177
 npm run assistant  # Claude in a shared document, at http://localhost:5179 (needs an API key)
 npm run desktop    # a desktop application with Tauri (needs Rust)
-npm test           # 394 tests
+npm test           # 399 tests
 npm run typecheck
 ```
 
@@ -86,6 +86,10 @@ npm run typecheck
 - **And on the desktop.** A Tauri application opens and saves `.docx` files
   of the disk, with a native menu, a window per document, PDF export and
   "Open with" from the Finder or the Explorer.
+- **Accessible.** A screen reader is told what the caret moves over and
+  where it is; a screen reader mode puts the paragraph in a field for its own
+  commands and a braille display. Every bar, menu and dialog, and the ruler,
+  work from the keyboard (F6, Alt+F10), and high contrast is kept.
 - **AI assistants** can read and change documents, keeping their look: through an MCP server, or as a chat with Claude in your application.
 - **Any language, any font.** The interface ships in Spanish and English and
   takes more as JSON; an application can register its own typefaces.
@@ -204,6 +208,7 @@ each.
 | [`apps/storage`](apps/storage) | `npm run storage` | Documents in Cloudflare R2, AWS S3 or MinIO. The browser opens and saves with addresses signed for a few minutes and never has a key; the server fills a template and stores the PDF. |
 | [`apps/realtime`](apps/realtime) | `npm run realtime` | Every document is a room, there only while someone is in it. The collaboration server keeps nothing: a backend gives it the document, takes it back, and lets each person in with a signed ticket. When everybody leaves, the backend keeps a version, signed by who changed it. |
 | [`apps/assistant`](apps/assistant) | `npm run assistant` | The real-time demo with Claude beside the document. The page holds the conversation and runs the tools on the editor; the server takes it to the Claude API with its key. |
+| [`apps/crm`](apps/crm) | `npm run crm` | The editor inside a CRM, in Spanish: a property's contract made from a template with its record, edited in its page, saved on its own a moment after each change, a version kept on leaving, review with tracked changes, and the assistant. |
 | [`apps/desktop`](apps/desktop) | `npm run desktop` | The editor as a desktop application, with Tauri. Each window is a `.docx` of the disk; native menu and dialogs, PDF, documents dropped on the window or opened from the system. |
 | [`apps/playground`](apps/playground) | `npm run dev` | Everything wired together without a framework. |
 
@@ -214,7 +219,7 @@ Every package is on npm: `@rebodocs/react`, and `core`, `editor`, `collab` and `
 This is working software that has not been used in production yet. What has
 been checked, and how:
 
-- **394 automated tests** over the engine, the change format, the
+- **399 automated tests** over the engine, the change format, the
   collaboration session, the interface texts, the tools for an assistant and
   its chat, copying and pasting with the formatting, and the backends of the
   storage and real-time demos.
@@ -231,6 +236,9 @@ been checked, and how:
   toolbar, tables, header and footer, letterhead, collaboration between two
   tabs, the React component inside a Next.js 16 + Tailwind 4 application, and
   a phone-sized screen. Touch input was also tried on a real phone.
+- **Accessibility**: what is announced after each key and the keyboard in
+  every part, read in headless Chrome; not yet listened to with VoiceOver,
+  NVDA or JAWS.
 - **The desktop application** was run on a Mac. Windows and Linux compile
   the same code, but have not been tried.
 

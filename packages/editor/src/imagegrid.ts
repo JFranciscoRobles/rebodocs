@@ -4,6 +4,7 @@
 // only uses the public methods of the editor.
 
 import { MAX_GRID_COLUMNS } from '@rebodocs/core';
+import { holdFocus } from './a11y';
 import type { Editor } from './editor';
 import { t } from './i18n';
 
@@ -27,8 +28,13 @@ const CSS = `
 .dx-ig-cell.dx-ig-drag{opacity:.35}
 .dx-ig-cell.dx-ig-drop{border:2px solid #0b57d0}
 .dx-ig-n{position:absolute;left:4px;top:4px;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:rgba(32,36,44,.72);color:#fff;font-size:11px;line-height:18px;text-align:center}
-.dx-ig-x{position:absolute;right:4px;top:4px;width:20px;height:20px;padding:0;border:0;border-radius:50%;background:rgba(32,36,44,.72);color:#fff;font:14px/20px system-ui,sans-serif;cursor:pointer;opacity:0}
-.dx-ig-cell:hover .dx-ig-x,.dx-ig-x:focus-visible{opacity:1}
+.dx-ig-x{position:absolute;right:4px;top:4px;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:rgba(32,36,44,.72);color:#fff;font:15px/24px system-ui,sans-serif;cursor:pointer;opacity:0}
+.dx-ig-mv{position:absolute;bottom:4px;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:rgba(32,36,44,.72);color:#fff;font:15px/24px system-ui,sans-serif;cursor:pointer;opacity:0}
+.dx-ig-mv:disabled{display:none}
+.dx-ig-earlier{left:4px}
+.dx-ig-later{right:4px}
+.dx-ig-cell:hover .dx-ig-x,.dx-ig-x:focus-visible,.dx-ig-cell:hover .dx-ig-mv,.dx-ig-mv:focus-visible{opacity:1}
+@media (hover:none){.dx-ig-x,.dx-ig-mv{opacity:1}}
 .dx-ig-foot{display:flex;align-items:center;gap:8px;padding:12px 16px 16px;border-top:1px solid #e3e6ec}
 .dx-ig-note{flex:1;color:#5f6470;font-size:12px;line-height:1.4}
 .dx-ig-foot button{height:32px;padding:0 16px;border:1px solid #d2d6de;border-radius:6px;background:#fff;color:inherit;font:inherit;white-space:nowrap;cursor:pointer}
@@ -139,8 +145,31 @@ export function openImageGrid(editor: Editor, files: File[]): Promise<number> {
             URL.revokeObjectURL(item.url);
             items = items.filter((other) => other !== item);
             render();
+            // The button that had the keyboard is gone with its picture.
+            if (!dialog.contains(document.activeElement)) (accept.disabled ? more : accept).focus();
           });
-          cell.append(img, el('span', 'dx-ig-n', String(i + 1)), x);
+          // Moved with a button as well as by dragging: from the keyboard, and by a hand that cannot drag.
+          const move = (by: -1 | 1) => {
+            const mover = el('button', `dx-ig-mv ${by < 0 ? 'dx-ig-earlier' : 'dx-ig-later'}`, by < 0 ? '‹' : '›');
+            mover.title = t(by < 0 ? 'grid.earlier' : 'grid.later', { name: '' }).replace(/\s+/g, ' ').trim();
+            mover.setAttribute('aria-label', t(by < 0 ? 'grid.earlier' : 'grid.later', { name: item.file.name }));
+            mover.disabled = i + by < 0 || i + by >= items.length;
+            mover.addEventListener('click', () => {
+              const next = items.slice();
+              const [moved] = next.splice(i, 1);
+              next.splice(i + by, 0, moved);
+              items = next;
+              render();
+              const to = i + by;
+              editor.announce(t('grid.place', { name: item.file.name, n: to + 1, total: items.length }));
+              // The keyboard goes with the picture; at an end, to the button that can still move it.
+              const cells = sheet.querySelectorAll<HTMLElement>('.dx-ig-cell');
+              const same = cells[to]?.querySelector<HTMLButtonElement>(by < 0 ? '.dx-ig-earlier' : '.dx-ig-later');
+              (same && !same.disabled ? same : cells[to]?.querySelector<HTMLButtonElement>(by < 0 ? '.dx-ig-later' : '.dx-ig-earlier'))?.focus();
+            });
+            return mover;
+          };
+          cell.append(img, el('span', 'dx-ig-n', String(i + 1)), x, move(-1), move(1));
           cell.addEventListener('dragstart', (e) => {
             dragging = i;
             cell.classList.add('dx-ig-drag');
@@ -177,7 +206,7 @@ export function openImageGrid(editor: Editor, files: File[]): Promise<number> {
       for (const item of items) URL.revokeObjectURL(item.url);
       document.removeEventListener('keydown', onKey, true);
       scrim.remove();
-      editor.focus();
+      release();
       resolve(inserted);
     };
     const insert = async () => {
@@ -209,6 +238,7 @@ export function openImageGrid(editor: Editor, files: File[]): Promise<number> {
     document.addEventListener('keydown', onKey, true);
     document.body.appendChild(scrim);
     render();
+    const release = holdFocus(dialog, () => editor.focus());
     accept.focus();
   });
 }

@@ -19,6 +19,7 @@ import { styleName, t } from './i18n';
 import { fontFamilies } from './fonts';
 import { IS_MAC } from './platform';
 import { createImagePicker } from './imagegrid';
+import { colorName, installRegionKeys, markRegion } from './a11y';
 
 export interface ToolbarOptions {
   /** Fonts offered in the list, after the ones given with `addFont`; the ones a document uses are added as they turn up. */
@@ -70,6 +71,8 @@ const CELL_SHADES = [
   'C6E0B4', 'DDEBF7', 'BDD7EE', 'D9E1F2', 'B4C6E7', 'EAD1DC', 'D9D2E9', 'FFFFFF',
 ];
 const GRID_COLUMNS = 8;
+/** The grids of a menu, which the arrows go through by rows and columns. */
+const GRIDS = '.dx-tb-grid, .dx-tb-colors';
 const GRID_ROWS = 6;
 const STYLE_ID = 'dx-toolbar-style';
 const MOD = IS_MAC ? '⌘' : 'Ctrl+';
@@ -116,8 +119,8 @@ const CSS = `
 .dx-tb-seg .dx-tb-btn{flex:1;padding:0 10px;border:1px solid #d2d6de}
 .dx-tb-seg .dx-tb-btn.dx-on{border-color:#a8c7fa}
 .dx-tb-item kbd{margin-left:auto;padding-left:16px;color:#5f6470;font:inherit}
-.dx-tb-grid{display:grid;grid-template-columns:repeat(${GRID_COLUMNS},18px);gap:2px;padding:4px}
-.dx-tb-cell{width:18px;height:18px;padding:0;border:1px solid #c5cad3;border-radius:2px;background:#fff;cursor:pointer}
+.dx-tb-grid{display:grid;grid-template-columns:repeat(${GRID_COLUMNS},22px);gap:2px;padding:4px}
+.dx-tb-cell{width:22px;height:22px;padding:0;border:1px solid #c5cad3;border-radius:2px;background:#fff;cursor:pointer}
 .dx-tb-cell.dx-on{border-color:#0b57d0;background:#d3e3fd}
 .dx-tb-hint{padding:2px 6px 4px;color:#5f6470;text-align:center}
 .dx-tb-colors{display:grid;grid-template-columns:repeat(8,22px);gap:4px;padding:4px}
@@ -174,6 +177,7 @@ const ICONS = {
   review: svg('<path d="M3 13.5V15h1.5l7.4-7.4-1.5-1.5L3 13.5zM12.6 4.4l1.5 1.5 1.2-1.2a1 1 0 0 0 0-1.4l-.1-.1a1 1 0 0 0-1.4 0l-1.2 1.2zM9 15h6"/>'),
   footnote: svg('<path d="M2.5 15.5h13M2.5 12.5h7M3 4l4.5 5M7.5 4L3 9M11 3.5l1.5-1v4"/>'),
   pageBreak: svg('<path d="M4.5 2.5v4h9v-4M4.5 15.5v-4h9v4M2.5 9h2M6.5 9h2M10.5 9h2M14.5 9h1"/>'),
+  sectionBreak: svg('<path d="M4.5 2.5v3.5h9V2.5M4.5 15.5V12h9v3.5M2.5 8h13M2.5 10h13"/>'),
   columns: svg('<path d="M2.5 4h5.5M2.5 7h5.5M2.5 10h5.5M2.5 13h4M10 4h5.5M10 7h5.5M10 10h5.5M10 13h3"/>'),
   colOne: svg('<path d="M3 4h12M3 7h12M3 10h12M3 13h8"/>'),
   colTwo: svg('<path d="M2.5 4h5.5M2.5 7h5.5M2.5 10h5.5M2.5 13h4M10 4h5.5M10 7h5.5M10 10h5.5M10 13h3"/>'),
@@ -221,10 +225,14 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   /** What to do, on every change of the document or the selection, to keep a control in step. */
   const updates: (() => void)[] = [];
   let popover: HTMLElement | null = null;
+  /** The button the menu that is open came from. */
+  let popoverFrom: HTMLElement | null = null;
 
   const closePopover = () => {
     popover?.remove();
     popover = null;
+    popoverFrom?.setAttribute('aria-expanded', 'false');
+    popoverFrom = null;
   };
 
   // The name of the control under the pointer, and its keys: said sooner than the browser says a title, and in the look of the bar.
@@ -300,13 +308,19 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     const left = Math.min(at.left - box.left, Math.max(0, bar.clientWidth - popover.offsetWidth - 8));
     popover.style.left = `${Math.max(0, left)}px`;
     popover.style.top = `${at.bottom - box.top + 4}px`;
+    popoverFrom = anchor;
+    anchor.setAttribute('aria-expanded', 'true');
+    // Opened from the keyboard (a click leaves it in the document): the keyboard goes into the menu.
+    if (document.activeElement === anchor) focusables(popover)[0]?.focus();
   };
 
   /** Runs a command and gives the keyboard back to the document. */
   const run = (command: () => void) => () => {
     closePopover();
+    const before = document.activeElement;
     command();
-    editor.focus();
+    // Back to the text, unless what was done gave the keyboard to something of its own, as a menu or a dialog does.
+    if (document.activeElement === before || document.activeElement === document.body) editor.focus();
   };
 
   /** The groups of the bar in their order, each with the line before it; `keep` for the ones that never leave the bar. */
@@ -336,6 +350,14 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
         node.disabled = disabled;
       });
     }
+    return node;
+  };
+
+  /** A button that opens a menu or a panel under it. */
+  const menuButton = (...args: Parameters<typeof button>) => {
+    const node = button(...args);
+    node.setAttribute('aria-haspopup', 'true');
+    node.setAttribute('aria-expanded', 'false');
     return node;
   };
 
@@ -388,14 +410,16 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     none?: string,
   ) => {
     const swatch = el('span', 'dx-tb-swatch');
-    const node = button(name, label, `${html}`, () => {
+    const node = menuButton(name, label, `${html}`, () => {
       const panel = el('div', '');
       const grid = el('div', 'dx-tb-colors');
       for (const color of colors) {
         const choice = el('button', 'dx-tb-color');
         choice.type = 'button';
-        choice.dataset.tip = `#${color}`;
-        choice.setAttribute('aria-label', `#${color}`);
+        // Read out by its name, as in Word: a number says nothing to whoever does not see it.
+        choice.dataset.tip = colorName(color);
+        choice.setAttribute('aria-label', colorName(color));
+        if (color === current()) choice.setAttribute('aria-current', 'true');
         choice.style.background = `#${color}`;
         choice.addEventListener('click', run(() => apply(color)));
         grid.appendChild(choice);
@@ -405,7 +429,10 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
       openPopover(node, panel);
     });
     node.appendChild(swatch);
-    updates.push(() => (swatch.style.background = current() ? `#${current()}` : 'transparent'));
+    updates.push(() => {
+      swatch.style.background = current() ? `#${current()}` : 'transparent';
+      node.setAttribute('aria-label', t('color.current', { name: label, color: colorName(current()) }));
+    });
     return node;
   };
 
@@ -500,7 +527,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     ['right', t('align.right')],
     ['justify', t('align.justify')],
   ];
-  const spacing = button('spacing', t('spacing.title'), ICONS.spacing + ICONS.caret, () => {
+  const spacing = menuButton('spacing', t('spacing.title'), ICONS.spacing + ICONS.caret, () => {
     const panel = el('div', '');
     const props = editor.activeParagraphProps();
     const toggle = (label: string, on: boolean, patch: ParagraphProps) => item(label, () => editor.setParagraphProps(patch), false, on);
@@ -523,7 +550,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     openPopover(spacing, panel);
   });
   // One button for the four: it shows the alignment of the paragraph, and opens the others.
-  const alignment = button('align', t('toolbar.align'), '', () => {
+  const alignment = menuButton('align', t('toolbar.align'), '', () => {
     const panel = el('div', '');
     const now = editor.activeParagraphProps().align;
     for (const [align, label] of aligns) {
@@ -581,7 +608,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     const text = window.prompt(prompt)?.trim();
     if (text) use(text);
   };
-  const insert = button(
+  const insert = menuButton(
     'insert',
     t('toolbar.insertTools'),
     `${ICONS.plus}<span>${t('insert')}</span>${ICONS.caret}`,
@@ -641,6 +668,9 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
           : entry('toc', t('toc.insert'), () => editor.insertToc(), !outside || !body, undefined, undefined, ICONS.toc),
         el('div', 'dx-tb-rule'),
         entry('page-break', t('bubble.pageBreak'), () => editor.insertPageBreak(), !body || editor.inTable, undefined, `${MOD}↵`, ICONS.pageBreak),
+        // A part of its own: another orientation, other margins, another header from there on.
+        entry('section-break', t('insert.sectionNextPage'), () => editor.insertSectionBreak('nextPage'), !body || editor.inTable, undefined, undefined, ICONS.sectionBreak),
+        entry('section-continuous', t('insert.sectionContinuous'), () => editor.insertSectionBreak('continuous'), !body || editor.inTable, undefined, undefined, ICONS.sectionBreak),
         entry('page-number', t('insert.pageNumber'), () => openPopover(page, pagePanel()), false, undefined, undefined, ICONS.numbers),
       );
       openPopover(insert, panel);
@@ -651,7 +681,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   // --- Review -----------------------------------------------------------------------
 
   // Tracked changes: on and off, and accepting or rejecting what was tracked. On, the button says so.
-  const review = button(
+  const review = menuButton(
     'review',
     t('review.tools'),
     `${ICONS.review}<span>${t('review')}</span>${ICONS.caret}`,
@@ -684,7 +714,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   // --- Tables ---------------------------------------------------------------------
 
   // What is done to a table there is: its rows, its columns and its cells. A new one is in the Insert menu.
-  const table = button(
+  const table = menuButton(
     'table',
     t('toolbar.tableTools'),
     ICONS.table + ICONS.caret,
@@ -803,7 +833,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
 
   // The header and the footer, and the page number that goes in one of them: where it goes and how it reads.
   // Choosing among the numbers leaves the panel open, so they can be tried in turn.
-  const page = button(
+  const page = menuButton(
     'page',
     t('toolbar.pageTools'),
     ICONS.page + ICONS.caret,
@@ -890,7 +920,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   // --- Columns --------------------------------------------------------------------
 
   // The text in one, two or three columns: the section the caret is in, or the selection on its own.
-  const columns = button(
+  const columns = menuButton(
     'columns',
     t('toolbar.columns'),
     ICONS.columns + ICONS.caret,
@@ -950,15 +980,19 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   const closeTray = () => tray.classList.remove('dx-open');
   const more = el('div', 'dx-tb-group');
   more.appendChild(
-    button('more', t('toolbar.more'), ICONS.more, () => {
+    menuButton('more', t('toolbar.more'), ICONS.more, () => {
       closePopover();
       tray.classList.toggle('dx-open');
-    }, () => ({ on: tray.classList.contains('dx-open') })),
+      moreButton.setAttribute('aria-expanded', String(tray.classList.contains('dx-open')));
+      // Opened from the keyboard: it goes on into what was under the button.
+      if (tray.classList.contains('dx-open') && document.activeElement === moreButton) focusables(tray)[0]?.focus();
+    }),
   );
   // Searching is not editing: it goes at the far end of the bar.
   const end = el('div', 'dx-tb-group dx-tb-end');
   if (options.onFind) end.appendChild(button('find', `${t('toolbar.find')} (${MOD}F)`, ICONS.find, options.onFind));
   bar.append(more, end, tray);
+  const moreButton = more.querySelector('button')!;
 
   let fitted = '';
   /** Puts in the bar the groups that fit in it, and the rest under the button. */
@@ -1003,12 +1037,107 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   };
   const closeOnEscape = (e: KeyboardEvent) => {
     if (e.key !== 'Escape' || !(popover || tray.classList.contains('dx-open'))) return;
+    // From the keyboard in the bar, it goes back to the button the menu came from; else to the document.
+    const from = bar.contains(document.activeElement) ? (popover ? popoverFrom : moreButton) : null;
     // One at a time: the menu that is open first, then what it was opened from.
     if (popover) closePopover();
-    else closeTray();
+    else {
+      closeTray();
+      moreButton.setAttribute('aria-expanded', 'false');
+    }
     refresh();
-    editor.focus();
+    if (from) from.focus();
+    else editor.focus();
+    e.stopPropagation();
   };
+
+  // --- Keyboard -----------------------------------------------------------------
+  // One stop of Tab for the whole bar; the arrows go along it, as in a toolbar
+  // of the system. In a menu, up and down go through what it offers.
+
+  /** What takes the keyboard in `root`, in order: what is hidden or disabled is passed over. */
+  function focusables(root: HTMLElement): HTMLElement[] {
+    return [...root.querySelectorAll<HTMLElement>('button, select, input, [tabindex="0"]')].filter(
+      (node) => !(node as HTMLButtonElement).disabled && node.getClientRects().length > 0,
+    );
+  }
+  /** The controls of the bar in the order the arrows take: what is under the button of the rest comes after it. */
+  const controls = () => {
+    const all = focusables(bar).filter((node) => !node.closest('.dx-tb-pop, .dx-tb-tip'));
+    const inTray = all.filter((node) => tray.contains(node));
+    const rest = all.filter((node) => !tray.contains(node));
+    const at = rest.indexOf(moreButton);
+    return at < 0 ? rest : [...rest.slice(0, at + 1), ...inTray, ...rest.slice(at + 1)];
+  };
+  /** The control the bar's one stop of Tab goes to. */
+  let current: HTMLElement | null = null;
+  const rove = () => {
+    const list = controls();
+    if (!current || !list.includes(current)) current = list[0] ?? null;
+    for (const node of focusables(bar)) if (!node.closest('.dx-tb-pop')) node.tabIndex = node === current ? 0 : -1;
+  };
+  bar.addEventListener('focusin', (e) => {
+    const target = e.target as HTMLElement;
+    if (controls().includes(target)) {
+      current = target;
+      rove();
+    }
+  });
+  bar.addEventListener('keydown', (e) => {
+    const target = e.target as HTMLElement;
+    if (popover?.contains(target)) {
+      if (!e.key.startsWith('Arrow')) return;
+      // A field of the menu keeps its arrows.
+      if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement) return;
+      // A grid (the size of a table, a palette of colours) goes by rows and columns; up and down leave it at its edges.
+      const grid = target.parentElement?.matches(GRIDS) ? target.parentElement : null;
+      if (grid) {
+        const cells = focusables(grid);
+        const at = cells.indexOf(target);
+        const columns = cells.filter((cell) => cell.offsetTop === cells[0].offsetTop).length || 1;
+        const to = { ArrowRight: at + 1, ArrowLeft: at - 1, ArrowDown: at + columns, ArrowUp: at - columns }[e.key];
+        e.preventDefault();
+        if (to !== undefined && to >= 0 && to < cells.length) {
+          cells[to].focus();
+          return;
+        }
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') return;
+      } else if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      // Up and down go through what the menu offers, a grid being one of them.
+      const items = focusables(popover).filter((node) => !node.parentElement?.matches(GRIDS) || node === target || node === focusables(node.parentElement)[0]);
+      const at = items.indexOf(target);
+      items[(at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+      e.preventDefault();
+      return;
+    }
+    const list = controls();
+    const at = list.indexOf(target);
+    if (at < 0) return;
+    let next: HTMLElement | undefined;
+    if (e.key === 'ArrowRight') next = list[(at + 1) % list.length];
+    else if (e.key === 'ArrowLeft') next = list[(at - 1 + list.length) % list.length];
+    else if (e.key === 'Home') next = list[0];
+    else if (e.key === 'End') next = list[list.length - 1];
+    else if (e.key === 'ArrowDown' && target.getAttribute('aria-haspopup') && target.getAttribute('aria-expanded') !== 'true') {
+      // Down on the button of a menu opens it, and goes into it.
+      target.click();
+      e.preventDefault();
+      return;
+    }
+    else if (e.key === 'Escape' && !popover && !tray.classList.contains('dx-open')) {
+      editor.focus();
+      e.preventDefault();
+      return;
+    }
+    if (!next) return;
+    next.focus();
+    e.preventDefault();
+  });
+  markRegion(bar, 'toolbar', () => {
+    rove();
+    return current;
+  });
+  installRegionKeys();
   bar.addEventListener('mousedown', keepFocus);
   document.addEventListener('mousedown', closeOutside);
   document.addEventListener('keydown', closeOnEscape);
@@ -1017,6 +1146,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     for (const update of updates) update();
     // A name of another length leaves another room for the rest.
     fit();
+    rove();
   };
   const unsubscribe = editor.onChange(refresh);
   container.appendChild(bar);

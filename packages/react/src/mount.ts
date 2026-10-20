@@ -61,6 +61,8 @@ export interface DocsHandle {
   exportDocx(): Uint8Array;
   /** Whether it changed since it was opened or last saved. */
   readonly dirty: boolean;
+  /** Gives the document to `onSave`, as ⌘S does: what an application that saves on its own calls. */
+  save(): Promise<void>;
   setName(name: string): void;
   setAuthor(author: string): void;
   setLocale(locale: string): void;
@@ -220,6 +222,7 @@ export function mountDocs(container: HTMLElement, options: DocsOptions = {}): Do
     get dirty() {
       return docs.state().dirty;
     },
+    save: docs.save,
     setName: docs.setName,
     setAuthor: docs.setAuthor,
     setLocale(locale) {

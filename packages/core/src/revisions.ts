@@ -65,6 +65,8 @@ export function revisionNow(now = new Date()): string {
 }
 
 const runWith = (props: RunProps, type: RevisionType, by: Reviser): RunProps => defined({ ...props, revision: type, revisionAuthor: by.author, revisionDate: by.date });
+/** One of the marks of where a note starts and ends. Putting a note in or taking it out is no change to the text, tracked or not, as in Word. */
+const noteMark = (props: RunProps): boolean => !!props.anchor && /<w:comment(?:RangeStart|RangeEnd|Reference)\b/.test(props.object ?? '');
 const runWithout = (props: RunProps): RunProps => (props.revision || props.revisionAuthor || props.revisionDate ? defined({ ...props, revision: undefined, revisionAuthor: undefined, revisionDate: undefined }) : props);
 const markWith = (props: ParagraphProps, type: RevisionType, by: Reviser): ParagraphProps => defined({ ...props, markRevision: type, markAuthor: by.author, markDate: by.date });
 const markWithout = (props: ParagraphProps): ParagraphProps => (props.markRevision || props.markAuthor || props.markDate ? defined({ ...props, markRevision: undefined, markAuthor: undefined, markDate: undefined }) : props);
@@ -241,7 +243,7 @@ function trackParagraphs(before: Paragraph[], after: Paragraph[], by: Reviser, w
       if (!e.item.mark) {
         // What comes in already marked as put in keeps who put it in: tracking an edit twice changes nothing.
         const props =
-          e.type === 'same' || (e.type === 'insert' && e.item.props.revision === 'insert') || (e.type === 'delete' && e.item.props.revision === 'delete')
+          e.type === 'same' || noteMark(e.item.props) || (e.type === 'insert' && e.item.props.revision === 'insert') || (e.type === 'delete' && e.item.props.revision === 'delete')
             ? e.item.props
             : runWith(e.item.props, e.type, by);
         if (e.at) place(e.at[0], e.at[1], { para: out.length, offset: length });
@@ -297,7 +299,7 @@ function trackParagraphs(before: Paragraph[], after: Paragraph[], by: Reviser, w
       else {
         const item = b.items[op.b];
         // What was put in and is taken out again goes for good.
-        if (item.mark ? item.from.props.markRevision === 'insert' : item.props.revision === 'insert') continue;
+        if (item.mark ? item.from.props.markRevision === 'insert' : item.props.revision === 'insert' || noteMark(item.props)) continue;
         emitted.push({ item, type: 'delete' });
       }
     }

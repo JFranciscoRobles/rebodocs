@@ -6,6 +6,7 @@
 import { type FormatId, NOTE_COLORS, cleanHref, isVariableName } from '@rebodocs/core';
 import { recallAuthor, setAuthor } from './author';
 import type { Editor, MarkKey } from './editor';
+import { arrowsThrough, colorName } from './a11y';
 import { type MessageKey, t } from './i18n';
 import { IS_MAC } from './platform';
 import { createImagePicker } from './imagegrid';
@@ -47,7 +48,7 @@ const CSS = `
 .dx-bb input{width:150px;height:28px;padding:0 8px;border:1px solid #d2d6de;border-radius:6px;font:inherit;color:inherit}
 .dx-bb input:focus-visible{outline:2px solid #0b57d0;outline-offset:-2px}
 .dx-bb input.dx-bb-author{width:120px}
-.dx-bb-dots{display:inline-flex;align-items:center;gap:5px;padding:0 6px}
+.dx-bb-dots{display:inline-flex;align-items:center;gap:6px;padding:0 6px}
 .dx-bb button.dx-bb-dot{width:18px;min-width:18px;height:18px;padding:0;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
 .dx-bb button.dx-bb-dot.dx-on{box-shadow:0 0 0 2px #2b2f38}
 .dx-bb-words{max-width:360px;padding:0 6px;line-height:1.35;white-space:normal}
@@ -340,7 +341,8 @@ export function createBubble(editor: Editor): Bubble {
         dot.type = 'button';
         dot.className = 'dx-bb-dot';
         dot.dataset.color = color;
-        dot.title = t('note.color');
+        dot.title = colorName(color);
+        dot.setAttribute('aria-label', colorName(color));
         dot.setAttribute('role', 'radio');
         dot.style.background = `#${color}`;
         dot.addEventListener('click', () => {
@@ -400,20 +402,36 @@ export function createBubble(editor: Editor): Bubble {
       if (item.on !== undefined) node.setAttribute('aria-pressed', String(item.on));
       if (item.css) node.style.cssText = item.css;
       node.disabled = !!item.disabled;
-      node.addEventListener('click', () => {
+      node.tabIndex = -1;
+      node.addEventListener('click', (e) => {
+        // From the keyboard, the keyboard stays on the bar for the next button; a click gives it back to the text.
+        const keyed = e.detail === 0 && bar.contains(document.activeElement);
+        const at = buttons().indexOf(node);
         acting = true;
         try {
           item.run();
         } finally {
           acting = false;
         }
-        if (!naming) editor.focus();
+        if (!naming && !(keyed && !item.closes)) editor.focus();
         if (item.closes) close();
-        else if (isOpen) refresh();
+        else if (isOpen) {
+          refresh();
+          if (keyed && !naming) buttons()[Math.min(at, buttons().length - 1)]?.focus();
+        }
       });
       bar.appendChild(node);
     }
+    const first = buttons()[0];
+    if (first) first.tabIndex = 0;
   };
+  const buttons = () => [...bar.querySelectorAll<HTMLButtonElement>(':scope > button:not(:disabled)')];
+  // Along the bar with the arrows, as along the toolbar; the one with the keyboard is the one Tab comes back to.
+  arrowsThrough(bar, buttons, { next: ['ArrowRight', 'ArrowDown'], prev: ['ArrowLeft', 'ArrowUp'] });
+  bar.addEventListener('focusin', (e) => {
+    if (!(e.target instanceof HTMLButtonElement) || e.target.parentElement !== bar) return;
+    for (const other of buttons()) other.tabIndex = other === e.target ? 0 : -1;
+  });
   const refresh = () => {
     render();
     place();
@@ -424,13 +442,16 @@ export function createBubble(editor: Editor): Bubble {
     isOpen = true;
     bar.classList.add('dx-bb-open');
     refresh();
+    // Shown by the key, it says what it is about and how to reach it: the keyboard stays in the text.
+    if (inEditor() && !editor.byTouch) editor.announce(`${t('bubble.label')}: ${bar.dataset.kind ?? ''}. ${t('a11y.bubbleHint')}`);
   };
   const close = () => {
     if (!isOpen) return;
     isOpen = false;
+    const had = bar.contains(document.activeElement);
     bar.classList.remove('dx-bb-open');
-    // The name of a variable was being typed in it: the keyboard goes back to the document.
-    if (naming) editor.focus();
+    // The name of a variable was being typed in it, or its buttons had the keyboard: it goes back to the document.
+    if (naming || had) editor.focus();
     naming = false;
   };
   const toggle = () => (isOpen ? close() : open());
@@ -452,7 +473,23 @@ export function createBubble(editor: Editor): Bubble {
     }
     armed = 0;
     if (!isOpen || e.key === TAP_KEY) return;
-    // What is typed in its own field is for it.
+    // Tab from the text goes to its buttons.
+    if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && inEditor() && !naming) {
+      const to = buttons().find((node) => node.tabIndex === 0) ?? buttons()[0];
+      if (to) {
+        e.preventDefault();
+        e.stopPropagation();
+        to.focus();
+        return;
+      }
+    }
+    // Tab from its buttons goes back to the text, and the bar goes with it.
+    if (e.key === 'Tab' && !naming && bar.contains(e.target as Node)) {
+      e.preventDefault();
+      close();
+      return;
+    }
+    // What is typed in its own field, and what moves along its buttons, is for it.
     if (bar.contains(e.target as Node) && e.key !== 'Escape') return;
     // Escape only puts the bar away; any other key goes on to do what it does, without it.
     if (e.key === 'Escape') e.stopPropagation();

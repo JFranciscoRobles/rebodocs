@@ -5,8 +5,7 @@ import { highlight } from '@/lib/docs';
 import { NPM, NPM_ORG, REPO } from '@/lib/site';
 
 const FEATURES = [
-  ['Compatible with Word files', 'It reads and writes DOCX, and lays pages out by the same rules, so a document looks the same here and there. Text pasted from Word, Google Docs or the web keeps its look.'],
-  ['DOCX in, the same DOCX out', 'What the editor does not understand stays in the file untouched. Nothing is lost by opening and saving.'],
+  ['Compatible with Word files', 'It reads and writes DOCX by the same rules of layout, and what it does not understand stays in the file untouched. Text pasted from Word, Google Docs or the web keeps its look.'],
   ['Templates', 'Any text in double braces is a variable. Fill contracts and receipts from the editor, from code or from the command line.'],
   ['Real-time collaboration', 'Several people on one document, each seeing the others’ carets, with undo of their own. Your backend keeps the files, and a version of each session of work.'],
   ['Tracked changes', 'What is typed stays underlined and what is deleted stays struck through, signed by who did it, until someone accepts or rejects it. Word reads the same changes.'],
@@ -15,6 +14,7 @@ const FEATURES = [
   ['Fonts that travel', 'Fonts of your own, TrueType or OpenType, go into the PDF, and into the DOCX when their licence lets them, so it looks the same where they are not installed.'],
   ['PDF without a browser', 'The same layout runs in Node. Generate a PDF with embedded fonts and selectable text on your server.'],
   ['On a phone and on the desktop', 'Pages fit the screen and zoom with two fingers. On a computer, a Tauri application opens and saves .docx files of the disk, with a native menu.'],
+  ['Accessible', 'A screen reader hears what the caret moves over, or reads the paragraph itself in screen reader mode. Every bar, menu and dialog works from the keyboard, and high contrast is kept.'],
   ['Yours to style', 'Use the interface that comes with it, or build your own with headless hooks and Tailwind.'],
   ['AI assistants', 'Claude reads and changes the real document, keeping its look: from Claude Desktop through an MCP server, or in a chat beside the editor of your application.'],
 ];
@@ -202,7 +202,7 @@ export default async function Home() {
         <div className="rounded-2xl bg-soft p-6 sm:p-10">
           <Title>Where it stands</Title>
           <p className="mt-3.5 max-w-[66ch] text-[17px] leading-relaxed text-muted">
-            Rebodocs works and has 394 automated tests, and it has not been used in production yet. Every package is{' '}
+            Rebodocs works and has 399 automated tests, and it has not been used in production yet. Every package is{' '}
             <a href={NPM_ORG} className="font-semibold text-brand hover:underline">
               on npm
             </a>

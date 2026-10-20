@@ -13,6 +13,8 @@ import {
   hitTest,
   importDocx,
   insertColumnBreak,
+  insertSectionBreak,
+  setSectionPage,
   layoutDocument,
   paragraphText,
   sectionCount,
@@ -187,6 +189,30 @@ describe('sections', () => {
     expect(line(2).y).toBe(line(1).y);
     expect(line(2).x).toBeGreaterThan(line(1).x);
     expect(line(3).y).toBeGreaterThan(line(2).y);
+  });
+
+  it('starts a new section at the caret, on the next page or on the same one, that takes a page of its own', () => {
+    const doc = createDoc([createParagraph('abcd'), createParagraph('e')]);
+    const { doc: next, pos } = insertSectionBreak(doc, { para: 0, offset: 2 });
+    expect(pos).toEqual({ para: 1, offset: 0 });
+    expect(next.paragraphs.map(paragraphText)).toEqual(['ab', 'cd', 'e']);
+    expect(sectionCount(next)).toBe(2);
+    // What comes before keeps the page it had; what follows starts on a page of its own.
+    expect(next.paragraphs[0].section?.page).toEqual(doc.page);
+    expect(layoutDocument(next, measurer).pages).toHaveLength(2);
+    // Turned on its side, only the new section is.
+    const turned = setSectionPage(next, 1, { width: doc.page.height, height: doc.page.width });
+    expect(turned.page.width).toBe(doc.page.height);
+    expect(turned.paragraphs[0].section?.page.width).toBe(doc.page.width);
+    // Continuous, it goes on in the same page.
+    const same = insertSectionBreak(doc, { para: 0, offset: 2 }, 'continuous').doc;
+    expect(same.sectionStart).toBe('continuous');
+    expect(layoutDocument(same, measurer).pages).toHaveLength(1);
+    // Taking the break away joins the sections again.
+    expect(sectionCount(deleteRange(next, { from: { para: 0, offset: 2 }, to: { para: 1, offset: 0 } }))).toBe(1);
+    // Not inside a table.
+    const cell = { ...doc, paragraphs: [{ ...doc.paragraphs[0], cell: { table: 't', row: 0, col: 0 } as never }, doc.paragraphs[1]] };
+    expect(insertSectionBreak(cell, { para: 0, offset: 1 }).doc).toBe(cell);
   });
 
   it('keeps the end of a section with the second half of a split paragraph, and with what is left of a merged one', () => {

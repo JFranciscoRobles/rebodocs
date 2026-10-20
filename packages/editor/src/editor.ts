@@ -198,6 +198,7 @@ import {
   boxLines,
   columnsAt,
   insertColumnBreak,
+  insertSectionBreak,
   setColumns,
   setHeaderRow,
   type Clip,
@@ -208,7 +209,8 @@ import {
   parseClip,
   serializeClip,
 } from '@rebodocs/core';
-import { onLocaleChange, t } from './i18n';
+import { onLocaleChange, styleName, t } from './i18n';
+import { type Announcer, VISUALLY_HIDDEN, createAnnouncer, injectA11yStyle, installRegionKeys, markRegion, spokenChar, spokenText } from './a11y';
 import { clipFromHtml } from './paste';
 import { fontFaces, fontFile, onFontsChange } from './fonts';
 import { IS_MAC, keyboardInset } from './platform';
@@ -304,6 +306,10 @@ const STYLE_ID = 'dx-editor-style';
  * away, and that is how the key is known.
  */
 const INPUT_MARK = '\u200B';
+/** The keys that turn the mode for screen readers on and off, as in Google Docs. */
+const READER_KEYS = IS_MAC ? '⌘⌥Z' : 'Ctrl+Alt+Z';
+/** How many editors were made, so that the ids of each are its own. */
+let editors = 0;
 /** A finger held still this long selects the word under it; one that moves this far, in pixels, is scrolling. */
 const HOLD_MS = 450;
 const TOUCH_SLOP = 10;
@@ -514,6 +520,20 @@ export class Editor {
   private composing = false;
   /** Set by the keys of a paste without formatting, for the paste that follows them. */
   private plainPaste = false;
+  /** What a screen reader is told. */
+  private announcer!: Announcer;
+  /** The keys to leave the document, for a screen reader. */
+  private hint = document.createElement('div');
+  /** How the last key moved the caret, for saying what it moved over. */
+  private moved: 'char' | 'word' | 'line' | 'all' | undefined;
+  /** The page last said, so that a new one is said once. */
+  private spokenPage = -1;
+  /**
+   * With the mode for screen readers on: the paragraph the caret is in, as the
+   * hidden field holds it, and the part of it selected there. Off, the field
+   * holds only a mark, and what the caret meets is said by the editor.
+   */
+  private mirror: { text: string; start: number; end: number } | undefined;
   /** What of the text in the hidden field is already in the document: a word still being composed, as far as it has got. */
   private typed = '';
   /** Where the caret was left by what was typed, which is where the rest of it goes. */
@@ -533,12 +553,17 @@ export class Editor {
   private caretHandleTimer = 0;
   private listeners = new Set<() => void>();
   /** Its own labels over the pages are written again when the language changes. */
-  private stopLocale = onLocaleChange(() => this.renderSelection());
+  private stopLocale = onLocaleChange(() => {
+    this.input.setAttribute('aria-label', t('a11y.document'));
+    this.hint.textContent = t('a11y.hint', { reader: READER_KEYS });
+    this.renderSelection();
+  });
   /** A font the application gives changes how wide its text is: everything is measured again. */
   private stopFonts = onFontsChange(() => this.refont());
 
   constructor(container: HTMLElement, doc: Doc = createDoc()) {
     injectStyle();
+    injectA11yStyle();
     this.doc = doc;
     this.root = container;
     this.root.classList.add('dx-editor');
@@ -550,7 +575,11 @@ export class Editor {
     this.input.setAttribute('autocapitalize', 'off');
     this.input.setAttribute('autocorrect', 'off');
     this.input.spellcheck = false;
+    // A screen reader takes the field for the document: what it holds is the editor's, what the caret meets is said.
+    this.input.setAttribute('aria-label', t('a11y.document'));
+    this.input.setAttribute('aria-multiline', 'true');
     this.caretEl = document.createElement('div');
+    this.caretEl.setAttribute('aria-hidden', 'true');
     this.caretEl.className = 'dx-caret';
     this.pagesEl.append(this.input, this.caretEl);
     // In a layer as large as the pages and no larger: a handle at their edge does not make them wider.
@@ -558,6 +587,15 @@ export class Editor {
     this.pagesEl.appendChild(this.handleLayer);
     this.handles = { anchor: this.handle('anchor'), focus: this.handle('focus'), caret: this.handle('caret') };
     this.root.appendChild(this.pagesEl);
+    this.announcer = createAnnouncer(this.root);
+    // What the keys to leave the document are, said when it is reached.
+    this.hint.id = `dx-hint-${++editors}`;
+    this.hint.style.cssText = VISUALLY_HIDDEN;
+    this.hint.textContent = t('a11y.hint', { reader: READER_KEYS });
+    this.root.appendChild(this.hint);
+    this.input.setAttribute('aria-describedby', this.hint.id);
+    markRegion(this.root, 'document', () => this.input);
+    installRegionKeys();
     this.resetInput();
 
     this.pagesEl.addEventListener('mousedown', this.onMouseDown);
@@ -610,6 +648,7 @@ export class Editor {
 
   destroy(): void {
     this.stopLocale();
+    this.announcer.destroy();
     this.stopFonts();
     this.hideNoteTip();
     window.removeEventListener('mousemove', this.onMouseMove);
@@ -634,6 +673,78 @@ export class Editor {
 
   focus(): void {
     this.input.focus({ preventScroll: true });
+  }
+
+  /** Says `text` to a screen reader, as the editor says what the keys do: for the bars and panels around it. */
+  announce(text: string, urgent = false): void {
+    this.announcer.say(text, urgent);
+  }
+
+  /**
+   * The mode for screen readers: the field that has the keyboard holds the
+   * paragraph the caret is in, with the caret and the selection where they
+   * are, so that the screen reader reads it with its own commands (the
+   * current line, the word, spelling it out) and a braille display shows it.
+   * The editor then leaves saying the text to the screen reader, and says
+   * only where the caret is: the page, the table, the heading. Off unless
+   * set; ⌘⌥Z (Ctrl+Alt+Z elsewhere) turns it on and off.
+   */
+  get screenReader(): boolean {
+    return !!this.mirror;
+  }
+
+  set screenReader(on: boolean) {
+    if (on === this.screenReader) return;
+    this.mirror = on ? { text: '', start: 0, end: 0 } : undefined;
+    this.root.classList.toggle('dx-reader', on);
+    this.resetInput();
+    this.announcer.say(t(on ? 'a11y.readerOn' : 'a11y.readerOff'), true);
+    this.emit();
+  }
+
+  /** Puts in the hidden field the paragraph the caret is in, and the selection in it, when the mode for screen readers is on. */
+  private syncMirror(): void {
+    if (!this.mirror || this.composing) return;
+    const { anchor, focus } = this.selection;
+    const text = paragraphText(this.text.paragraphs[focus.para]);
+    // A selection that goes on into other paragraphs is shown as far as the edge of this one.
+    const other = anchor.para === focus.para ? anchor.offset : anchor.para < focus.para ? 0 : text.length;
+    const start = Math.min(other, focus.offset);
+    const end = Math.max(other, focus.offset);
+    this.mirror = { text, start, end };
+    if (this.input.value !== text) this.input.value = text;
+    if (this.input.selectionStart !== start || this.input.selectionEnd !== end) this.input.setSelectionRange(start, end, other > focus.offset ? 'backward' : 'forward');
+  }
+
+  /**
+   * What was typed in the field while it holds the paragraph: what took the
+   * place of the selection there, or, when something else changed, as the
+   * corrections of a keyboard do, what differs from what it held.
+   */
+  private readerInput(): void {
+    const mirror = this.mirror;
+    if (!mirror || this.composing) return;
+    const { text: was, start, end } = mirror;
+    const now = this.input.value;
+    const kept = was.length - end;
+    let added: string;
+    if (now.length >= start + kept && now.startsWith(was.slice(0, start)) && now.endsWith(was.slice(end))) {
+      added = now.slice(start, now.length - kept);
+    } else {
+      let from = 0;
+      while (from < was.length && from < now.length && was[from] === now[from]) from++;
+      let back = 0;
+      while (back < was.length - from && back < now.length - from && was[was.length - 1 - back] === now[now.length - 1 - back]) back++;
+      const { para } = this.selection.focus;
+      this.setSelection({ para, offset: from }, { para, offset: was.length - back });
+      added = now.slice(from, now.length - back);
+    }
+    const entered = added.endsWith('\n');
+    if (entered) added = added.slice(0, -1);
+    if (added) this.insertText(added);
+    else if (!this.collapsed) this.deleteBackward();
+    if (entered) this.insertParagraphBreak();
+    this.syncMirror();
   }
 
   /**
@@ -978,7 +1089,8 @@ export class Editor {
   /** Where the selection is in the window: the selected text or picture, or the caret when nothing is. */
   selectionBounds(): DOMRect | undefined {
     const marks = [...this.root.querySelectorAll('.dx-sel, .dx-objsel')];
-    const rects = (marks.length ? marks : [this.caretEl]).map((el) => el.getBoundingClientRect()).filter((r) => r.height > 0);
+    // The caret is not shown while the document does not have the keyboard: the hidden field stands where it is.
+    const rects = (marks.length ? marks : [this.caretEl, this.input]).map((el) => el.getBoundingClientRect()).filter((r) => r.height > 0);
     if (!rects.length) return undefined;
     const left = Math.min(...rects.map((r) => r.left));
     const top = Math.min(...rects.map((r) => r.top));
@@ -1282,6 +1394,8 @@ export class Editor {
     const first = area === 'body' ? this.paged.pages[at]?.lines[0] : undefined;
     const pos = first ? { para: first.para, offset: first.start } : docStart();
     this.setSelection(pos);
+    const name = this.area === 'body' ? t('a11y.body') : t(`area.${this.area}`);
+    this.announcer.say(this.area === 'body' ? name : `${name}, ${t('a11y.page', { page: this.pageOf(this.areaPage) + 1 })}`, true);
   }
 
   /** The document the selection is in: the real one, or the header or footer seen as one. */
@@ -1448,6 +1562,7 @@ export class Editor {
 
   selectAll(): void {
     this.setSelection(docStart(), docEnd(this.text));
+    this.announcer.say(t('a11y.allSelected'), true);
   }
 
   /** Formatting of the selection start, or of the text about to be typed. */
@@ -1550,6 +1665,8 @@ export class Editor {
       }
     }
     const kind = this.collapsed && !byWord ? (dir < 0 ? 'backspace' : 'delete') : '';
+    const gone = textInRange(this.text, range);
+    this.announcer.say(t('a11y.deleted', { text: gone.length === 1 ? spokenChar(gone) : spokenText(gone) }), true);
     this.forward = dir > 0;
     try {
       this.commit(deleteRange(this.text, range), { anchor: range.from, focus: range.from }, kind);
@@ -1559,14 +1676,18 @@ export class Editor {
   }
 
   toggleMark(key: MarkKey): void {
+    const say = (on: boolean) => this.announcer.say(t(on ? 'a11y.on' : 'a11y.off', { name: t(`mark.${key}`) }), true);
     if (this.collapsed) {
       const current = this.pendingProps ?? propsAt(this.text, this.selection.focus);
-      this.pendingProps = { ...current, [key]: !resolveRun(current)[key] };
+      const on = !resolveRun(current)[key];
+      this.pendingProps = { ...current, [key]: on };
       this.emit();
+      say(on);
       return;
     }
     const allOn = runsInRange(this.text, this.range).every((r) => resolveRun(r.props)[key]);
     this.commit(applyRunProps(this.text, this.range, { [key]: !allOn }), this.selection);
+    say(!allOn);
   }
 
   setRunProps(patch: RunProps): void {
@@ -2397,6 +2518,21 @@ export class Editor {
     if (result.doc !== doc) this.commitDoc(result.doc, { anchor: result.pos, focus: result.pos });
   }
 
+  /**
+   * Starts a new section at the caret, as Word's section break: on the next
+   * page, or `continuous` on the same one. What comes before keeps how it is
+   * set out; what follows can then be given another page, other margins,
+   * columns or a header of its own.
+   */
+  insertSectionBreak(start: 'nextPage' | 'continuous' = 'nextPage'): void {
+    if (this.area !== 'body' || this.inTable) return;
+    const doc = this.collapsed ? this.doc : deleteRange(this.doc, this.range);
+    const result = insertSectionBreak(doc, this.range.from, start);
+    if (result.doc === doc) return;
+    this.commitDoc(result.doc, { anchor: result.pos, focus: result.pos });
+    this.announcer.say(t('area.section', { n: this.sectionIndex + 1 }), true);
+  }
+
   /** Changes the size or the margins of the page of the section, or, with `everywhere`, of every section. */
   setPage(patch: Partial<PageSetup>, everywhere = false): void {
     const marks = sectionMarks(this.doc);
@@ -2441,13 +2577,17 @@ export class Editor {
   }
 
   undo(): void {
+    const could = this.canUndo;
     if (this.history) this.history.undo();
     else this.restore(this.undoStack, this.redoStack);
+    this.announcer.say(t(could ? 'a11y.undone' : 'a11y.nothingToUndo'), true);
   }
 
   redo(): void {
+    const could = this.canRedo;
     if (this.history) this.history.redo();
     else this.restore(this.redoStack, this.undoStack);
+    this.announcer.say(t(could ? 'a11y.redone' : 'a11y.nothingToRedo'), true);
   }
 
   get canUndo(): boolean {
@@ -2566,6 +2706,8 @@ export class Editor {
       if (!el) {
         el = document.createElement('div');
         el.className = 'dx-page';
+        // Positioned pieces of text a screen reader cannot follow: what the caret meets is said instead.
+        el.setAttribute('aria-hidden', 'true');
         this.pagesEl.insertBefore(el, this.input);
         const sheet = document.createElement('div');
         sheet.className = 'dx-sheet';
@@ -3021,6 +3163,7 @@ export class Editor {
     this.renderMargin();
     this.renderTocChip();
     this.placeCaret(this.selection.focus, this.collapsed);
+    this.syncMirror();
     this.renderHandles();
 
     // Restart the blink so the caret stays solid while it moves.
@@ -3726,10 +3869,12 @@ export class Editor {
 
   private moveHorizontal(dir: -1 | 1, byWord: boolean, extend: boolean): void {
     if (!extend && !this.collapsed) {
+      this.moved = 'char';
       this.moveTo(dir < 0 ? this.range.from : this.range.to, false);
       return;
     }
     const focus = this.selection.focus;
+    this.moved = byWord ? 'word' : 'char';
     this.moveTo(byWord ? moveWord(this.text, focus, dir) : moveChar(this.text, focus, dir), extend);
   }
 
@@ -3744,6 +3889,7 @@ export class Editor {
       : dir < 0
         ? docStart()
         : docEnd(this.text);
+    this.moved = 'line';
     this.moveTo(pos, extend);
     this.goalX = x;
   }
@@ -3757,16 +3903,26 @@ export class Editor {
       cell = neighbourCell(this.text, this.selection.focus.para, dir);
     }
     if (!cell) return;
+    this.moved = 'line';
     const end = { para: cell.to, offset: paragraphLength(this.text.paragraphs[cell.to]) };
     this.setSelection({ para: cell.from, offset: 0 }, end);
   }
 
   private moveToLineEdge(dir: -1 | 1, extend: boolean): void {
     const line = lineForPosition(this.flow, this.mapOffset(this.selection.focus, true));
+    this.moved = 'line';
     this.moveTo(this.mapOffset({ para: line.para, offset: dir < 0 ? line.start : lineEndOffset(line) }, false), extend);
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    const before = this.selection;
+    this.moved = undefined;
+    this.handleKey(e);
+    if (this.moved) this.announceMove(before);
+    this.moved = undefined;
+  };
+
+  private handleKey(e: KeyboardEvent): void {
     this.hideNoteTip();
     if (e.isComposing || this.composing) return;
     const mod = e.metaKey || e.ctrlKey;
@@ -3782,6 +3938,11 @@ export class Editor {
       return;
     }
 
+    if ((IS_MAC ? e.metaKey : e.ctrlKey) && e.altKey && !e.shiftKey && e.code === 'KeyZ') {
+      this.screenReader = !this.screenReader;
+      e.preventDefault();
+      return;
+    }
     if (mod && e.altKey && e.code === 'KeyF') {
       // A note at the foot of the page, with the keys Word has for it.
       this.insertFootnote();
@@ -3891,9 +4052,98 @@ export class Editor {
       }
     }
     if (handled) e.preventDefault();
-  };
+  }
+
+  /**
+   * Says what a key moved the caret over: the character, the word or the line
+   * it is now at, or what it added to the selection or took from it; and,
+   * before that, where it is when that changed: the page, a table cell, a
+   * heading, a list, a link, a tracked change.
+   */
+  private announceMove(before: Selection): void {
+    const { anchor, focus } = this.selection;
+    if (comparePositions(focus, before.focus) === 0 && comparePositions(anchor, before.anchor) === 0) return;
+    const doc = this.text;
+    const parts: string[] = [];
+    if (this.area === 'body') {
+      const page = lineForPosition(this.flow, this.mapOffset(focus, true)).page;
+      if (page !== this.spokenPage && this.spokenPage >= 0) parts.push(t('a11y.page', { page: this.pageOf(page) + 1 }));
+      this.spokenPage = page;
+    }
+    const selecting = comparePositions(anchor, focus) !== 0;
+    // While selecting, what is said is what was selected, not where it is.
+    if (focus.para !== before.focus.para && !selecting) parts.push(...this.whereIs(focus.para, before.focus.para));
+    // In the mode for screen readers, the text is the screen reader's to read, from the field: only where it is is said.
+    const reader = !!this.mirror;
+    if (reader && selecting) {
+      // Nothing is said of a selection: the screen reader says what it selected.
+    } else if (selecting) {
+      // Further from the anchor than it was: what it went over is now selected.
+      const grew = Math.abs(this.distance(anchor, focus)) > Math.abs(this.distance(anchor, before.focus)) || comparePositions(anchor, before.anchor) !== 0;
+      const moved = textInRange(doc, orderedRange(before.focus, focus));
+      // A character that is the mark between two paragraphs is the end of the first.
+      const said = moved === '\n' && focus.para !== before.focus.para ? t('a11y.endOfParagraph') : this.moved === 'char' ? spokenChar(moved) : spokenText(moved);
+      parts.push(t(grew ? 'a11y.selected' : 'a11y.unselected', { text: said }));
+    } else {
+      const text = paragraphText(doc.paragraphs[focus.para]);
+      if (reader) {
+        // What the caret is at is read from the field.
+      } else if (this.moved === 'char') parts.push(spokenChar(text[focus.offset]));
+      else if (this.moved === 'word') {
+        const word = wordRangeAt(doc, focus);
+        parts.push(word.to.offset > word.from.offset ? text.slice(word.from.offset, word.to.offset) : spokenChar(text[focus.offset]));
+      } else {
+        const line = lineForPosition(this.flow, this.mapOffset(focus, true));
+        const from = this.mapOffset({ para: line.para, offset: line.start }, false).offset;
+        const to = this.mapOffset({ para: line.para, offset: line.end }, false).offset;
+        parts.push(spokenText(text.slice(from, to)));
+      }
+      const link = linkAt(doc, focus);
+      const was = linkAt(doc, before.focus);
+      if (link?.href && link.href !== was?.href) parts.push(t('a11y.link', { href: link.href }));
+      const revision = revisionAt(doc.paragraphs, focus);
+      if (revision && revision !== revisionAt(doc.paragraphs, before.focus)) {
+        parts.push(t(revision.type === 'delete' ? 'a11y.removed' : 'a11y.inserted', { author: revision.author }));
+      }
+    }
+    // Under what the screen reader reads from the field, not over it.
+    this.announcer.say(parts.join('. '), !reader);
+  }
+
+  /** How far `to` is from `from`, in characters of the text, paragraphs counting one each. */
+  private distance(from: Position, to: Position): number {
+    const sign = comparePositions(from, to);
+    if (sign === 0) return 0;
+    const range = sign < 0 ? { from, to } : { from: to, to: from };
+    return textInRange(this.text, range).length * (sign < 0 ? 1 : -1);
+  }
+
+  /** What changed of where the caret is, from paragraph `was` to paragraph `para`: a table cell, a heading, a list. */
+  private whereIs(para: number, was: number): string[] {
+    const doc = this.text;
+    const out: string[] = [];
+    const cell = locateCell(doc, para);
+    const before = locateCell(doc, was);
+    if (cell && (cell.tableIndex !== before?.tableIndex || cell.rowIndex !== before.rowIndex || cell.cellIndex !== before.cellIndex)) {
+      out.push(t('a11y.cell', { row: cell.rowIndex + 1, column: cell.column + 1 }));
+    } else if (!cell && before) out.push(t('a11y.leftTable'));
+    const style = styleIdAt(doc, para);
+    const styles = paragraphStyles(doc);
+    if (style !== styleIdAt(doc, was) && style !== styles[0].id) {
+      const found = styles.find((s) => s.id === style);
+      if (found) out.push(styleName(found));
+    }
+    const list = listKindAt(doc, para);
+    const level = doc.paragraphs[para].props.listLevel ?? 0;
+    if (list && (list !== listKindAt(doc, was) || level !== (doc.paragraphs[was].props.listLevel ?? 0))) {
+      const name = t(list === 'bullet' ? 'a11y.bulletList' : 'a11y.numberList');
+      out.push(level ? `${name}, ${t('a11y.level', { level: level + 1 })}` : name);
+    }
+    return out;
+  }
 
   private onInput = (): void => {
+    if (this.mirror) return this.readerInput();
     const raw = this.input.value;
     const marked = raw.startsWith(INPUT_MARK);
     // The mark is gone and nothing else is there: it was taken away, which is a Backspace.
@@ -3916,7 +4166,7 @@ export class Editor {
     // Some browsers say what was composed once more after it ended, in an input of their own: by the time
     // this runs they have, and the field was emptied twice over.
     window.setTimeout(() => {
-      if (!this.composing && this.input.value !== INPUT_MARK) this.onInput();
+      if (!this.composing && !this.mirror && this.input.value !== INPUT_MARK) this.onInput();
     });
   };
 
@@ -3952,7 +4202,8 @@ export class Editor {
   private resetInput(): void {
     this.typed = '';
     this.typedEnd = undefined;
-    if (this.input.value !== INPUT_MARK) this.input.value = INPUT_MARK;
+    if (this.mirror) this.syncMirror();
+    else if (this.input.value !== INPUT_MARK) this.input.value = INPUT_MARK;
   }
 
   // --- Touch --------------------------------------------------------------
@@ -4225,6 +4476,7 @@ export class Editor {
     const doc = this.collapsed ? this.text : deleteRange(this.text, range);
     const result = insertClip(doc, outsideField(doc, range.from), clip);
     this.commit(result.doc, { anchor: result.pos, focus: result.pos });
+    this.announcer.say(t('a11y.pasted'));
     return true;
   }
 

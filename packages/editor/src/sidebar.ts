@@ -5,6 +5,7 @@
 // the public methods of the editor.
 
 import { type PageSetup, imageExtension } from '@rebodocs/core';
+import { arrowsThrough, holdFocus, tabbables } from './a11y';
 import type { Editor } from './editor';
 import { type MessageKey, getLocale, locales, t } from './i18n';
 import { IS_MAC } from './platform';
@@ -59,7 +60,7 @@ const CSS = `
 .dx-side-scrim{position:fixed;inset:0;z-index:40;background:rgba(20,24,32,.32);opacity:0;visibility:hidden;transition:opacity .18s,visibility .18s}
 .dx-side{position:fixed;left:0;top:0;bottom:0;z-index:41;display:flex;flex-direction:column;width:300px;max-width:88vw;background:#fff;box-shadow:4px 0 24px rgba(0,0,0,.18);font:13px system-ui,-apple-system,"Segoe UI",sans-serif;color:#2b2f38;transform:translateX(-105%);visibility:hidden;transition:transform .18s,visibility .18s}
 .dx-side-open.dx-side-scrim{opacity:1;visibility:visible}
-.dx-side-open.dx-side{transform:none;visibility:visible}
+.dx-side-open.dx-side{transform:none;visibility:visible;transition:transform .18s}
 .dx-side-top{display:flex;align-items:center;gap:8px;padding:12px 12px 12px 16px;border-bottom:1px solid #e3e6ec}
 .dx-side-name{flex:1;min-width:0;overflow:hidden;font-weight:600;font-size:14px;text-overflow:ellipsis;white-space:nowrap}
 .dx-side-body{flex:1;overflow-y:auto;padding:6px 8px 16px}
@@ -146,6 +147,7 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
   const side = el('aside', 'dx-side');
   side.setAttribute('role', 'dialog');
   side.setAttribute('aria-label', t('menu.title'));
+  side.setAttribute('aria-modal', 'true');
   const top = el('div', 'dx-side-top');
   const name = el('div', 'dx-side-name');
   const x = el('button', 'dx-side-x', ICONS.close);
@@ -164,12 +166,15 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
 
   /** Says in the menu whether there is a letterhead to change or to take away, each time it opens. */
   let letterheadItems = () => {};
-  const close = () => {
+  /** Gives the keyboard back to what had it when the menu opened, and lets Tab out again. */
+  let release: ((restore?: boolean) => void) | undefined;
+  const close = (restore = true) => {
     if (!isOpen) return;
     isOpen = false;
     scrim.classList.remove('dx-side-open');
     side.classList.remove('dx-side-open');
-    editor.focus();
+    release?.(restore);
+    release = undefined;
   };
   const open = () => {
     if (isOpen) return;
@@ -178,8 +183,12 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
     letterheadItems();
     scrim.classList.add('dx-side-open');
     side.classList.add('dx-side-open');
-    x.focus();
+    release = holdFocus(side, () => editor.focus());
+    // The first thing to do, not the button that closes: Escape does that.
+    (body.querySelector<HTMLElement>('.dx-side-item:not([hidden])') ?? x).focus();
   };
+  // Up and down the entries, as in a menu.
+  arrowsThrough(side, () => tabbables(body).filter((node) => node.classList.contains('dx-side-item')));
 
   const head = (label: string) => {
     const node = el('div', 'dx-side-head');
@@ -261,6 +270,7 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
   /** Whether what is set goes to every section, and not only to the one being edited. */
   let everywhere = false;
   const setPage = (patch: Partial<PageSetup>) => editor.setPage(patch, everywhere);
+  let releaseDialog: ((restore?: boolean) => void) | undefined;
   const openPageSetup = () => {
     if (pageBefore) return;
     close();
@@ -268,7 +278,8 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
     everywhere = false;
     refresh();
     pageScrim.classList.add('dx-side-open');
-    form.querySelector<HTMLElement>('select')?.focus();
+    releaseDialog = holdFocus(dialog, () => editor.focus());
+    tabbables(form)[0]?.focus();
   };
   const closePageSetup = (keep: boolean) => {
     if (!pageBefore) return;
@@ -277,7 +288,8 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
     if (!keep) editor.setSectionPages(pageBefore);
     pageBefore = undefined;
     pageScrim.classList.remove('dx-side-open');
-    editor.focus();
+    releaseDialog?.();
+    releaseDialog = undefined;
   };
   accept.addEventListener('click', () => closePageSetup(true));
   cancel.addEventListener('click', () => closePageSetup(false));
@@ -468,8 +480,8 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
     for (const update of updates) update();
   };
 
-  x.addEventListener('click', close);
-  scrim.addEventListener('click', close);
+  x.addEventListener('click', () => close());
+  scrim.addEventListener('click', () => close());
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && pageBefore) {
       e.stopPropagation();

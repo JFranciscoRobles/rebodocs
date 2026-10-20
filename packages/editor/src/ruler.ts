@@ -5,8 +5,9 @@
 // off the ruler goes. Like the toolbar, it only uses the public methods of the editor.
 
 import type { TabStop } from '@rebodocs/core';
+import { installRegionKeys, markRegion } from './a11y';
 import type { Editor } from './editor';
-import { type MessageKey, t } from './i18n';
+import { type MessageKey, getLocale, t } from './i18n';
 
 export interface Ruler {
   destroy(): void;
@@ -62,13 +63,14 @@ const tabMark = (kind: TabKind) => `<svg viewBox="0 0 9 8" width="9" height="8">
 /** How far from the ruler, in pixels, a dragged tab stop is let go of to take it away. */
 const TAB_DROP = 18;
 
+/** In the order Tab goes through them: from left to right, as they stand on the ruler. */
 const HANDLES: [Handle, MessageKey, string][] = [
   ['marginLeft', 'ruler.marginLeft', ''],
-  ['marginRight', 'ruler.marginRight', ''],
   ['first', 'ruler.first', DOWN],
   ['hanging', 'ruler.hanging', UP],
   ['left', 'ruler.left', BOX],
   ['right', 'ruler.right', UP],
+  ['marginRight', 'ruler.marginRight', ''],
 ];
 
 function injectStyle(): void {
@@ -96,9 +98,32 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
     node.title = t(label);
     node.dataset.name = name;
     node.addEventListener('mousedown', (e) => startDrag(e, name));
+    // From the keyboard, each marker is a slider: the arrows move it a quarter of a centimetre, with Shift a whole one.
+    node.tabIndex = 0;
+    node.setAttribute('role', 'slider');
+    node.setAttribute('aria-label', t(label));
+    node.setAttribute('aria-orientation', 'horizontal');
+    node.addEventListener('keydown', (e) => {
+      const by = step(e);
+      if (!by) return;
+      e.preventDefault();
+      const from = read();
+      apply(name, from, moved(from, name, positionOf(from, name) + by, true));
+    });
     handles[name] = node;
     bar.appendChild(node);
   }
+  bar.setAttribute('role', 'group');
+  bar.setAttribute('aria-label', t('a11y.ruler'));
+  markRegion(bar, 'ruler', () => bar.querySelector<HTMLElement>('[tabindex="0"]'));
+  installRegionKeys();
+  /** How far an arrow moves a marker, in points: a quarter of a centimetre, a whole one with Shift, a point with Alt. */
+  const step = (e: KeyboardEvent): number => {
+    const dir = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 0;
+    if (!dir || e.ctrlKey || e.metaKey) return 0;
+    return dir * (e.shiftKey ? PT_PER_CM : e.altKey ? 1 : SNAP);
+  };
+  const cm = (pt: number) => t('a11y.cm', { value: (Math.round((pt / PT_PER_CM) * 100) / 100).toLocaleString(getLocale()) });
 
   // Clicks on the ruler must not take the keyboard away from the document.
   bar.addEventListener('mousedown', (e) => e.preventDefault());
@@ -110,8 +135,30 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
   const showKind = () => {
     kindButton.innerHTML = tabMark(kind);
     kindButton.title = `${t(TAB_NAMES[kind])}. ${t('ruler.tabHint')}`;
+    kindButton.setAttribute('aria-label', t('a11y.tabKind', { kind: t(TAB_NAMES[kind]) }));
   };
   showKind();
+  kindButton.tabIndex = 0;
+  kindButton.setAttribute('role', 'button');
+  kindButton.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      kind = TAB_KINDS[(TAB_KINDS.indexOf(kind) + 1) % TAB_KINDS.length];
+      showKind();
+      editor.announce(t(TAB_NAMES[kind]), true);
+    } else if (e.key === 'Insert' || e.key === '+') {
+      // A stop where the caret is, as a click on the scale above it would set.
+      e.preventDefault();
+      const at = editor.selectionBounds();
+      if (!at) return;
+      const state = read();
+      const { origin, scale } = frame();
+      const pos = round(Math.round(((at.left - bar.getBoundingClientRect().left - origin) / scale - state.left) / SNAP) * SNAP);
+      if (pos <= 0 || pos >= state.right - state.left) return;
+      setTabs([...state.tabs.filter((tab) => Math.abs(tab.pos - pos) > 0.5), { pos, align: kind }]);
+      editor.announce(t('a11y.tabAt', { kind: t(TAB_NAMES[kind]), value: cm(pos) }), true);
+    }
+  });
   kindButton.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -119,7 +166,8 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
     kind = TAB_KINDS[(TAB_KINDS.indexOf(kind) + 1) % TAB_KINDS.length];
     showKind();
   });
-  bar.appendChild(kindButton);
+  // First for Tab, as it is first on the ruler.
+  canvas.after(kindButton);
   /** The marks of the tab stops of the paragraph, one for each. */
   let tabMarks: HTMLElement[] = [];
   // A click on the scale, inside the text, sets a stop there.
@@ -230,6 +278,26 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
         mark.innerHTML = tabMark(tab.align as TabKind);
         mark.title = `${t(TAB_NAMES[tab.align as TabKind])}. ${t('ruler.tabDrag')}`;
         mark.addEventListener('mousedown', (e) => startTabDrag(e, Number(mark.dataset.index)));
+        mark.tabIndex = 0;
+        mark.setAttribute('role', 'slider');
+        mark.setAttribute('aria-label', t('a11y.tabStop', { kind: t(TAB_NAMES[tab.align as TabKind]) }));
+        mark.addEventListener('keydown', (e) => {
+          const from = read();
+          const index = Number(mark.dataset.index);
+          const was = from.tabs[index];
+          if (!was) return;
+          if (e.key === 'Delete' || e.key === 'Backspace') {
+            e.preventDefault();
+            kindButton.focus();
+            setTabs(from.tabs.filter((_, i) => i !== index));
+            return;
+          }
+          const by = step(e);
+          if (!by) return;
+          e.preventDefault();
+          const pos = round(clamp(was.pos + by, 0, from.right - from.left));
+          setTabs([...from.tabs.filter((tab, i) => i !== index && Math.abs(tab.pos - pos) > 0.5), { ...was, pos }]);
+        });
         mark.dataset.index = String(index);
         bar.appendChild(mark);
         return mark;
@@ -238,7 +306,18 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
     stops.forEach(({ tab, index }, k) => {
       tabMarks[k].dataset.index = String(index);
       tabMarks[k].style.left = `${origin + (state.left + tab.pos) * scale}px`;
+      tabMarks[k].setAttribute('aria-valuetext', cm(tab.pos));
     });
+    // What each marker stands at, for a screen reader.
+    const values: Record<Handle, number> = {
+      first: state.indentLeft + state.indentFirstLine,
+      hanging: state.indentLeft,
+      left: state.indentLeft,
+      right: state.indentRight,
+      marginLeft: state.marginLeft,
+      marginRight: state.marginRight,
+    };
+    for (const [name, node] of Object.entries(handles) as [Handle, HTMLElement][]) node.setAttribute('aria-valuetext', cm(values[name]));
   };
 
   const refresh = (state = read()) => {
@@ -324,7 +403,16 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
     drag.guide.style.left = `${page.left + positionOf(drag.now, drag.handle) * scale}px`;
   };
 
-  const endDrag = (apply: boolean) => {
+  /** Gives the document what a marker moved from `from` to `now` says. */
+  const apply = (handle: Handle, from: State, now: State) => {
+    if (handle === 'marginLeft' || handle === 'marginRight') {
+      if (now.marginLeft !== from.marginLeft || now.marginRight !== from.marginRight) editor.setPage({ marginLeft: now.marginLeft, marginRight: now.marginRight });
+    } else if (now.indentLeft !== from.indentLeft || now.indentFirstLine !== from.indentFirstLine || now.indentRight !== from.indentRight) {
+      editor.setParagraphProps({ indentLeft: now.indentLeft, indentFirstLine: now.indentFirstLine, indentRight: now.indentRight });
+    }
+  };
+
+  const endDrag = (keep: boolean) => {
     if (!drag) return;
     const { handle, from, now, guide } = drag;
     drag = undefined;
@@ -333,14 +421,8 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
     window.removeEventListener('mousemove', onMove);
     window.removeEventListener('mouseup', onUp);
     window.removeEventListener('keydown', onKey, true);
-    if (apply) {
-      // The document changes once, when the marker is let go: laying it out on every move would drag.
-      if (handle === 'marginLeft' || handle === 'marginRight') {
-        if (now.marginLeft !== from.marginLeft || now.marginRight !== from.marginRight) editor.setPage({ marginLeft: now.marginLeft, marginRight: now.marginRight });
-      } else if (now.indentLeft !== from.indentLeft || now.indentFirstLine !== from.indentFirstLine || now.indentRight !== from.indentRight) {
-        editor.setParagraphProps({ indentLeft: now.indentLeft, indentFirstLine: now.indentFirstLine, indentRight: now.indentRight });
-      }
-    }
+    // The document changes once, when the marker is let go: laying it out on every move would drag.
+    if (keep) apply(handle, from, now);
     refresh();
     editor.focus();
   };

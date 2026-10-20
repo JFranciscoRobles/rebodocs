@@ -31,6 +31,7 @@ export const NAV: { title: string; items: NavItem[] }[] = [
       { title: 'Without a framework', slug: 'vanilla' },
       { title: 'Styling and Tailwind', slug: 'styling' },
       { title: 'Phones and touch', slug: 'mobile' },
+      { title: 'Accessibility', slug: 'accessibility' },
     ],
   },
   {

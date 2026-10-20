@@ -106,9 +106,10 @@ with CSS, `addFont({ family: 'Raleway' })` is enough.
   (Playwright) is the single most useful thing to do here.
 - **`editor.ts` is one file of about 4,200 lines.** Input (keyboard, mouse,
   touch), painting and commands should be split into modules.
-- **Accessibility.** The pages are positioned spans a screen reader cannot
-  follow. It needs an accessible mirror of the text, or ARIA live
-  announcements at least, and keyboard access to every menu.
+- **Accessibility.** What is announced, the keyboard in every part and the
+  screen reader mode (⌘⌥Z, Ctrl+Alt+Z) were checked in headless Chrome, not
+  with VoiceOver, NVDA or JAWS. The exported PDF is not tagged. See
+  [accessibility](https://rebodocs.com/docs/accessibility/).
 - **Real phones.** Touch was tried on one phone. On-screen keyboards differ
   (Gboard, iOS, Samsung), and autocorrection that rewrites an earlier word is
   deliberately avoided, not supported. No capital letter is put at the start

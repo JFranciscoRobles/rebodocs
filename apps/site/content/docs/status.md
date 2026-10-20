@@ -4,7 +4,7 @@ Rebodocs is a word processor compatible with Word files. It is not a copy of Wor
 
 ## What is checked
 
-**394 automated tests**, over the engine, the collaboration change format and session, the texts of the interface, the tools for an assistant and its chat (against a Claude of the tests' own), copying and pasting with the formatting, and the backends of the storage and real-time demos: a bucket kept in memory, and two people typing through the three routes.
+**399 automated tests**, over the engine, the collaboration change format and session, the texts of the interface, the tools for an assistant and its chat (against a Claude of the tests' own), copying and pasting with the formatting, and the backends of the storage and real-time demos: a bucket kept in memory, and two people typing through the three routes.
 
 **Compatibility of layout.** Real documents are compared line by line with the PDF Word exports from the same file. On the receipt used as reference, every line is within 0.4 pt of Word's. The comparison is a command, `npm run word-compare -- file.docx`, so any document can be measured.
 
@@ -15,7 +15,8 @@ Rebodocs is a word processor compatible with Word files. It is not a copy of Wor
 - the toolbar, tables, header and footer, page numbers, letterhead;
 - collaboration between two tabs: typing at once, undo per person, tables, reconnection;
 - the React component in a Next.js 16 application with Tailwind 4: server rendering, saving, features, headless hooks;
-- a phone-sized screen with touch: pinch, selection handles, composed input.
+- a phone-sized screen with touch: pinch, selection handles, composed input;
+- [accessibility](/docs/accessibility/): what is announced after each key, F6 and Alt+F10, every menu and dialog from the keyboard, the ruler, screen reader mode, high contrast.
 
 Touch input was also tried on a real phone.
 
@@ -30,6 +31,7 @@ Touch input was also tried on a real phone.
 - **The desktop application outside a Mac.** It was run on a Mac; Windows and Linux compile the same code but are untried, and so is opening a document with a double click in them.
 - **Pasting from every program.** Reading the HTML of the clipboard was checked with samples of Word, Google Docs and web pages, not with automated tests; other programs write HTML of their own.
 - **Claude in the editor with a real key.** The chat and its route were tested against a Claude of the tests' own and the page was opened without a key; a conversation with the real API has not been tried in the repository.
+- **Screen readers.** What the editor announces was read in Chrome, not listened to with VoiceOver, NVDA or JAWS, and screen reader mode was not tried with a braille display.
 - **Production.** Nobody has depended on it yet.
 
 ## Known limits
@@ -52,7 +54,7 @@ Touch input was also tried on a real phone.
 **The editor**
 
 - Pasting from Word, Google Docs or a web page keeps the formatting of the text, links, lists and headings, but not the pictures or tables in it: a table comes as lines with tabs. No drag and drop of text. No spell check.
-- The pages are not accessible to screen readers.
+- A screen reader hears the document through announcements, or through the paragraph in [screen reader mode](/docs/accessibility/#screen-reader-mode); it cannot browse the pages as a web page.
 - Every page is in the DOM, so very long documents get slow.
 - The included interface is light only.
 

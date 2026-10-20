@@ -66,7 +66,7 @@ const { state, commands, editor, docs, ready } = useDocs();
 | Links and comments | `setLink`, `removeLink`, `addNote`, `setNoteText`, `setNoteColor`, `removeNote`, `selectNote` |
 | Structure | `insertToc`, `updateToc`, `goToHeading`, `moveSection`, `insertFootnote`, `insertTextBox`, `restoreVersion` |
 | Review | `setTrackChanges`, `acceptRevision`, `rejectRevision`, `acceptAllRevisions`, `rejectAllRevisions`, `goToRevision`, `selectRevision` |
-| Columns | `setColumns`, `insertColumnBreak` |
+| Columns and sections | `setColumns`, `insertColumnBreak`, `insertSectionBreak` |
 | Page | `setPage`, `setPageNumbering`, `setFirstPageDifferent`, `setOwnHeaders`, `setArea`, `setLetterhead`, `setLetterheadFile`, `fitLetterheadMargins`, `removeLetterhead` |
 | Search | `find`, `findStep`, `replaceFound`, `replaceAllFound` |
 | View | `setZoom`, `setFit`, `setView`, `setShowNotes`, `print` |

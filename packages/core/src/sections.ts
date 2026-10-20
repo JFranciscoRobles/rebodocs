@@ -10,12 +10,13 @@ import {
   type Position,
   type Range,
   type Section,
+  type SectionStart,
   ANCHOR_CHAR,
   ONE_COLUMN,
   defined,
   orderedRange,
 } from './model';
-import { insertText, propsAt } from './ops';
+import { insertText, propsAt, splitParagraph } from './ops';
 import { COLUMN_BREAK_XML } from './layout';
 
 /** The most columns a section may be set in. */
@@ -210,6 +211,23 @@ export function setColumns(doc: Doc, range: Range, columns: Columns): Doc {
 export function insertColumnBreak(doc: Doc, pos: Position): { doc: Doc; pos: Position } {
   if (doc.paragraphs[pos.para]?.cell) return { doc, pos };
   return insertText(doc, pos, ANCHOR_CHAR, { ...propsAt(doc, pos), object: COLUMN_BREAK_XML, anchor: true });
+}
+
+/**
+ * Puts a section break at the caret, as Word's: the paragraph is split, and
+ * what comes before it becomes a section of its own, set out as the one it was
+ * in, with the same header and footer. What follows starts on the next page or,
+ * `continuous`, on the same one, and can then be given another page, other
+ * margins or columns. Not inside a table: a section does not end in one.
+ */
+export function insertSectionBreak(doc: Doc, pos: Position, start: SectionStart = 'nextPage'): { doc: Doc; pos: Position } {
+  if (doc.paragraphs[pos.para]?.cell) return { doc, pos };
+  // What the file said of the section is the later part's to write back; the new one starts from what it shows.
+  const { xml: _, ...was } = sectionOf(doc, pos.para);
+  const split = splitParagraph(doc, pos);
+  let out = endSectionAt(split.doc, pos.para, was);
+  out = patchSection(out, sectionMarkOf(out, split.pos.para), { start });
+  return { doc: out, pos: split.pos };
 }
 
 /** The paragraphs that end a section, by index: the marks the document has. */

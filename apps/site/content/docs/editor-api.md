@@ -78,6 +78,7 @@ Dragging works too: the edge between two columns moves it, the bottom edge of a 
 | `columns` | The columns of the section the caret is in: `count`, `space`, `widths` when they are not all as wide, `separator`. |
 | `setColumns(columns)` | With a caret, the section it is in; with a selection, the selected text alone, as a section of its own on the same page. |
 | `insertColumnBreak()` | What follows the caret starts at the top of the next column. |
+| `insertSectionBreak(start?)` | Starts a new section at the caret, as Word's section break: `'nextPage'` (the default) or `'continuous'`. What comes before keeps its page; what follows can be given another orientation, other margins, columns or a header of its own, with `setPage` and the page setup's "This section". |
 | `insertTextBox(text?)`, `textBoxes` | A text box anchored to the caret's paragraph, the text going round it, with the caret taken into it; the text boxes and their text. A click in a box edits it (`area` is then `'textbox'`); a click on its edge selects it, to drag it elsewhere. |
 | `insertFootnote(text?)`, `footnotes` | A note at the foot of the page at the caret (⌘⌥F / Ctrl+Alt+F), with the caret taken into it; the notes the text refers to, with their numbers. A click on a note edits it: `area` is then `'footnote'`. |
 
@@ -122,6 +123,8 @@ The view is the editor's, not the document's: it is not saved in the file.
 | `setShowNotes(on)` | Comments in a margin beside the pages. |
 | `autoformat` | Whether typing `# `, `- ` or `**bold**` formats as Markdown would. On by default. |
 | `focus()` | Gives the keyboard to the document. |
+| `screenReader` | [Screen reader mode](/docs/accessibility/#screen-reader-mode): the hidden field holds the paragraph the caret is in. Off by default; ⌘⌥Z (Ctrl+Alt+Z) turns it on and off. |
+| `announce(text, urgent?)` | Says `text` to a screen reader, through the editor's live region. |
 | `element` | The element the pages scroll in. |
 | `destroy()` | Takes everything away. |
 

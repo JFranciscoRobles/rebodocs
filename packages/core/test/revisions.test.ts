@@ -6,12 +6,14 @@ import {
   type Doc,
   type Paragraph,
   acceptRevisions,
+  addNote,
   createDoc,
   decideAllRevisions,
   deleteRange,
   insertText,
   paragraphText,
   rejectRevisions,
+  removeNote,
   revisionAt,
   revisionsOf,
   splitParagraph,
@@ -161,5 +163,21 @@ describe('tracked changes in the file', () => {
     const back = importDocx(exportDocx(d));
     expect(shown(back)).toEqual(shown(d));
     expect(revisionsOf(back).map((r) => r.author)).toEqual(['Ana', 'Luis']);
+  });
+});
+
+describe('notes while changes are tracked', () => {
+  it('puts a note in and takes it out without either being a change to the text', () => {
+    const start = doc('El precio se cubrirá de contado');
+    const noted = addNote(start, { from: { para: 0, offset: 22 }, to: { para: 0, offset: 32 } }, { text: '¿Con crédito?', author: 'Luis' });
+    const tracked = trackEdit(start, noted.doc, LUIS).doc;
+    expect(revisionsOf(tracked)).toEqual([]);
+    expect(tracked.notes).toHaveLength(1);
+    // Typed beside it, the text is still a change; the note is not.
+    const typed = trackEdit(tracked, insertText(tracked, { para: 0, offset: 0 }, 'Nota: ').doc, LUIS).doc;
+    expect(revisionsOf(typed).map((r) => r.text)).toEqual(['Nota: ']);
+    const removed = trackEdit(typed, removeNote(typed, noted.id!), LUIS).doc;
+    expect(revisionsOf(removed).map((r) => r.text)).toEqual(['Nota: ']);
+    expect(texts(removed)).toEqual(['Nota: El precio se cubrirá de contado']);
   });
 });

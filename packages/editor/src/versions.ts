@@ -6,6 +6,7 @@
 // next; and the document can be taken back to it, as a step to undo.
 
 import { type Comparison, type Doc, compareDocs, importDocx } from '@rebodocs/core';
+import { holdFocus } from './a11y';
 import { Editor } from './editor';
 import { getLocale, t } from './i18n';
 import { IS_MAC } from './platform';
@@ -155,6 +156,9 @@ export function createVersionView(editor: Editor, versions: Versions, options: V
   root.hidden = true;
   root.setAttribute('role', 'dialog');
   root.setAttribute('aria-label', t('compare.title'));
+  root.setAttribute('aria-modal', 'true');
+  /** Gives the keyboard back to what had it when the comparison opened. */
+  let release: ((restore?: boolean) => void) | undefined;
   const bar = el('div', 'dx-vv-bar');
   const title = el('span', 'dx-vv-title', t('compare.title'));
   const fromLabel = el('label', '', t('compare.from'));
@@ -291,7 +295,9 @@ export function createVersionView(editor: Editor, versions: Versions, options: V
     viewer = undefined;
     comparison = undefined;
     fromDoc = undefined;
-    editor.focus();
+    if (release) release();
+    else editor.focus();
+    release = undefined;
   };
 
   fromSelect.addEventListener('change', () => {
@@ -352,6 +358,7 @@ export function createVersionView(editor: Editor, versions: Versions, options: V
       if (against && !list.some((info) => info.id === against.id)) list.push(against);
       fillSelects();
       root.hidden = false;
+      release ??= holdFocus(root, () => editor.focus());
       place();
       await compare();
       close.focus();
