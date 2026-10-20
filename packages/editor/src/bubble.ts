@@ -525,7 +525,14 @@ export function createBubble(editor: Editor): Bubble {
   const unsubscribe = editor.onChange(() => {
     if (isOpen && !acting) close();
   });
-  document.body.append(bar, picker);
+  // On the page, or in what is shown full screen when that holds the document: outside it nothing shows.
+  const mount = () => {
+    const full = document.fullscreenElement;
+    const host = full && full !== document.documentElement && full.contains(editor.element) ? full : document.body;
+    if (bar.parentElement !== host) host.append(bar, picker);
+  };
+  mount();
+  document.addEventListener('fullscreenchange', mount);
 
   return {
     open,
@@ -546,6 +553,7 @@ export function createBubble(editor: Editor): Bubble {
       window.removeEventListener('blur', disarm);
       window.removeEventListener('resize', onMove);
       document.removeEventListener('scroll', onMove, true);
+      document.removeEventListener('fullscreenchange', mount);
       bar.remove();
       picker.remove();
     },

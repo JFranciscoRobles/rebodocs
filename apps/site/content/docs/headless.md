@@ -193,3 +193,62 @@ The formats are `date`, `dateLong`, `dateFull`, `number`, `currency`, `upper`, `
 ```
 
 It is drawn on a canvas, so its look is its colours and not classes: `--dx-ruler` behind it, `--dx-ruler-line` under it, `--dx-ruler-margin` for the page outside the text, `--dx-ruler-text` for the room of the text, `--dx-ruler-ink` for the numbers and the markers, `--dx-ruler-on` for the marker being dragged.
+
+## A whole editor screen
+
+What we learned putting a headless editor inside a CRM (a Next.js app with its own components, autosave to its API and real-time rooms):
+
+**Start from the hooks.** Most panels are already one: `useDocsVariables` for a template's fields, `useDocsPage` for sections and page setup, `useDocsCount` for the status bar, `useDocsResponsive` for phones, `useDocsFind` for the search. Each re-renders only when its own value changes.
+
+**Saving as the person types.** Listen to the editor, not to React: `editor.onChange` is called for the selection too, so compare the document itself, which is a new object only when it changed.
+
+```tsx
+const { editor, docs, ready } = useDocs();
+useEffect(() => {
+  if (!editor || !ready) return;
+  let last = editor.doc;
+  let timer: ReturnType<typeof setTimeout>;
+  return editor.onChange(() => {
+    if (editor.doc === last) return;
+    last = editor.doc;
+    clearTimeout(timer);
+    timer = setTimeout(() => void docs!.save(), 3000);   // calls onSave
+  });
+}, [editor, ready, docs]);
+```
+
+`useDocsValue((e) => e.doc)` would do the same and compare the whole document as JSON at every key: a long contract then takes a second per keystroke.
+
+**Menus give the keyboard back.** A menu of a component library returns the focus to the button that opened it, and the next key goes nowhere. Give the document the focus instead: Base UI's `finalFocus`, Radix's `onCloseAutoFocus`.
+
+```tsx
+const toDocument = () => editor?.element.querySelector<HTMLElement>('.dx-input') ?? true;
+<DropdownMenuContent finalFocus={toDocument}>…</DropdownMenuContent>
+```
+
+**A loading state.** `DocsSurface` is there before the document is: an empty page shows until `ready`, and in a room until the room has sent it (`state.collab === 'on'`). Cover the surface until then, once:
+
+```tsx
+const [loaded, setLoaded] = useState(false);
+useEffect(() => {
+  if (!loaded && ready && (!collab || state.collab === 'on')) requestAnimationFrame(() => setLoaded(true));
+}, [loaded, ready, collab, state.collab]);
+// <div className="relative flex-1"><DocsSurface …/>{!loaded && <Skeleton className="absolute inset-0" />}</div>
+```
+
+**Read only.** `editor.readOnly = true` for someone who may only look: the commands do nothing and the keys type nothing. In a room, the server's `admit` saying `readOnly` does it for you.
+
+**Opening a file without leaving the room.** `docs.openFile()` replaces the document and leaves the room. To put another DOCX in its place as one more change, that the others receive and that ⌘Z takes back:
+
+```tsx
+const doc = await loadVersion({ list: async () => [], load: async () => bytes }, file.name);
+commands.restoreVersion(doc);
+```
+
+**Phones.** `commands.setFit('width')` on a narrow screen shows the whole page across it, zoomed, without setting the text out again.
+
+**Full screen.** The bar beside the selection, menus and toasts are drawn on the page, outside the editor. Put the page in full screen (`document.documentElement.requestFullscreen()`) and the editor above everything with `position: fixed`, rather than the editor's own element. The bar follows an element that holds the editor into full screen, but your menus and toasts will not.
+
+**A real-time room inside your API.** `createCollabServer` without a `port` gives a `handle` to mount at `/collab` in Express or Nest, with a storage that calls your services straight. The browser must reach it directly: a proxy that reads the whole response first (Next's route handlers do) never ends a stream of server-sent events. See [collaboration](/docs/collaboration/).
+
+**Lists.** `setListStyle({ format: 'lowerLetter', text: '#.-' })` writes "a.-", "b.-"; `restartNumbering()` and `continueNumbering()` for the caret's item. Tab and ⇧Tab change the level wherever the caret is in an item, and Enter on an empty item goes up one, so a sublist is two keys away and so is coming back.
