@@ -20,7 +20,12 @@ import { type Entry, type RoomStorage, type Session, folderStorage, memoryStorag
 export type { Entry, Session };
 
 export interface CollabServerOptions {
-  port: number;
+  /**
+   * The port to listen on; 0 for any free one. Left out, the server listens
+   * on none: its `handle` is given the requests of a server of the system's
+   * own (Express, Nest, a plain one), under `/collab`.
+   */
+  port?: number;
   /** The address to listen on: this machine alone (127.0.0.1) when left out. */
   host?: string;
   /** Where the rooms are kept; in memory alone when neither this nor `dataDir` is given. */
@@ -44,9 +49,15 @@ export interface CollabServerOptions {
 }
 
 export interface CollabServer {
+  /** The port it listens on; 0 when it listens on none. */
   readonly port: number;
-  /** Resolves once it listens. */
+  /** Resolves once it listens, or at once when it listens on none. */
   ready: Promise<void>;
+  /**
+   * Answers a request, for a server of the system's own to hand on what goes
+   * to `/collab`. What does not is handed to `next` when there is one.
+   */
+  handle(req: IncomingMessage, res: ServerResponse, next?: (error?: unknown) => void): void;
   /** Gives the storage what it does not have yet of the rooms people are in. */
   flush(): Promise<void>;
   /** The rooms it holds now, and what the people in each are called: a room nobody is in is on its way out. */
@@ -73,6 +84,8 @@ interface Client {
   name: string;
   color: string;
   sel?: Presence;
+  /** Let in to watch: what they send to change the document is not taken. */
+  readOnly?: boolean;
   streams: Set<ServerResponse>;
 }
 
@@ -243,8 +256,15 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
   };
   const seen = ({ id, name, color, sel }: Client) => ({ client: id, name, color, sel });
 
-  const body = (req: IncomingMessage): Promise<string> =>
-    new Promise((done, fail) => {
+  const body = (req: IncomingMessage): Promise<string> => {
+    // Read already by the server it is mounted in (Express's body parsers).
+    const parsed = (req as IncomingMessage & { body?: unknown }).body;
+    if (req.readableEnded && parsed !== undefined) {
+      if (typeof parsed === 'string') return Promise.resolve(parsed);
+      if (parsed instanceof Uint8Array) return Promise.resolve(Buffer.from(parsed).toString('utf8'));
+      return Promise.resolve(JSON.stringify(parsed));
+    }
+    return new Promise((done, fail) => {
       const chunks: Buffer[] = [];
       let size = 0;
       req.on('data', (chunk: Buffer) => {
@@ -255,6 +275,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
       req.on('error', fail);
       req.on('end', () => done(Buffer.concat(chunks).toString('utf8')));
     });
+  };
 
   const cors = { 'Access-Control-Allow-Origin': '*' };
   const json = (res: ServerResponse, status: number, data: unknown) => res.writeHead(status, { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(data));
@@ -268,11 +289,13 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
     res.writeHead(200, { 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream' }).end(readFileSync(file));
   };
 
-  const onRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    const url = new URL(req.url ?? '/', 'http://localhost');
+  const onRequest = async (req: IncomingMessage, res: ServerResponse, next?: (error?: unknown) => void): Promise<void> => {
+    // Mounted with `app.use('/collab', …)`, Express takes the prefix off the address: it is in `originalUrl`.
+    const url = new URL((req as IncomingMessage & { originalUrl?: string }).originalUrl ?? req.url ?? '/', 'http://localhost');
     const path = url.pathname;
     if (!path.startsWith(`${PREFIX}/`)) {
-      if (req.method === 'GET' || req.method === 'HEAD') serveFile(res, path);
+      if (next) next();
+      else if (req.method === 'GET' || req.method === 'HEAD') serveFile(res, path);
       else json(res, 404, { error: 'not found' });
       return;
     }
@@ -318,7 +341,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
     if (req.method === 'GET' && action === 'events') {
       const clientId = (url.searchParams.get('client') ?? '').slice(0, 64);
       if (!clientId) return void json(res, 400, { error: 'client' });
-      let pass: { name?: string } | undefined = {};
+      let pass: { name?: string; readOnly?: boolean } | undefined = {};
       if (storage.admit) {
         room.entering = (room.entering ?? 0) + 1;
         try {
@@ -347,12 +370,13 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
       // Who they are is for the system to say, when it does.
       const named = pass.name;
       client.name = (named ?? url.searchParams.get('name') ?? '').slice(0, 80);
+      client.readOnly = !!pass.readOnly;
       room.names.set(client.id, client.name);
       client.streams.add(res);
       res.writeHead(200, { ...cors, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       // What it has of the room is of use only if it is of the room as it is now.
       const known = Number(url.searchParams.get('epoch')) === room.epoch ? Math.max(0, Math.min(Number(url.searchParams.get('from')) || 0, room.log.length)) : 0;
-      send(res, 'hello', { client: client.id, color: client.color, as: client.name, epoch: room.epoch, name: room.name, rev: room.log.length, from: known, entries: room.log.slice(known), peers: [...room.clients.values()].filter((c) => c !== client).map(seen) });
+      send(res, 'hello', { client: client.id, color: client.color, as: client.name, readOnly: client.readOnly, epoch: room.epoch, name: room.name, rev: room.log.length, from: known, entries: room.log.slice(known), peers: [...room.clients.values()].filter((c) => c !== client).map(seen) });
       tell(room, 'presence', seen(client), client.id);
       const beat = setInterval(() => res.write(': still here\n\n'), 20000);
       res.on('close', () => {
@@ -379,6 +403,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
         tell(room, 'presence', seen(client), client.id);
         return void json(res, 200, {});
       }
+      if (client.readOnly) return void json(res, 403, { error: 'read-only' });
       const { rev, seq, ops } = posted;
       if (posted.epoch !== room.epoch || !Number.isInteger(rev) || rev! < 0 || rev! > room.log.length || !Number.isInteger(seq) || !Array.isArray(ops)) return void json(res, 409, { error: 'stale' });
       // Sent again because the answer got lost: it is already in its place.
@@ -395,15 +420,18 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
     json(res, 404, { error: 'not found' });
   };
 
-  let server: Server | undefined;
-  let port = options.port;
-  const ready = new Promise<void>((done, fail) => {
-    const made = createServer((req, res) => {
-      onRequest(req, res).catch((error: Error) => {
-        if (!res.headersSent) json(res, 400, { error: error.message });
-        else res.end();
-      });
+  const handle = (req: IncomingMessage, res: ServerResponse, next?: (error?: unknown) => void) => {
+    onRequest(req, res, next).catch((error: Error) => {
+      if (!res.headersSent) json(res, 400, { error: error.message });
+      else res.end();
     });
+  };
+
+  let server: Server | undefined;
+  let port = options.port ?? 0;
+  const ready = new Promise<void>((done, fail) => {
+    if (options.port === undefined) return done();
+    const made = createServer((req, res) => handle(req, res));
     made.once('error', fail);
     made.listen(options.port, options.host ?? '127.0.0.1', () => {
       server = made;
@@ -418,6 +446,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
       return port;
     },
     ready,
+    handle,
     flush,
     rooms: () => [...rooms.values()].map((room) => ({ id: room.id, people: [...room.clients.values()].map((client) => client.name) })),
     close() {

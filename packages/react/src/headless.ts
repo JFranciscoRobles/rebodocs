@@ -175,7 +175,11 @@ export function useDocs(): UseDocs {
  * Something else of the document, worked out from the editor each time it
  * changes: its outline, its notes, its styles. What uses it is drawn again
  * only when what `select` gives is no longer the same, compared as JSON.
+ * For small values: the whole document (`editor.doc`) is made into JSON at
+ * every key, pictures and all. To know when it changes, `editor.onChange`.
  */
+let warned = false;
+
 export function useDocsValue<T>(select: (editor: Editor) => T, fallback: T): T {
   const { docs } = useHeld();
   const selector = useRef(select);
@@ -187,6 +191,11 @@ export function useDocsValue<T>(select: (editor: Editor) => T, fallback: T): T {
     if (!docs) return empty;
     const value = selector.current(docs.editor);
     const key = JSON.stringify(value);
+    // A value this large makes each key slow: said once, with what to use instead.
+    if (key && key.length > 200_000 && !warned) {
+      warned = true;
+      console.warn('useDocsValue: the value selected is too large to compare at every change (as the whole document would be). Use editor.onChange for that.');
+    }
     if (kept.current?.key !== key) kept.current = { key, value };
     return kept.current.value;
     // eslint-disable-next-line react-hooks/exhaustive-deps

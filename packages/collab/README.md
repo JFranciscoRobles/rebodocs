@@ -36,6 +36,14 @@ import { backendStorage } from '@rebodocs/collab/storage';
 const server = createCollabServer({ port: 7420, storage: backendStorage({ url: 'https://my-app.example/api/docs', key: process.env.KEY }) });
 ```
 
+Without `port` it listens on none: mount it in the server your API already
+has, and give it a `RoomStorage` of your own that calls your services straight.
+
+```ts
+const collab = createCollabServer({ storage: myStorage });
+app.use('/collab', collab.handle);   // Express, or Nest's main.ts
+```
+
 | Option | Environment | What it is |
 | --- | --- | --- |
 | `--port` | `REBODOCS_COLLAB_PORT` | Port; 7420 by default. |

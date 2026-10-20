@@ -49,8 +49,11 @@ export interface RoomStorage {
   add(id: string, entry: Entry): void;
   /** The document of a room people are working in, as it is now: for the storages that have nothing but that. */
   save?(id: string, docx: Uint8Array): Promise<void>;
-  /** Who may come into a room, when knowing its name is not enough. Gives what they are called, or nothing for no. */
-  admit?(id: string, ticket: string): Promise<{ name?: string } | undefined>;
+  /**
+   * Who may come into a room, when knowing its name is not enough. Gives what
+   * they are called, and whether they come in only to watch; or nothing for no.
+   */
+  admit?(id: string, ticket: string): Promise<{ name?: string; readOnly?: boolean } | undefined>;
 }
 
 /** Nothing is kept: the rooms last as long as the server runs. */
@@ -104,7 +107,8 @@ export interface BackendOptions {
  *   PUT  url/<id>          the document as it is now, as a DOCX, to keep. The last one of a session, when
  *                          everybody left, says so in `X-Rebodocs-Session-End: 1`, and who changed it in
  *                          `X-Rebodocs-Authors` (each name URL-encoded, separated by commas): when to keep a version.
- *   POST url/<id>/access   `{ "ticket": "…" }`: 200 with `{ "name": "…" }` when whoever has that ticket may edit it.
+ *   POST url/<id>/access   `{ "ticket": "…" }`: 200 with `{ "name": "…" }` when whoever has that ticket may edit it,
+ *                          and `"readOnly": true` besides when they may only look at it.
  */
 export function backendStorage(options: BackendOptions): RoomStorage {
   const url = options.url.replace(/\/+$/, '');
@@ -137,8 +141,8 @@ export function backendStorage(options: BackendOptions): RoomStorage {
     async admit(id, ticket) {
       const response = await fetch(`${of(id)}/access`, { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket }) });
       if (!response.ok) return undefined;
-      const answer = (await response.json().catch(() => ({}))) as { name?: unknown };
-      return typeof answer.name === 'string' ? { name: answer.name } : {};
+      const answer = (await response.json().catch(() => ({}))) as { name?: unknown; readOnly?: unknown };
+      return { ...(typeof answer.name === 'string' && { name: answer.name }), ...(answer.readOnly === true && { readOnly: true }) };
     },
   };
 }

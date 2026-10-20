@@ -386,8 +386,9 @@ describe('the documents of another system', () => {
         if (down) return void res.writeHead(503).end();
         if (req.method === 'POST' && action === 'access') {
           const { ticket } = JSON.parse(Buffer.concat(chunks).toString()) as { ticket: string };
-          const name = { 'pase-ana': 'Ana Ruiz', 'pase-luis': 'Luis Mora' }[ticket];
-          return void (name && documents.has(id) ? res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ name })) : res.writeHead(403).end());
+          const name = { 'pase-ana': 'Ana Ruiz', 'pase-luis': 'Luis Mora', 'pase-eva': 'Eva Gil' }[ticket];
+          const readOnly = ticket === 'pase-eva' || undefined;
+          return void (name && documents.has(id) ? res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ name, readOnly })) : res.writeHead(403).end());
         }
         if (req.method === 'GET') {
           const docx = documents.get(id);
@@ -437,6 +438,19 @@ describe('the documents of another system', () => {
     expect((await enter('contrato-17', 'pase-inventado')).session.state).toBe('closed');
     expect((await enter('contrato-17', '')).session.state).toBe('closed');
     expect((await enter('otro-documento', 'pase-ana')).session.state).toBe('closed');
+  });
+
+  it('lets in to watch whoever the system says may only look, and takes no change from them', async () => {
+    const ana = await enter('contrato-17', 'pase-ana');
+    const eva = await enter('contrato-17', 'pase-eva');
+    expect(ana.session.readOnly).toBe(false);
+    expect(eva.session.readOnly).toBe(true);
+    eva.host.edit((doc) => insertText(doc, { para: 0, offset: 0 }, 'Eva: ').doc);
+    ana.host.edit((doc) => insertText(doc, { para: 1, offset: 3 }, ', Ana').doc);
+    await until(() => eva.host.texts[1] === 'dos, Ana');
+    await server.flush();
+    expect(kept('contrato-17')).toEqual(['uno', 'dos, Ana']);
+    expect(ana.host.texts).toEqual(['uno', 'dos, Ana']);
   });
 
   it('says which saving ends a session of work, and who changed the document in it', async () => {
@@ -505,5 +519,89 @@ describe('the documents of another system', () => {
     down = false;
     await server.flush();
     expect(kept('contrato-17')).toEqual(['uno!', 'dos']);
+  });
+});
+
+describe('a server mounted in the system\'s own', () => {
+  // As Express gives it a request under `app.use('/collab', …)`: without the prefix, and with the body read.
+  let system: Server;
+  let server: CollabServer;
+  let url: string;
+  let sessions: Session[];
+  let others: string[];
+  let saved: Uint8Array | undefined;
+
+  beforeEach(async () => {
+    others = [];
+    saved = undefined;
+    const docx = exportDocx(createDoc([createParagraph('uno')]));
+    server = createCollabServer({
+      storage: {
+        open: false,
+        forgets: true,
+        load: async (id) => (id === 'contrato-del-drive' ? { name: 'Contrato.docx', epoch: 1, base: docx, log: [] } : undefined),
+        keep: async (_id, room, folded) => {
+          if (folded) saved = room.base;
+        },
+        add: () => {},
+        admit: async (_id, ticket) => ({ 'pase-ana': { name: 'Ana Ruiz' }, 'pase-luis': { name: 'Luis Mora' } })[ticket],
+      },
+      idle: 60,
+    });
+    await server.ready;
+    expect(server.port).toBe(0);
+    system = createServer((req, res) => {
+      const next = () => {
+        others.push(req.url!);
+        res.writeHead(200).end('del sistema');
+      };
+      // Some systems hand every request on to it, and it hands back what is not its own.
+      if (!req.url!.startsWith('/collab/')) return server.handle(req, res, next);
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        const mounted = req as typeof req & { originalUrl: string; body?: unknown };
+        mounted.originalUrl = req.url!;
+        req.url = req.url!.slice('/collab'.length);
+        if (chunks.length) mounted.body = JSON.parse(Buffer.concat(chunks).toString());
+        server.handle(req, res, next);
+      });
+    });
+    await new Promise<void>((done) => system.listen(0, '127.0.0.1', done));
+    url = `http://127.0.0.1:${(system.address() as { port: number }).port}`;
+    sessions = [];
+  });
+
+  afterEach(() => {
+    for (const session of sessions) session.leave();
+    server.close();
+    system.close();
+    system.closeAllConnections();
+  });
+
+  const enter = async (ticket: string) => {
+    const host = new Host();
+    const session = joinRoom(host, 'contrato-del-drive', { url, ticket });
+    sessions.push(session);
+    await until(() => session.state === 'on' || session.state === 'closed');
+    return { host, session };
+  };
+
+  it('works on a port that is not its own, with what the system already read of each request', async () => {
+    const ana = await enter('pase-ana');
+    const luis = await enter('pase-luis');
+    expect(luis.session.title).toBe('Contrato.docx');
+    ana.host.edit((doc) => insertText(doc, { para: 0, offset: 3 }, ' y dos').doc);
+    await until(() => luis.host.texts[0] === 'uno y dos');
+    expect(luis.session.peers.map((peer) => peer.name)).toEqual(['Ana Ruiz']);
+    expect((await enter('pase-inventado')).session.state).toBe('closed');
+    for (const session of sessions) session.leave();
+    await until(() => saved !== undefined);
+    expect(importDocx(saved!).paragraphs.map(paragraphText)).toEqual(['uno y dos']);
+  });
+
+  it('hands on what is not its own', async () => {
+    expect(await (await fetch(`${url}/api/propiedades`)).text()).toBe('del sistema');
+    expect(others).toEqual(['/api/propiedades']);
   });
 });

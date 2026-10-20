@@ -86,6 +86,8 @@ export interface Session {
   readonly color: string;
   /** What the others see this person as: what was given here, or what the system the document belongs to says. */
   readonly name: string;
+  /** Let in only to watch, by the system the document belongs to: what is changed here is not taken. */
+  readonly readOnly: boolean;
   /** Changes made here the server has not taken yet. */
   readonly pending: number;
   /** How many times the document here was found not to be the room's, and was loaded again. */
@@ -167,6 +169,7 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
   let name = options.name ?? '';
   let state: CollabState = 'connecting';
   let title = '';
+  let readOnly = false;
   let color = '';
   const peers = new Map<string, Peer & { sel?: SentPresence }>();
 
@@ -273,6 +276,8 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
   /** Whether the server said it took what is on its way; its place comes later, with everybody's. */
   let taken = false;
   const flush = () => {
+    // Let in only to watch: the server takes nothing from here.
+    if (readOnly) return;
     if (state !== 'on' || posting || (inflight ? taken : !buffer.length)) return;
     if (!inflight) {
       inflight = buffer;
@@ -478,8 +483,9 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
 
   // --- The connection -------------------------------------------------------------
 
-  const start = async (hello: { epoch: number; from: number; entries: Entry[]; name: string; color: string; as?: string; peers: (Peer & { sel?: SentPresence })[] }) => {
+  const start = async (hello: { epoch: number; from: number; entries: Entry[]; name: string; color: string; as?: string; readOnly?: boolean; peers: (Peer & { sel?: SentPresence })[] }) => {
     title = hello.name;
+    readOnly = !!hello.readOnly;
     color = hello.color;
     if (hello.as) name = hello.as;
     peers.clear();
@@ -641,6 +647,9 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
     },
     get name() {
       return name;
+    },
+    get readOnly() {
+      return readOnly;
     },
     get pending() {
       return (inflight?.length ?? 0) + buffer.length + (carry?.ops.length ?? 0);

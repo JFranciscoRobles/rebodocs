@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/desktop",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Rebodocs as a desktop application with Tauri: .docx files of the disk, a native menu, PDF, opening a document from the Finder or the Explorer.",
   "license": "MIT",
   "private": true,

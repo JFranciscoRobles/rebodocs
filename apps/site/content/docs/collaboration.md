@@ -276,7 +276,30 @@ The storage is an interface, so the backend over HTTP is one of three that come 
 | `folderStorage(dir)` | Each room in a folder: `base.docx`, `log.jsonl` with every change, `meta.json`. The file and log before the last fold stay beside them, as `*.before.*`. |
 | `memoryStorage()` | Nothing at all: rooms last as long as the process. |
 
-A `RoomStorage` has `load(id)` and `keep(id, room, folded)` for the file, `add(id, entry)` for each change, and optionally `save(id, docx)` for the document while people work, and `admit(id, ticket)` to say who may come in and under what name.
+A `RoomStorage` has `load(id)` and `keep(id, room, folded)` for the file, `add(id, entry)` for each change, and optionally `save(id, docx)` for the document while people work, and `admit(id, ticket)` to say who may come in, under what name, and whether only to watch (`{ name, readOnly: true }`). Someone let in to watch sees the others type and cannot change anything: the editor goes read-only, and the server refuses their changes. `/access` says it the same way, with `"readOnly": true`.
+
+### Inside your API, on its port
+
+Left without `port`, the server listens on none: mount its `handle` in the server your API already has, and the room storage can call your services straight, without the three routes:
+
+```ts
+const collab = createCollabServer({
+  storage: {
+    open: false,
+    forgets: true,
+    load: async (id) => ({ name: await documents.name(id), epoch: 1, base: await documents.read(id), log: [] }),
+    keep: async (id, room, folded, ended) => { if (folded) await documents.write(id, room.base, ended?.authors); },
+    add: () => {},
+    save: (id, docx) => documents.write(id, docx),
+    admit: (id, ticket) => tickets.check(id, ticket),   // { name, readOnly? } or undefined
+  },
+  saveEvery: 10_000,
+});
+
+app.use('/collab', collab.handle);   // Express; in Nest, app.use in main.ts
+```
+
+It reads the address from `originalUrl`, so the prefix Express takes off does not matter, and takes a body your body parser already read. Its routes answer with `Access-Control-Allow-Origin: *` and need no cookies: the ticket is what lets someone in. One process still holds each room, so run one instance of the API, or route each room to one.
 
 ### On the wire
 

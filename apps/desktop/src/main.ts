@@ -243,7 +243,7 @@ async function buildMenu(): Promise<Menu> {
         await Submenu.new({
           text: 'Rebodocs',
           items: [
-            await PredefinedMenuItem.new({ item: { About: { name: 'Rebodocs', version: '0.8.5' } }, text: text('about') }),
+            await PredefinedMenuItem.new({ item: { About: { name: 'Rebodocs', version: '0.8.6' } }, text: text('about') }),
             await separator(),
             await PredefinedMenuItem.new({ item: 'Hide', text: text('hide') }),
             await PredefinedMenuItem.new({ item: 'HideOthers', text: text('hideOthers') }),

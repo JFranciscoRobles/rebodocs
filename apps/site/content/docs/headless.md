@@ -90,7 +90,7 @@ Each gives what there is to show and what there is to do, for a piece of interfa
 | `useDocsCount()` | `words` and `characters` of the document, and of what is `selected`. |
 | `useDocsBubble()` | The bar beside the selection, with `<DocsProvider bubble>`: `open`, `close`, `toggle`, `ask`. |
 | `useDocsResponsive()` | Fits pages to a narrow window; `narrow`, and `keyboard` in pixels. |
-| `useDocsValue(select, fallback)` | Anything else worked out from the editor, re-rendering only when it changes. |
+| `useDocsValue(select, fallback)` | Anything else worked out from the editor, re-rendering only when it changes. For small values: it compares them as JSON at every change, so selecting `editor.doc` makes each key slow. To know when the document changes, `editor.onChange`. |
 
 A find bar, for example:
 

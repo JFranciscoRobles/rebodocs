@@ -335,6 +335,8 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
           if (joined.title && !options.name) name = joined.title;
           // Who the person is, is for the application to say when it says who may come in: their notes are signed with it too.
           if (ticket && joined.name) editor.author = joined.name;
+          // Let in only to watch: the document does not change here.
+          if (joined.readOnly) editor.readOnly = true;
           savedDoc = editor.doc;
           void startWith(options.letterhead);
         }
