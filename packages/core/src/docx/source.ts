@@ -310,3 +310,18 @@ export function embeddedFonts(source: DocxSource): EmbeddedFont[] {
   }
   return out;
 }
+
+/**
+ * The language a file says its text is in, in the defaults of its styles, as
+ * a tag ('es-MX', 'en-US'): what a screen reader reads it with. Undefined for
+ * a document that did not come from a file, or one that does not say.
+ */
+export function documentLanguage(doc: { source?: DocxSource }): string | undefined {
+  const source = doc.source;
+  if (!source) return undefined;
+  const styles = source.files[`${source.mainPath.slice(0, source.mainPath.lastIndexOf('/') + 1)}styles.xml`];
+  const xml = styles && strFromU8(styles);
+  const defaults = xml && /<w:rPrDefault\b[\s\S]*?<\/w:rPrDefault>/.exec(xml)?.[0];
+  // Word may write it the way some systems do, es_419: a tag has hyphens.
+  return (defaults && /<w:lang\b[^>]*?\bw:val="([^"]+)"/.exec(defaults)?.[1]?.replace(/_/g, '-')) || undefined;
+}

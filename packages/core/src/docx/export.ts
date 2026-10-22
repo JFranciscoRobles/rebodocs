@@ -21,6 +21,7 @@ import {
   type TableRow,
   type TabStop,
   type ParagraphProps,
+  type ResolvedParagraphProps,
   type ParagraphStyle,
   type ResolvedRunProps,
   type Run,
@@ -45,6 +46,8 @@ import { textBoxId, textBoxOf } from '../textboxes';
 import { CUSTOM_PROPERTIES_PATH, HIGHLIGHTS, NOTE_COLORS_PROPERTY, mergeTabs, parseRunProps, resolveStyle, val } from './import';
 import { type DocxSource, type EmbeddedFont, type SourceSlot, type StorySource, relationships } from './source';
 import { type XmlNode, child, childrenOf, createNode, escapeXml, parseElement, parseXml, serializeXml } from './xml';
+import { textByFamily } from '../fonts';
+import { parseTrueType, subsetTrueType } from '../pdf';
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const XML_HEADER = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
@@ -234,18 +237,38 @@ function writeMedia(doc: Doc, files: Record<string, Uint8Array>, mainPath: strin
  * embedded, or only as bitmaps, stays out.
  */
 function embeddable(bytes: Uint8Array): boolean {
-  if (bytes.length < 12) return false;
+  const fsType = licence(bytes);
+  // Of the licence bits, the least strict one that is set holds: 'restricted' alone keeps it out.
+  return fsType !== undefined && (fsType & 0x0200) === 0 && (fsType & 0x000f) !== 0x0002;
+}
+
+/** The licence bits of a TrueType file (fsType, in OS/2): 0 when it has none to say. Undefined for another kind of file. */
+function licence(bytes: Uint8Array): number | undefined {
+  if (bytes.length < 12) return undefined;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const version = view.getUint32(0);
-  if (version !== 0x00010000 && version !== 0x74727565) return false;
+  if (version !== 0x00010000 && version !== 0x74727565) return undefined;
   for (let i = 0; i < view.getUint16(4); i++) {
     const record = 12 + i * 16;
-    if (String.fromCharCode(bytes[record], bytes[record + 1], bytes[record + 2], bytes[record + 3]) !== 'OS/2') continue;
-    const fsType = view.getUint16(view.getUint32(record + 8) + 8);
-    // Of the licence bits, the least strict one that is set holds: 'restricted' alone keeps it out.
-    return (fsType & 0x0200) === 0 && (fsType & 0x000f) !== 0x0002;
+    if (String.fromCharCode(bytes[record], bytes[record + 1], bytes[record + 2], bytes[record + 3]) === 'OS/2') return view.getUint16(view.getUint32(record + 8) + 8);
   }
-  return true;
+  return 0;
+}
+
+/** What a font cut down keeps besides the text of the document: the letters, digits and signs of the keyboard, for page numbers, list numbers and a word typed later. */
+const KEYBOARD = Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i)).join('');
+
+/**
+ * The font file with the glyphs of `text` and of the keyboard alone, when its
+ * licence lets it be cut down; otherwise undefined, and it goes whole.
+ */
+function cutDown(bytes: Uint8Array, text: string): Uint8Array | undefined {
+  if ((licence(bytes) ?? 0x0100) & 0x0100) return undefined;
+  const font = parseTrueType(bytes);
+  if (!font) return undefined;
+  const glyphs = new Set<number>();
+  for (const ch of KEYBOARD + text) glyphs.add(font.glyph(ch.codePointAt(0)!));
+  return subsetTrueType(bytes, glyphs, true);
 }
 
 /** A key of the kind a font is obfuscated with, as a GUID: {XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}. */
@@ -271,7 +294,7 @@ const EMBEDS = [
  * 32 bytes XOR the key), named in the font table, and the setting that says
  * the document carries its fonts.
  */
-function writeFonts(files: Record<string, Uint8Array>, mainPath: string, fonts: EmbeddedFont[]): void {
+function writeFonts(files: Record<string, Uint8Array>, mainPath: string, fonts: EmbeddedFont[], text?: Map<string, string>): void {
   const faces = fonts.filter((font) => font.family && embeddable(font.bytes));
   if (!faces.length) return;
   const slash = mainPath.lastIndexOf('/') + 1;
@@ -286,6 +309,7 @@ function writeFonts(files: Record<string, Uint8Array>, mainPath: string, fonts: 
   const relsPath = `${dir}_rels/fontTable.xml.rels`;
   let rels = files[relsPath] ? strFromU8(files[relsPath]) : `${XML_HEADER}<Relationships xmlns="${RELS_NS}"/>`;
   let added = false;
+  let cut = false;
   for (const face of faces) {
     let font = childrenOf(table, 'w:font').find((f) => f.attrs['w:name']?.toLowerCase() === face.family.toLowerCase());
     if (!font) {
@@ -296,7 +320,9 @@ function writeFonts(files: Record<string, Uint8Array>, mainPath: string, fonts: 
     if (child(font, kind[0])) continue;
     const key = fontKey();
     const hex = key.replace(/[^0-9A-F]/g, '');
-    const bytes = face.bytes.slice();
+    const smaller = text && cutDown(face.bytes, text.get(face.family.toLowerCase()) ?? '');
+    if (smaller) cut = true;
+    const bytes = smaller ?? face.bytes.slice();
     for (let i = 0; i < 32; i++) bytes[i] ^= parseInt(hex.slice(30 - 2 * (i % 16), 32 - 2 * (i % 16)), 16);
     let n = 1;
     while (files[`${dir}fonts/dxfont${n}.odttf`]) n++;
@@ -305,7 +331,7 @@ function writeFonts(files: Record<string, Uint8Array>, mainPath: string, fonts: 
     while (rels.includes(`"rId${r}"`)) r++;
     rels = appendToRoot(rels, 'Relationships', `<Relationship Id="rId${r}" Type="${R_NS}/font" Target="fonts/dxfont${n}.odttf"/>`);
     // The faces of a font go in their order, after what else it says of itself.
-    font.children.push(createNode(kind[0], { 'r:id': `rId${r}`, 'w:fontKey': key }));
+    font.children.push(createNode(kind[0], { 'r:id': `rId${r}`, 'w:fontKey': key, ...(smaller ? { 'w:subsetted': '1' } : {}) }));
     const order = EMBEDS.map(([name]) => name as string);
     const rank = (c: XmlNode) => order.indexOf(c.name);
     font.children.sort((a, b) => (rank(a) < 0 || rank(b) < 0 ? 0 : rank(a) - rank(b)));
@@ -318,14 +344,16 @@ function writeFonts(files: Record<string, Uint8Array>, mainPath: string, fonts: 
   if (!/Extension="odttf"/i.test(types)) {
     files['[Content_Types].xml'] = strToU8(insertBefore(types, /<Override\b/, 'Types', '<Default Extension="odttf" ContentType="application/vnd.openxmlformats-officedocument.obfuscatedFont"/>'));
   }
-  // Word keeps the fonts in the file it saves only when its settings say the document carries them.
+  // Word keeps the fonts in the file it saves only when its settings say the document carries them; cut down, when they say that too.
   const settingsPath = `${dir}settings.xml`;
+  const say = ['w:embedTrueTypeFonts', ...(cut ? ['w:saveSubsetFonts'] : [])];
   if (!files[settingsPath]) {
-    addPart(files, mainPath, 'settings.xml', `${R_NS}/settings`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml', `${XML_HEADER}<w:settings xmlns:w="${W_NS}"><w:embedTrueTypeFonts/></w:settings>`);
+    addPart(files, mainPath, 'settings.xml', `${R_NS}/settings`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml', `${XML_HEADER}<w:settings xmlns:w="${W_NS}">${say.map((name) => `<${name}/>`).join('')}</w:settings>`);
   } else {
     const settings = parseElement(strFromU8(files[settingsPath]));
-    if (settings && !child(settings, 'w:embedTrueTypeFonts')) {
-      insertOrdered(settings, SETTINGS_ORDER, createNode('w:embedTrueTypeFonts'));
+    const missing = say.filter((name) => settings && !child(settings, name));
+    if (settings && missing.length) {
+      for (const name of missing) insertOrdered(settings, SETTINGS_ORDER, createNode(name));
       files[settingsPath] = strToU8(XML_HEADER + serializeXml(settings));
     }
   }
@@ -509,6 +537,45 @@ function writeStyles(doc: Doc, files: Record<string, Uint8Array>, mainPath: stri
   if (!added) return;
   if (existing) files[path] = strToU8(appendToRoot(strFromU8(existing), 'w:styles', added));
   else addPart(files, mainPath, 'styles.xml', STYLES_REL, STYLES_TYPE, `${XML_HEADER}<w:styles xmlns:w="${W_NS}">${added}</w:styles>`);
+}
+
+/**
+ * Says in the defaults of the styles which language the text is in, when the
+ * file does not say it already: without one, Word gives every run the language
+ * it guesses when it opens the file, and with changes tracked, that is a change
+ * of formatting of every run, by whoever opened it.
+ */
+function writeLanguage(files: Record<string, Uint8Array>, mainPath: string, language: string, replace = false): void {
+  const path = `${mainPath.slice(0, mainPath.lastIndexOf('/') + 1)}styles.xml`;
+  const lang = `<w:lang w:val="${escapeXml(language)}"/>`;
+  if (!files[path]) {
+    addPart(files, mainPath, 'styles.xml', STYLES_REL, STYLES_TYPE, `${XML_HEADER}<w:styles xmlns:w="${W_NS}"><w:docDefaults><w:rPrDefault><w:rPr>${lang}</w:rPr></w:rPrDefault></w:docDefaults></w:styles>`);
+    return;
+  }
+  const styles = parseElement(strFromU8(files[path]));
+  if (!styles) return;
+  let defaults = child(styles, 'w:docDefaults');
+  if (!defaults) {
+    defaults = createNode('w:docDefaults');
+    styles.children.unshift(defaults);
+  }
+  let rPrDefault = child(defaults, 'w:rPrDefault');
+  if (!rPrDefault) {
+    rPrDefault = createNode('w:rPrDefault');
+    defaults.children.unshift(rPrDefault);
+  }
+  let rPr = child(rPrDefault, 'w:rPr');
+  if (!rPr) {
+    rPr = createNode('w:rPr');
+    rPrDefault.children.push(rPr);
+  }
+  const had = child(rPr, 'w:lang');
+  if (had && !replace) return;
+  if (had) {
+    if (had.attrs['w:val'] === language) return;
+    had.attrs['w:val'] = language;
+  } else insertOrdered(rPr, RPR_ORDER, parseElement(lang)!);
+  files[path] = strToU8(XML_HEADER + serializeXml(styles));
 }
 
 /** Writes into `files` the lists the package does not define yet: all of them for a new document. */
@@ -788,23 +855,35 @@ function markRevisionXml(props: ParagraphProps): string {
 /**
  * Writes runs inside the changes they are part of: one `w:ins` or `w:del`
  * around each stretch of the same change, inside the wrapper the runs share.
+ * Text taken out of what another put in goes in a `w:del` inside a `w:ins`,
+ * as Word writes it. A move goes as the text taken out and the text put in:
+ * written as Word's own move, with its ranges, the file did not open in Word
+ * for Mac, which reads the two as it reads any other.
  */
 function revisionWriter(): { open(props: RunProps): string; close(): string } {
   let key = '';
-  let tag = '';
+  let closing = '';
   return {
     open(props) {
-      const next = props.revision ? `${props.revision}\u0000${props.revisionAuthor ?? ''}\u0000${props.revisionDate ?? ''}` : '';
+      const next = props.revision
+        ? [props.revision, props.revisionAuthor, props.revisionDate, props.insertedBy, props.insertedDate].map((v) => v ?? '').join('\u0000') + (props.insertedBy !== undefined ? '\u0000n' : '')
+        : '';
       if (next === key) return '';
       const out = this.close();
       key = next;
-      tag = revisionTag(props.revision);
-      return out + (tag ? `<${tag}${revisionAttrs(props.revisionAuthor, props.revisionDate)}>` : '');
+      const tag = revisionTag(props.revision);
+      if (!tag) return out;
+      let open = '';
+      if (props.revision === 'delete' && props.insertedBy !== undefined) {
+        open += `<w:ins${revisionAttrs(props.insertedBy, props.insertedDate)}>`;
+        closing = '</w:del></w:ins>';
+      } else closing = `</${tag}>`;
+      return out + open + `<${tag}${revisionAttrs(props.revisionAuthor, props.revisionDate)}>`;
     },
     close() {
-      const out = tag ? `</${tag}>` : '';
+      const out = closing;
       key = '';
-      tag = '';
+      closing = '';
       return out;
     },
   };
@@ -826,8 +905,21 @@ function runPropsXml(props: RunProps): string {
     `<w:sz w:val="${size}"/><w:szCs w:val="${size}"/>` +
     (highlightName(p.highlight) === 'none' ? '' : `<w:highlight w:val="${highlightName(p.highlight)}"/>`) +
     (p.underline ? '<w:u w:val="single"/>' : '') +
+    rPrChangeXml(props) +
     '</w:rPr>'
   );
+}
+
+/** The change of formatting of a run, as Word keeps one: who, when, and its formatting before. */
+function rPrChangeXml(props: RunProps): string {
+  const change = props.formatChange;
+  return change ? `<w:rPrChange${revisionAttrs(change.author, change.date)}>${runPropsXml(change.before)}</w:rPrChange>` : '';
+}
+
+/** The change of formatting of a paragraph, as Word keeps one. */
+function pPrChangeXml(props: ParagraphProps): string {
+  const change = props.formatChange;
+  return change ? `<w:pPrChange${revisionAttrs(change.author, change.date)}><w:pPr>${paragraphFormatXml(resolveParagraph(change.before))}</w:pPr></w:pPrChange>` : '';
 }
 
 function runXml(run: Run): string {
@@ -880,16 +972,14 @@ function tabsXml(leaderTab: number, tabs: TabStop[], style: TabStop[] = []): str
   return stops.length ? `<w:tabs>${stops.map((stop) => stop.xml).join('')}</w:tabs>` : '';
 }
 
-function paragraphXml(para: Paragraph): string {
-  const p = resolveParagraph(para.props);
+/** The formatting of a paragraph, as the first children of its `w:pPr`. */
+function paragraphFormatXml(p: ResolvedParagraphProps): string {
   const firstLine =
     p.indentFirstLine < 0
       ? ` w:hanging="${twips(-p.indentFirstLine)}"`
       : ` w:firstLine="${twips(p.indentFirstLine)}"`;
   const jc = p.align === 'justify' ? 'both' : p.align;
-  const isEmpty = para.runs.every((r) => !r.text);
   return (
-    '<w:p><w:pPr>' +
     (p.styleId ? `<w:pStyle w:val="${escapeXml(p.styleId)}"/>` : '') +
     (p.keepNext ? '<w:keepNext/>' : '') +
     (p.keepLines ? '<w:keepLines/>' : '') +
@@ -901,10 +991,20 @@ function paragraphXml(para: Paragraph): string {
     `<w:spacing w:before="${twips(p.spacingBefore)}" w:after="${twips(p.spacingAfter)}"` +
     ` w:line="${Math.round(p.lineHeight * 240)}" w:lineRule="auto"/>` +
     `<w:ind w:left="${twips(p.indentLeft)}" w:right="${twips(p.indentRight)}"${firstLine}/>` +
-    `<w:jc w:val="${jc}"/>` +
+    `<w:jc w:val="${jc}"/>`
+  );
+}
+
+function paragraphXml(para: Paragraph): string {
+  const p = resolveParagraph(para.props);
+  const isEmpty = para.runs.every((r) => !r.text);
+  return (
+    '<w:p><w:pPr>' +
+    paragraphFormatXml(p) +
     // The paragraph mark carries the formatting of an empty paragraph, and the change that put it in or took it out.
     (isEmpty ? runPropsXml(para.runs[0].props).replace('<w:rPr>', `<w:rPr>${markRevisionXml(para.props)}`) : markRevisionXml(para.props) ? `<w:rPr>${markRevisionXml(para.props)}</w:rPr>` : '') +
     (para.section ? sectionXml(para.section) : '') +
+    pPrChangeXml(para.props) +
     '</w:pPr>' +
     wrappedRunsXml(para.runs) +
     '</w:p>'
@@ -989,13 +1089,15 @@ const bordersKey = (cell: TableCell) => JSON.stringify(cellLines(cell));
 
 /** `w:trPr` with what the model says of a row on top of what the file had: its height, and whether it is a heading or must not be split. */
 function patchRow(trPr: XmlNode, row: TableRow): void {
-  trPr.children = trPr.children.filter((c) => c.name !== 'w:trHeight' && c.name !== 'w:cantSplit' && c.name !== 'w:tblHeader');
+  trPr.children = trPr.children.filter((c) => c.name !== 'w:trHeight' && c.name !== 'w:cantSplit' && c.name !== 'w:tblHeader' && c.name !== 'w:ins' && c.name !== 'w:del');
+  // Put in or taken out while changes were tracked, as the model says now.
+  if (row.revision) insertOrdered(trPr, TRPR_ORDER, parseElement(`<${row.revision.type === 'insert' ? 'w:ins' : 'w:del'}${revisionAttrs(row.revision.author, row.revision.date)}/>`)!);
   if (row.cantSplit) insertOrdered(trPr, TRPR_ORDER, createNode('w:cantSplit'));
   if (row.height) insertOrdered(trPr, TRPR_ORDER, createNode('w:trHeight', row.exact ? { 'w:val': String(twips(row.height)), 'w:hRule': 'exact' } : { 'w:val': String(twips(row.height)) }));
   if (row.header) insertOrdered(trPr, TRPR_ORDER, createNode('w:tblHeader'));
 }
 
-const TRPR_ORDER = ['w:cnfStyle', 'w:divId', 'w:gridBefore', 'w:gridAfter', 'w:wBefore', 'w:wAfter', 'w:cantSplit', 'w:trHeight', 'w:tblHeader', 'w:tblCellSpacing', 'w:jc', 'w:hidden'];
+const TRPR_ORDER = ['w:cnfStyle', 'w:divId', 'w:gridBefore', 'w:gridAfter', 'w:wBefore', 'w:wAfter', 'w:cantSplit', 'w:trHeight', 'w:tblHeader', 'w:tblCellSpacing', 'w:jc', 'w:hidden', 'w:ins', 'w:del', 'w:trPrChange'];
 
 /**
  * A table written from the model. When it was read from a file (`from`), the
@@ -1048,7 +1150,7 @@ function tableXml(
     model = own ?? model;
     out += own ? from!.xml.slice(own.start, own.openEnd) : '<w:tr>';
     const wasRow = from?.original?.rows.find((r) => r.id === row.id);
-    const rowKey = (r: TableRow) => `${r.height}:${!!r.exact}:${!!r.cantSplit}:${!!r.header}`;
+    const rowKey = (r: TableRow) => `${r.height}:${!!r.exact}:${!!r.cantSplit}:${!!r.header}:${JSON.stringify(r.revision ?? null)}`;
     if (model) {
       out += model.children.filter((c) => c.name === 'w:tblPrEx').map(slice).join('');
       const kept = child(model, 'w:trPr');
@@ -1059,7 +1161,7 @@ function tableXml(
         patchRow(trPr, row);
         if (trPr.children.length) out += serializeXml(trPr);
       }
-    } else if (row.before || row.height || row.cantSplit || row.header) {
+    } else if (row.before || row.height || row.cantSplit || row.header || row.revision) {
       const trPr = createNode('w:trPr');
       if (row.before) insertOrdered(trPr, TRPR_ORDER, createNode('w:gridBefore', { 'w:val': String(row.before) }));
       patchRow(trPr, row);
@@ -1430,6 +1532,10 @@ function patchedRunProps(source: DocxSource, base: RunProps, props: RunProps, fo
       'w:cstheme',
     ]);
   }
+  // The change of formatting as the model has it now: kept, decided, or made here.
+  rPr.children = rPr.children.filter((c) => c.name !== 'w:rPrChange');
+  const change = rPrChangeXml(props);
+  if (change) insertOrdered(rPr, RPR_ORDER, parseElement(change)!);
   return rPr;
 }
 
@@ -1527,6 +1633,10 @@ function patchedParagraphProps(
     into.children.unshift(parseElement(change)!);
     if (!markRPr) insertOrdered(pPr, PPR_ORDER, into);
   } else if (markRPr && !markRPr.children.some((c) => c.name !== '#text')) pPr.children = pPr.children.filter((c) => c !== markRPr);
+  // The change of its formatting as the model has it now.
+  pPr.children = pPr.children.filter((c) => c.name !== 'w:pPrChange');
+  const formatted = pPrChangeXml(para.props);
+  if (formatted) insertOrdered(pPr, PPR_ORDER, parseElement(formatted)!);
   return pPr;
 }
 
@@ -1829,6 +1939,21 @@ export interface DocxOptions {
    * be embedded go in, and only the faces the file does not carry already.
    */
   fonts?: EmbeddedFont[];
+  /**
+   * The language the text is in, as a tag ('es-MX', 'en'): said in the defaults
+   * of its styles, for spelling and for Word not to guess one, when the file
+   * does not say it already.
+   */
+  language?: string;
+  /** Says `language` even where the file says another one: for a language a person chose for the text. */
+  replaceLanguage?: boolean;
+  /**
+   * Whether those fonts go in cut down to the characters of the document and
+   * of the keyboard, as Word's "Embed only the characters used": a much
+   * smaller file, in which a character typed later that the font does not keep
+   * is shown in another font by whoever lacks it. Whole when the licence says so.
+   */
+  subsetFonts?: boolean;
 }
 
 export function exportDocx(whole: Doc, options: DocxOptions = {}): Uint8Array {
@@ -1842,6 +1967,7 @@ export function exportDocx(whole: Doc, options: DocxOptions = {}): Uint8Array {
     ? { ...source.files }
     : { '[Content_Types].xml': strToU8(CONTENT_TYPES), '_rels/.rels': strToU8(ROOT_RELS) };
   writeStyles(doc, files, mainPath, source);
+  if (options.language) writeLanguage(files, mainPath, options.language, options.replaceLanguage);
   writeNumbering(doc, files, mainPath, source);
   writeNotes(doc, files, mainPath, source);
   writeFootnotes(doc, files, mainPath, source);
@@ -1860,7 +1986,7 @@ export function exportDocx(whole: Doc, options: DocxOptions = {}): Uint8Array {
   }
   xml = replaceBoxes(xml, mainPath, boxes);
   files[mainPath] = strToU8(writeLinks(files, mainPath, writeMedia(doc, files, mainPath, xml)));
-  if (options.fonts?.length) writeFonts(files, mainPath, options.fonts);
+  if (options.fonts?.length) writeFonts(files, mainPath, options.fonts, options.subsetFonts ? textByFamily(doc) : undefined);
   writeTracking(doc, files, mainPath, source);
   dropUnusedPictures(files);
   return zipSync(files);

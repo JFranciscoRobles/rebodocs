@@ -39,7 +39,34 @@ export interface RunProps {
   /** Who made the change, and when, as an ISO date. */
   revisionAuthor?: string;
   revisionDate?: string;
+  /**
+   * On text taken out that someone else had put in, while both changes wait:
+   * who put it in, and when. As in Word, it is two changes, each to accept or
+   * reject on its own.
+   */
+  insertedBy?: string;
+  insertedDate?: string;
+  /**
+   * Set when the change is half of a move, as Word tracks text moved: the
+   * name both halves share, the place it left (taken out) and the one it went
+   * to (put in). Accepting or rejecting either half decides both.
+   */
+  revisionMove?: string;
+  /** Set when the formatting of the text was changed while changes were tracked: who, when, and what it was before. */
+  formatChange?: FormatChange<RunFormat>;
 }
+
+/** A change of formatting, kept to be accepted or rejected as Word keeps one: who made it, when, and the formatting before it. */
+export interface FormatChange<T> {
+  author: string;
+  date?: string;
+  /** The formatting it had: what rejecting the change gives back. What it leaves out was not set. */
+  before: T;
+}
+
+/** What of a run's properties is its formatting: what a change of formatting is about. */
+export const RUN_FORMAT = ['bold', 'italic', 'underline', 'strike', 'fontSize', 'fontFamily', 'color', 'highlight'] as const;
+export type RunFormat = Pick<RunProps, (typeof RUN_FORMAT)[number]>;
 
 /** The highlight colours Word offers, in the order of its palette. */
 export const HIGHLIGHT_COLORS = [
@@ -119,7 +146,30 @@ export interface ParagraphProps {
   markRevision?: '' | 'insert' | 'delete';
   markAuthor?: string;
   markDate?: string;
+  /** Set when the formatting of the paragraph was changed while changes were tracked: who, when, and what it was before. */
+  formatChange?: FormatChange<ParagraphFormat>;
 }
+
+/** What of a paragraph's properties is its formatting. */
+export const PARAGRAPH_FORMAT = [
+  'align',
+  'spacingBefore',
+  'spacingAfter',
+  'lineHeight',
+  'indentLeft',
+  'indentRight',
+  'indentFirstLine',
+  'pageBreakBefore',
+  'keepNext',
+  'keepLines',
+  'widowControl',
+  'numId',
+  'listLevel',
+  'styleId',
+  'leaderTab',
+  'tabs',
+] as const;
+export type ParagraphFormat = Pick<ParagraphProps, (typeof PARAGRAPH_FORMAT)[number]>;
 
 /** A named look for a paragraph. Its formatting is complete: nothing of what the paragraph had shows through. */
 export interface ParagraphStyle {
@@ -205,6 +255,15 @@ export interface TableRow {
   /** A heading row: one of the first rows of the table, shown again at the top of every page the table goes on to. */
   header?: boolean;
   cells: TableCell[];
+  /** Set for a row put in or taken out while changes were tracked: it stays, marked, until the change is accepted or rejected. */
+  revision?: RowRevision;
+}
+
+/** A row put in or taken out, by whom and when: one change, decided whole. */
+export interface RowRevision {
+  type: 'insert' | 'delete';
+  author: string;
+  date?: string;
 }
 
 /** A table that is not in the run of the text but beside it, the text going round it. */
@@ -456,8 +515,8 @@ export interface Range {
   to: Position;
 }
 
-export type ResolvedRunProps = Required<RunProps>;
-export type ResolvedParagraphProps = Required<ParagraphProps>;
+export type ResolvedRunProps = Required<Omit<RunProps, 'formatChange'>> & Pick<RunProps, 'formatChange'>;
+export type ResolvedParagraphProps = Required<Omit<ParagraphProps, 'formatChange'>> & Pick<ParagraphProps, 'formatChange'>;
 
 export const DEFAULT_PAGE: PageSetup = {
   width: 612,
@@ -487,6 +546,9 @@ export const DEFAULT_RUN: ResolvedRunProps = {
   revision: '',
   revisionAuthor: '',
   revisionDate: '',
+  insertedBy: '',
+  insertedDate: '',
+  revisionMove: '',
 };
 
 export const DEFAULT_PARAGRAPH: ResolvedParagraphProps = {
@@ -531,7 +593,7 @@ export function resolveParagraph(props: ParagraphProps): ResolvedParagraphProps 
 export function runPropsEqual(a: RunProps, b: RunProps): boolean {
   const ra = resolveRun(a);
   const rb = resolveRun(b);
-  return (Object.keys(ra) as (keyof RunProps)[]).every((k) => ra[k] === rb[k]);
+  return (Object.keys(ra) as (keyof RunProps)[]).every((k) => ra[k] === rb[k]) && ra.formatChange === rb.formatChange;
 }
 
 export function paragraphLength(p: Paragraph): number {

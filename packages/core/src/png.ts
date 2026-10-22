@@ -133,11 +133,135 @@ export function decodePng(bytes: Uint8Array): Required<Pick<PdfImage, 'width' | 
   }
 }
 
+/**
+ * The pixels of the first frame of a GIF: a palette, LZW-packed indices, and
+ * one index that may stand for what shows through. Undefined for one that
+ * cannot be read.
+ */
+export function decodeGif(bytes: Uint8Array): Required<Pick<PdfImage, 'width' | 'height' | 'rgb' | 'alpha'>> | undefined {
+  try {
+    const head = String.fromCharCode(...bytes.subarray(0, 6));
+    if (head !== 'GIF87a' && head !== 'GIF89a') return undefined;
+    const u16 = (at: number) => bytes[at] | (bytes[at + 1] << 8);
+    const width = u16(6);
+    const height = u16(8);
+    const flags = bytes[10];
+    let at = 13;
+    let palette: Uint8Array | undefined;
+    if (flags & 0x80) {
+      const size = 3 * (2 << (flags & 7));
+      palette = bytes.subarray(at, at + size);
+      at += size;
+    }
+    let clear = -1;
+    while (at < bytes.length) {
+      const block = bytes[at];
+      if (block === 0x21) {
+        // An extension; the one of graphic control says which index is see-through.
+        if (bytes[at + 1] === 0xf9 && bytes[at + 3] & 1) clear = bytes[at + 6];
+        at += 2;
+        while (bytes[at]) at += bytes[at] + 1;
+        at++;
+      } else if (block === 0x2c) {
+        const left = u16(at + 1);
+        const top = u16(at + 3);
+        const w = u16(at + 5);
+        const h = u16(at + 7);
+        const local = bytes[at + 9];
+        at += 10;
+        if (local & 0x80) {
+          const size = 3 * (2 << (local & 7));
+          palette = bytes.subarray(at, at + size);
+          at += size;
+        }
+        if (!palette) return undefined;
+        const minimum = bytes[at++];
+        // The packed indices come in blocks of up to 255 bytes.
+        const packed: number[] = [];
+        while (bytes[at]) {
+          for (let k = 1; k <= bytes[at]; k++) packed.push(bytes[at + k]);
+          at += bytes[at] + 1;
+        }
+        const indices = lzw(packed, minimum, w * h);
+        const order = local & 0x40 ? interlacedRows(h) : Array.from({ length: h }, (_, y) => y);
+        const rgb = new Uint8Array(width * height * 3).fill(255);
+        const alpha = new Uint8Array(width * height);
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const index = indices[y * w + x];
+            const px = left + x;
+            const py = top + order[y];
+            if (index === undefined || index === clear || px >= width || py >= height) continue;
+            const i = py * width + px;
+            rgb.set(palette.subarray(index * 3, index * 3 + 3), i * 3);
+            alpha[i] = 255;
+          }
+        }
+        return { width, height, rgb, alpha };
+      } else {
+        return undefined;
+      }
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The rows of an interlaced GIF in the order they come: every eighth from 0, from 4, every fourth from 2, every other from 1. */
+function interlacedRows(height: number): number[] {
+  const rows: number[] = [];
+  for (const [start, step] of [[0, 8], [4, 8], [2, 4], [1, 2]]) for (let y = start; y < height; y += step) rows.push(y);
+  return rows;
+}
+
+/** The indices LZW packed, with codes that grow from `minimum + 1` bits to twelve. */
+function lzw(data: number[], minimum: number, count: number): Uint8Array {
+  const out = new Uint8Array(count);
+  const clearCode = 1 << minimum;
+  const end = clearCode + 1;
+  let size = minimum + 1;
+  let table: number[][] = [];
+  const reset = () => {
+    table = Array.from({ length: clearCode + 2 }, (_, i) => (i < clearCode ? [i] : []));
+    size = minimum + 1;
+  };
+  reset();
+  let written = 0;
+  let previous: number[] | undefined;
+  let bits = 0;
+  let held = 0;
+  for (let i = 0; i < data.length && written < count; ) {
+    while (held < size && i < data.length) {
+      bits |= data[i++] << held;
+      held += 8;
+    }
+    if (held < size) break;
+    const code = bits & ((1 << size) - 1);
+    bits >>>= size;
+    held -= size;
+    if (code === clearCode) {
+      reset();
+      previous = undefined;
+      continue;
+    }
+    if (code === end) break;
+    const entry = code < table.length ? table[code] : previous ? [...previous, previous[0]] : undefined;
+    if (!entry) break;
+    for (const index of entry) if (written < count) out[written++] = index;
+    if (previous && table.length < 4096) table.push([...previous, entry[0]]);
+    if (table.length === 1 << size && size < 12) size++;
+    previous = entry;
+  }
+  return out;
+}
+
 /** A picture of a document as a PDF takes it; undefined for the kinds that cannot be read here. */
 export function pdfImage(media: Media): PdfImage | undefined {
   if (media.type === 'image/jpeg') {
     const size = jpegSize(media.bytes);
     return size && { ...size, jpeg: media.bytes };
   }
+  if (media.type === 'image/gif') return decodeGif(media.bytes);
   return media.type === 'image/png' ? decodePng(media.bytes) : undefined;
 }

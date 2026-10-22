@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DocsEditor, type Versions } from '@rebodocs/react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type DocsHandle, DocsEditor, type Versions } from '@rebodocs/react'
 import { type BucketFile, type MadePdf, listFiles, listVersions, makePdf, readFile, readUrl, saveVersion, variablesOf, writeFile } from './api'
 
 const isDocx = (key: string) => /\.docx$/i.test(key)
@@ -80,6 +80,7 @@ export function App() {
   const [open, setOpen] = useState<Open>()
   const [status, setStatus] = useState<{ text: string; bad?: boolean }>({ text: '' })
   const [pdf, setPdf] = useState(false)
+  const handle = useRef<DocsHandle | undefined>(undefined)
   const say = (text: string) => setStatus({ text })
   const fail = (problem: unknown) => setStatus({ text: messageOf(problem), bad: true })
 
@@ -125,12 +126,20 @@ export function App() {
     try {
       say(`Saving ${open.key}…`)
       await writeFile(open.key, docx)
-      await saveVersion(open.key, docx)
-      say(`${open.key} saved, ${sizeOf(docx.length)}, and kept as a version.`)
-      void refresh()
     } catch (problem) {
-      fail(problem)
+      // Thrown back: the editor says it could not be saved, and the document stays unsaved.
+      say('')
+      throw problem
     }
+    // The document is in the bucket now, whatever happens to its version: said apart.
+    try {
+      // Signed with the name the person gives their notes, when they gave one.
+      await saveVersion(open.key, docx, { author: handle.current?.editor.author || undefined })
+      say(`${open.key} saved, ${sizeOf(docx.length)}, and kept as a version.`)
+    } catch (problem) {
+      fail(new Error(`${open.key} is saved, but its version could not be kept: ${messageOf(problem)}`))
+    }
+    void refresh()
   }
 
   const stored = !!open && !!files?.some((file) => file.key === open.key)
@@ -172,7 +181,7 @@ export function App() {
         <div className="editor">
           {open ? (
             // Made again for another document: the key is its place in the bucket.
-            <DocsEditor key={open.key} className="fill" docx={open.docx} name={open.key.split('/').pop()} locale="en" versions={versions} onSave={(docx) => save(docx)} onError={(message) => fail(new Error(message))} />
+            <DocsEditor key={open.key} className="fill" docx={open.docx} name={open.key.split('/').pop()} locale="en" versions={versions} onSave={(docx) => save(docx)} onReady={(docs) => (handle.current = docs)} onError={(message) => fail(new Error(message))} />
           ) : (
             <p className="empty">Nothing open.</p>
           )}

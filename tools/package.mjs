@@ -126,6 +126,6 @@ export async function buildPackage(name, spec) {
     publishConfig: { access: 'public' },
   };
   writeFileSync(join(out, 'package.json'), `${JSON.stringify(published, null, 2)}\n`);
-  for (const file of ['README.md', 'LICENSE']) copyFileSync(existsSync(join(here, file)) ? join(here, file) : join(root, file), join(out, file));
+  for (const file of ['README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) copyFileSync(existsSync(join(here, file)) ? join(here, file) : join(root, file), join(out, file));
   console.log(`${source.name} ${version}: dist/ is the package, ${files} declaration files in it.`);
 }

@@ -9,4 +9,5 @@ let bucket: Bucket | undefined;
 
 export const api = createApi(() => (bucket ??= openBucket()), {
   fontDirs: process.env.FONTS_DIR ? [resolve(process.env.FONTS_DIR)] : [],
+  keepVersions: process.env.VERSIONS_KEPT ? Number(process.env.VERSIONS_KEPT) : undefined,
 });

@@ -1,8 +1,10 @@
 export { IS_MAC, keyboardInset, onKeyboard } from './platform';
 export { type FontSource, addFont, addFonts, fontFaces, fontFamilies, fontFile, onFontsChange } from './fonts';
 export { type Responsive, type ResponsiveOptions, createResponsive } from './responsive';
-export { Editor, MAX_ZOOM, MIN_ZOOM, type EditArea, type MarkKey, type NoteView, type PeerCaret, type Selection, type ViewMode, type ZoomFit } from './editor';
+export { Editor, MAX_ZOOM, MIN_ZOOM, type ChangesView, type EditArea, type MarkKey, type NoteView, type PeerCaret, type Selection, type ViewMode, type ZoomFit } from './editor';
 export { CanvasMeasurer, cssFont, cssFontFamily } from './measurer';
+export { DARK_THEME, type Theme, applyTheme } from './theme';
+export { type Dictionary, type SpellChecker, type SpellCheckerOptions, type SpelledWord, createSpellChecker, wordsToCheck } from './spellcheck';
 export { type Toolbar, type ToolbarOptions, createToolbar } from './toolbar';
 export { type StatusBar, type StatusBarOptions, createStatusBar } from './statusbar';
 export { type Ruler, createRuler } from './ruler';
@@ -11,6 +13,7 @@ export { type Panel, type PanelOptions, type PanelTab, createPanel } from './pan
 export { type VersionInfo, type VersionView, type VersionViewOptions, type Versions, createVersionView, loadVersion, restoreVersionOf, sortVersions, versionDate, versionName } from './versions';
 export { type Sidebar, type SidebarOptions, createSidebar } from './sidebar';
 export { type Bubble, createBubble } from './bubble';
+export { type FocusMode, type FocusModeOptions, createFocusMode } from './focus';
 export { createImagePicker, insertPictures, openImageGrid } from './imagegrid';
-export { type MessageKey, type Messages, addLocale, getLocale, locales, messages, onLocaleChange, setLocale, styleName, t } from './i18n';
+export { type MessageKey, type Messages, type Texts, PLURALS, addLocale, getLocale, locales, messages, onLocaleChange, plural, setLocale, speaks, styleName, t } from './i18n';
 export { recallAuthor, setAuthor } from './author';

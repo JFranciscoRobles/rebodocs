@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/core",
-  "version": "0.8.7",
+  "version": "0.9.0",
   "description": "The engine: document model, DOCX import and export, page layout, PDF and templates. No DOM.",
   "license": "MIT",
   "private": true,

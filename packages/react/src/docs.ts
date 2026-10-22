@@ -9,13 +9,18 @@
 // lie on, their shadow, the colour of the selection.
 
 import { type CollabState, type Peer, type Session, createRoom, joinRoom, pingServer } from '@rebodocs/collab/browser';
-import { letterheadImage } from '@rebodocs/core';
-import { type Bubble, type EditArea, type FontSource, type Versions, type ViewMode, type ZoomFit, Editor, IS_MAC, addFonts, fontFamilies, createBubble, recallAuthor, setAuthor, t } from '@rebodocs/editor';
+import { type Doc, letterheadImage } from '@rebodocs/core';
+import { type Bubble, type ChangesView, type EditArea, type FontSource, type SpellChecker, type Theme, type ViewMode, type ZoomFit, Editor, IS_MAC, addFonts, fontFamilies, createBubble, recallAuthor, setAuthor, t } from '@rebodocs/editor';
 import { type AssistantLink, type AssistantOptions, connectAssistant } from '@rebodocs/mcp/browser';
 
 export interface DocsCoreOptions {
   /** The document to open, as a DOCX; an empty one without it. Not used with `collab`, where the room has it. */
   docx?: Uint8Array | ArrayBuffer;
+  /**
+   * Whether `docx` has changes not saved yet, as a draft the application kept:
+   * `dirty` from the start, and the dot beside the title with it.
+   */
+  unsaved?: boolean;
   /** What the document is called: given to what is exported and saved. */
   name?: string;
   /** Who the person is: what their notes are signed with, and what the others see them as. */
@@ -38,15 +43,20 @@ export interface DocsCoreOptions {
   fonts?: FontSource[];
   /**
    * Whether the DOCX made of the document carries the fonts given in `fonts`
-   * that its text is in (the TrueType ones whose licence lets them). On unless false.
+   * that its text is in (the TrueType ones whose licence lets them): whole
+   * unless false, or cut down to the characters used with 'subset'.
    */
-  embedFonts?: boolean;
+  embedFonts?: boolean | 'subset';
+  /** The language the text is in, as a tag ('es-MX', 'en-US'), written in the DOCX made of it; the language of the interface when left out. */
+  language?: string;
   /**
-   * The versions of the document, where the application keeps them: what
-   * lists them, gives one back, and keeps a new one. With them, the side
-   * panel has a tab to compare the document with one and to go back to it.
+   * What marks the words spelled wrong, with a red wave, and offers what they
+   * could be: `createSpellChecker` with the dictionaries you give, or one of
+   * your own. None, and nothing is marked.
    */
-  versions?: Versions;
+  spellcheck?: SpellChecker;
+  /** The colours of the interface: 'light' (as it comes), 'dark', or 'auto' for the one the system is set to. The pages stay white. */
+  theme?: Theme;
   /** Given the document when the person saves (⌘S, or `save()`): keeping it is the application's business. */
   onSave?: (docx: Uint8Array, name: string) => void | Promise<void>;
   /** Called when the document changes. */
@@ -75,8 +85,8 @@ export interface DocsHeadlessOptions extends DocsCoreOptions, DocsKeys {
    * The bar that comes up beside the selection, with what can be done to it:
    * copying and pasting on a screen that is touched, making a variable of the
    * words selected, a link, a note. It is the one thing here with a look of
-   * its own (the classes `dx-bb…`). Off unless true; read when the document
-   * is made.
+   * its own, put in the body and coloured by the `--dx-ui-…` variables. Off
+   * unless true; read when the document is made.
    */
   bubble?: boolean;
 }
@@ -115,6 +125,8 @@ export interface DocsState {
   letterhead: boolean;
   /** Whether what is typed and deleted is tracked, as changes to accept or reject. */
   trackChanges: boolean;
+  /** How tracked changes are shown: marked, or the document with all of them accepted, or with none. */
+  changesView: ChangesView;
   /** How many changes there are to accept or reject; `editor.revisions` lists them. */
   revisionCount: number;
   /** Where typing goes: the text, or the header or footer. */
@@ -134,6 +146,8 @@ export interface DocsState {
   name: string;
   /** Whether it changed since it was opened or last saved. With others on it, it is kept as it changes. */
   dirty: boolean;
+  /** How many times the document was given to `onSave` and kept: an application that keeps a version with each save lists them again when it grows. */
+  saves: number;
   collab: CollabState | 'off';
   /** The others on the document, and this person among them. */
   peers: Peer[];
@@ -193,6 +207,7 @@ const COMMANDS = [
   'insertTextBox',
   'restoreVersion',
   'setTrackChanges',
+  'setChangesView',
   'acceptRevision',
   'rejectRevision',
   'acceptAllRevisions',
@@ -264,11 +279,22 @@ export interface Docs {
 
 const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
+/**
+ * What tells one list of fonts from another, for a component that renders
+ * again with the same fonts in a new array: the files by their address, or by
+ * their size when they are bytes.
+ */
+export const fontsKey = (fonts: FontSource[] | undefined): string =>
+  JSON.stringify((fonts ?? []).map(({ family, bold, italic, src }) => [family, !!bold, !!italic, typeof src === 'string' || src === undefined ? src : src.byteLength]));
+
 /** Puts the pages of a document in `container`, and gives what an interface needs to work on it. */
 export function createDocs(container: HTMLElement, options: DocsHeadlessOptions = {}): Docs {
   const editor = new Editor(container);
   if (options.fonts?.length) void addFonts(options.fonts);
-  if (options.embedFonts === false) editor.embedFonts = false;
+  if (options.embedFonts !== undefined) editor.embedFonts = options.embedFonts;
+  if (options.language) editor.language = options.language;
+  if (options.spellcheck) editor.spellChecker = options.spellcheck;
+  if (options.theme) editor.theme = options.theme;
   if (options.author) editor.author = options.author;
   else recallAuthor(editor);
   let name = options.name ?? '';
@@ -289,7 +315,8 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
   };
   if (options.docx && !options.collab) loadFile(options.docx);
   /** The document as it was opened or last saved: while the editor holds this very one, there is nothing to save. */
-  let savedDoc = editor.doc;
+  let savedDoc: Doc | undefined = options.unsaved && options.docx && !options.collab ? undefined : editor.doc;
+  let saves = 0;
 
   // --- The letterhead ------------------------------------------------------------
 
@@ -316,7 +343,7 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
     await applyLetterhead(given);
     if (session || editor.commits !== before + 1) return;
     editor.load(editor.doc);
-    savedDoc = editor.doc;
+    if (savedDoc) savedDoc = editor.doc;
     emit();
   };
 
@@ -373,6 +400,7 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
     try {
       await options.onSave(editor.exportDocx(), name);
       savedDoc = editor.doc;
+      saves++;
       emit();
     } catch (error) {
       fail(t('app.saveFailed', { error: (error as Error).message }));
@@ -404,7 +432,7 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
   // The usual keys, while the keyboard is in the document; elsewhere on the page they are the application's.
   const onKey = (e: KeyboardEvent) => {
     if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
-    const key = e.key.toLowerCase();
+    const key = e.key?.toLowerCase();
     if (key === 's' && options.onSave) {
       e.preventDefault();
       void save();
@@ -450,6 +478,7 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
       pictureSelected: editor.pictureSelected,
       letterhead: editor.hasLetterhead,
       trackChanges: editor.trackChanges,
+      changesView: editor.changesView,
       revisionCount: editor.revisions.length,
       area: editor.area,
       page: editor.currentPage,
@@ -463,6 +492,7 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
       findIndex: editor.findIndex,
       name,
       dirty: !session && editor.doc !== savedDoc,
+      saves,
       collab: collabState(),
       peers: session?.peers ?? [],
       me: { name: session?.name || editor.author, color: session?.color ?? '' },

@@ -33,7 +33,7 @@ It was built to live inside another application: a CRM that fills contract and r
 - **Not a copy of Word.** Rebodocs is not a copy of Microsoft Word and does not try to be one. It is a word processor of its own, compatible with the DOCX format: it opens what Word saves, Word opens what it saves, and pages come out the same in both. It does not have every feature of Word, and it has some of its own, such as template variables. Everything it adds is saved so that Word opens it and shows it well.
 
 - **Not a hosted service.** There is nothing to sign up for. It is code you run.
-- **Not finished.** It works and is tested, and it has not been used in production yet. [Status and roadmap](/docs/status/) lists what is checked and what is missing, plainly.
+- **Not finished.** It is tested and published on npm, and it does not do everything yet. [Status and roadmap](/docs/status/) lists what is checked and what is missing, plainly.
 
 ## License
 

@@ -21,17 +21,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { importDocx, variableNames } from '@rebodocs/core';
 import { type Bucket, DOCX } from './bucket';
+import { Refused } from './refused';
 import { makePdf } from './pdf';
-
-/** A request that cannot be answered, and the status that says why. */
-class Refused extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 
 /** The key asked for, when it is one this server deals with: a file name with no way out of the bucket. */
 function keyOf(url: URL, extension: RegExp): string {
@@ -57,6 +48,13 @@ async function bodyOf(request: IncomingMessage): Promise<unknown> {
 
 /** Where the versions of a document are kept. */
 const VERSIONS = 'versions/';
+
+/** The key of a document, which may not be one of the versions: those are written once, by POST /api/versions, and never again. */
+function documentKey(url: URL): string {
+  const key = keyOf(url, /\.docx$/i);
+  if (key.startsWith(VERSIONS)) throw new Refused(400, 'That is a version, which stays as it was kept. Save it under another name.');
+  return key;
+}
 const versionsOf = (key: string) => `${VERSIONS}${key}/`;
 
 /** What a version says of itself, as the end of its key: when, then by whom and with what name. */
@@ -114,12 +112,14 @@ async function templateOf(bucket: Bucket, key: string) {
  * Answers the requests under `/api`; says false for any other, so that
  * whatever serves the pages can go on with it.
  */
-export function createApi(bucket: () => Bucket, options: { fontDirs?: string[] } = {}) {
+export function createApi(bucket: () => Bucket, options: { fontDirs?: string[]; keepVersions?: number } = {}) {
+  /** How many versions of a document are kept: the oldest go as new ones come. */
+  const keep = Number.isFinite(options.keepVersions) ? Math.max(1, Math.floor(options.keepVersions!)) : 50;
   const routes: Record<string, (url: URL, request: IncomingMessage) => Promise<unknown>> = {
     // The versions are beside the documents, not among them.
     'GET /api/files': async () => (await bucket().list()).filter((file) => !file.key.startsWith(VERSIONS)),
     'GET /api/url': async (url) => ({ url: await bucket().readUrl(keyOf(url, /\.(docx|pdf)$/i)) }),
-    'POST /api/url': async (url) => ({ url: await bucket().writeUrl(keyOf(url, /\.docx$/i), DOCX), type: DOCX }),
+    'POST /api/url': async (url) => ({ url: await bucket().writeUrl(documentKey(url), DOCX), type: DOCX }),
     'GET /api/variables': async (url) => ({ names: variableNames(await templateOf(bucket(), keyOf(url, /\.docx$/i))) }),
     'GET /api/versions': async (url) => {
       const key = keyOf(url, /\.docx$/i);
@@ -129,11 +129,15 @@ export function createApi(bucket: () => Bucket, options: { fontDirs?: string[] }
     'POST /api/versions': async (url, request) => {
       const key = keyOf(url, /\.docx$/i);
       if (key.startsWith(VERSIONS)) throw new Refused(400, 'A version has no versions of its own.');
-      const version = versionKey(key, metaOf(await bodyOf(request)));
+      const meta = metaOf(await bodyOf(request));
+      // Room for the one that comes: the oldest beyond what is kept go. Their keys sort by when they were kept.
+      const kept = (await bucket().list(versionsOf(key))).map((file) => file.key).filter((name) => versionOf({ key: name, modified: '' }, key)).sort();
+      for (const old of kept.slice(0, Math.max(0, kept.length - (keep - 1)))) await bucket().remove(old);
+      const version = versionKey(key, meta);
       return { url: await bucket().writeUrl(version, DOCX), type: DOCX, version: versionOf({ key: version, modified: new Date().toISOString() }, key) };
     },
     'POST /api/pdf': async (url, request) => {
-      const key = keyOf(url, /\.docx$/i);
+      const key = documentKey(url);
       const values = await bodyOf(request);
       if (!values || typeof values !== 'object' || Array.isArray(values)) throw new Refused(400, 'The body is not an object with a value for each variable.');
       const filled = Object.fromEntries(Object.entries(values).map(([name, value]) => [name, String(value ?? '')]));
@@ -159,6 +163,7 @@ export function createApi(bucket: () => Bucket, options: { fontDirs?: string[] }
     try {
       send(200, await route(url, request));
     } catch (error) {
+      // What the person can act on is said; anything else of the bucket stays in the log.
       if (error instanceof Refused) send(error.status, { error: error.message });
       else {
         console.error(error);

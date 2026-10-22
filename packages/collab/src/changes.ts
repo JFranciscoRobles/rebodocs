@@ -267,6 +267,21 @@ function diffParagraph(was: Paragraph, now: Paragraph, part: StoryPart | undefin
     while (head < most && a[head] === b[head] && sameProps(pa[head], pb[head])) head++;
     let tail = 0;
     while (tail < most - head && a[a.length - 1 - tail] === b[b.length - 1 - tail] && sameProps(pa[a.length - 1 - tail], pb[b.length - 1 - tail])) tail++;
+    // Text only put in, or only taken out, can often be read at several places: " always" typed before
+    // " add" is also "lways a" after "Late payments a". Of them, the one at the start of a word is what
+    // was typed, and the one formatting made at the same time agrees with, a word at a time.
+    const added = b.length - head - tail;
+    const gone = a.length - head - tail;
+    if ((added === 0) !== (gone === 0)) {
+      const [text, props, size] = gone ? [a, pa, gone] : [b, pb, added];
+      const edge = (at: number) => at === 0 || /\s/.test(text[at - 1]) || /\s/.test(text[at]);
+      let at = head;
+      while (!edge(at) && text[at - 1] === text[at - 1 + size] && sameProps(props[at - 1], props[at - 1 + size])) at--;
+      if (edge(at)) {
+        tail += head - at;
+        head = at;
+      }
+    }
     const remove = a.length - head - tail;
     const insert = sliceRuns(now.runs, head, b.length - tail);
     // An empty paragraph still has the formatting of what will be typed in it.

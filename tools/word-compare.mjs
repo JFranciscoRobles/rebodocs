@@ -68,7 +68,7 @@ function exportWithWord() {
 /** Rows of text of each page of a PDF: [top, bottom, text]. Words at the same height are one row. */
 function pdfRows(path) {
   const html = execFileSync('pdftotext', ['-bbox-layout', path, '-'], { encoding: 'utf8', maxBuffer: 1 << 28 });
-  const decode = (t) => t.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const decode = (t) => t.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n)).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
   return [...html.matchAll(/<page [^>]*>(.*?)<\/page>/gs)].map(([, page]) => {
     const lines = [...page.matchAll(/<line xMin="([\d.]+)" yMin="([\d.]+)" xMax="[\d.]+" yMax="([\d.]+)">(.*?)<\/line>/gs)]
       .map(([, x, top, bottom, body]) => ({

@@ -10,6 +10,241 @@
   --color-soft: #f5f7fb;
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* --- The landing page: warm neutrals and six pastel pairs ---------------- */
+  --color-ink-soft: #4a4843;
+  --color-faint: #9b9890; /* decoration only, never real text */
+  --color-surface: #f7f6f3;
+  --color-hover: #f1f0ec;
+  --color-border: #eae8e3;
+  --color-border-strong: #dddad3;
+  --color-brand-hover: #08398a;
+  --color-delete: #b13a2a;
+  --color-pastel-blue: #e8f0fd;
+  --color-pastel-blue-fg: #0b57d0;
+  --color-pastel-yellow: #fbf3db;
+  --color-pastel-yellow-fg: #8a5a00;
+  --color-pastel-green: #e7f3ea;
+  --color-pastel-green-fg: #2e6b3c;
+  --color-pastel-pink: #fbe8ef;
+  --color-pastel-pink-fg: #a23a5e;
+  --color-pastel-purple: #f0ebf8;
+  --color-pastel-purple-fg: #6a4a9c;
+  --color-pastel-orange: #fcebdd;
+  --color-pastel-orange-fg: #a4521c;
+
+  --shadow-lift: 0 12px 28px rgba(47, 46, 43, 0.1);
+  --shadow-editor: 0 30px 60px -20px rgba(47, 46, 43, 0.18), 0 2px 6px rgba(47, 46, 43, 0.05);
+  --shadow-menu: 0 16px 36px rgba(47, 46, 43, 0.14);
+
+  --animate-draw: draw 1.4s cubic-bezier(0.6, 0, 0.2, 1) forwards;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-float-slow: float 8s ease-in-out -2s infinite;
+  --animate-type: type 1s steps(14, end) 0.8s forwards;
+  --animate-blink: blink 1s steps(1) infinite;
+  --animate-pop-in: pop-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  --animate-menu-in: menu-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) 2s forwards;
+  --animate-menu-hover: menu-hover 6s ease-in-out 2.4s infinite;
+  --animate-roll: roll 8s cubic-bezier(0.8, 0, 0.2, 1) 3s infinite;
+  --animate-wiggle: wiggle 0.5s ease;
+  --animate-grow: grow 2.2s cubic-bezier(0.6, 0, 0.2, 1) 0.5s forwards;
+  --animate-enter: enter 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
+
+  @keyframes draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0) rotate(-2deg);
+    }
+    50% {
+      transform: translateY(-10px) rotate(2deg);
+    }
+  }
+  @keyframes type {
+    to {
+      width: 14ch;
+    }
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes menu-in {
+    from {
+      opacity: 0;
+      transform: translateY(-6px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes menu-hover {
+    0%,
+    12% {
+      background: var(--color-hover);
+    }
+    16%,
+    100% {
+      background: transparent;
+    }
+  }
+  /* {{client}}, then three clients, then {{client}} again: the loop does not jump. */
+  @keyframes roll {
+    0%,
+    18% {
+      transform: translateY(0);
+    }
+    25%,
+    43% {
+      transform: translateY(-1.5em);
+    }
+    50%,
+    68% {
+      transform: translateY(-3em);
+    }
+    75%,
+    93% {
+      transform: translateY(-4.5em);
+    }
+    100% {
+      transform: translateY(-6em);
+    }
+  }
+  @keyframes wiggle {
+    0%,
+    100% {
+      transform: rotate(0);
+    }
+    30% {
+      transform: rotate(-10deg);
+    }
+    60% {
+      transform: rotate(8deg);
+    }
+  }
+  /* What has just changed comes in from a little below. */
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgba(11, 87, 208, 0.25);
+    }
+    50% {
+      box-shadow: 0 0 0 6px rgba(11, 87, 208, 0);
+    }
+  }
+  @keyframes grow {
+    to {
+      width: 100%;
+    }
+  }
+}
+
+/* The fonts of the landing page, loaded by next/font in `app/layout.tsx`. */
+@theme inline {
+  --font-display: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-text: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-code: var(--font-jetbrains), ui-monospace, monospace;
+  --font-hand: var(--font-caveat), cursive;
+}
+
+/* The landing page writes in warmer ink than the documentation. */
+.home {
+  --color-ink: #2f2e2b;
+  --color-muted: #6b6964;
+  font-family: var(--font-text);
+}
+.home :focus-visible {
+  outline: 3px solid #8db4f5;
+  outline-offset: 2px;
+}
+
+/* A card that rises under the pointer. */
+.lift {
+  transition:
+    transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.25s ease,
+    border-color 0.2s ease;
+}
+.lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(47, 46, 43, 0.1);
+}
+
+/* The sheet and the search box of the documentation, as native dialogs. */
+dialog.sheet,
+dialog.palette {
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+dialog.sheet::backdrop,
+dialog.palette::backdrop {
+  background: rgba(47, 46, 43, 0.35);
+}
+
+/* A hand-drawn stroke that draws itself in. */
+.draw {
+  stroke-dasharray: 600;
+  stroke-dashoffset: 600;
+}
+
+/* Sections rise into view where the browser ties animations to scrolling; elsewhere they are just there. */
+@supports (animation-timeline: view()) {
+  .reveal {
+    animation: rise linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 25%;
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(36px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
+    transition: none !important;
+  }
 }
 
 html {
@@ -22,15 +257,11 @@ body {
 }
 
 /* Code coloured when the site is built: the block brings its own colours. */
-.code pre {
-  margin: 0;
-}
-.code pre,
 .doc pre {
   padding: 18px 20px;
   overflow-x: auto;
   border-radius: 12px;
-  font: 13px/1.65 var(--font-mono);
+  font: 13px/1.65 var(--font-code);
 }
 
 /* --- A page of the documentation, as Markdown makes it ----------------------- */
@@ -45,9 +276,10 @@ body {
 .doc h2 {
   margin-top: 2.2em;
   padding-top: 1.2em;
-  border-top: 1px solid var(--color-line);
+  border-top: 1px solid var(--color-border);
+  font-family: var(--font-display);
   font-size: 24px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.01em;
   line-height: 1.25;
 }
@@ -92,9 +324,8 @@ body {
 .doc :not(pre) > code {
   padding: 2px 6px;
   border-radius: 6px;
-  background: var(--color-soft);
-  border: 1px solid var(--color-line);
-  font: 0.86em var(--font-mono);
+  background: var(--color-hover);
+  font: 0.86em var(--font-code);
   overflow-wrap: anywhere;
 }
 .doc .table {
@@ -109,25 +340,32 @@ body {
 .doc th,
 .doc td {
   padding: 9px 12px;
-  border-bottom: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-border);
   text-align: left;
   vertical-align: top;
 }
 .doc th {
   font-weight: 650;
   white-space: nowrap;
-  background: var(--color-soft);
+  background: var(--color-surface);
 }
 .doc blockquote {
   padding: 12px 16px;
-  border-left: 3px solid var(--color-accent);
-  border-radius: 0 8px 8px 0;
-  background: #fff7ef;
-  color: #5a3a12;
+  border-radius: 12px;
+  background: var(--color-pastel-yellow);
+  color: #5c4a1e;
 }
 .doc blockquote > * + * {
   margin-top: 0.6em;
 }
 .doc strong {
   font-weight: 650;
+}
+
+/* Markdown inside a page written in React: its code on the warm grey of the page. */
+.doc-part pre {
+  background: var(--color-surface) !important;
+}
+.doc-part > :first-child {
+  margin-top: 0;
 }

@@ -6,17 +6,47 @@
     <title>Rebodocs playground</title>
     <style>
       html, body { height: 100%; margin: 0; }
-      body { display: flex; flex-direction: column; }
-      #main { position: relative; flex: 1; min-height: 0; display: flex; }
-      #editor { flex: 1; min-width: 0; }
+      /* The layout DocsEditor comes with (packages/react/src/mount.ts): the toolbar, the panel and the status bar as islands on the canvas. */
+      .dx-app{display:flex;flex-direction:column;gap:8px;height:100%;min-height:0;min-width:0;box-sizing:border-box;padding:8px;overflow:hidden;text-align:left;background:var(--dx-canvas,#efede8)}
+      .dx-app-toolbar .dx-tb,.dx-app-status .dx-sb:not(.dx-sb-chips):not(.dx-sb-floating),.dx-app-panel .dx-pn,.dx-app-panel .dx-pn-rail{border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:14px;background:var(--dx-ui-bar,#fbfaf8);box-shadow:0 1px 2px rgba(47,46,43,.05),0 10px 30px -18px rgba(47,46,43,.28)}
+      .dx-app-toolbar .dx-tb:not(.dx-tb-tabs):not(.dx-tb-two-rows){padding:6px 8px}
+      .dx-app{position:relative}
+      .dx-app-panel{display:flex;gap:8px;min-height:0}
+      .dx-app-panel .dx-pn{height:auto}
+      .dx-app-right .dx-app-panel{order:2}
+      .dx-app-status:has(.dx-sb-floating){position:absolute;left:20px;right:20px;bottom:18px;z-index:6;pointer-events:none}
+      .dx-app-right:has(.dx-pn-open) .dx-app-status:has(.dx-sb-floating){right:calc(min(340px,45vw) + 32px)}
+      .dx-app:not(.dx-app-right):has(.dx-pn-open) .dx-app-status:has(.dx-sb-floating){left:calc(min(340px,45vw) + 32px)}
+      .dx-narrow .dx-app-status:has(.dx-sb-floating){left:10px!important;right:10px!important;bottom:10px}
+      /* On a narrow screen the rail is a row above the pages, which keep the whole width; its panel comes over them. */
+      .dx-narrow .dx-app-main:has(.dx-pn-rail){flex-direction:column;gap:6px}
+      .dx-narrow .dx-app-panel .dx-pn-rail{flex-direction:row;align-self:flex-start;width:auto;height:auto;padding:3px}
+      .dx-narrow .dx-app-panel .dx-pn-rail .dx-pn-tab{width:38px;height:38px}
+      .dx-narrow .dx-app-panel .dx-pn-rail+.dx-pn{left:0;top:52px}
+      .dx-narrow.dx-app-right .dx-pn{left:auto;right:0}
+      .dx-app-ruler:empty{display:none}
+      .dx-app-ruler{margin:-4px 0 -8px}
+      .dx-app-ruler .dx-ruler{background:transparent;border-bottom:0}
+      .dx-app-main{position:relative;flex:1;min-height:0;display:flex;gap:8px}
+      .dx-app-panel:empty{display:none}
+      .dx-app-panel .dx-pn{max-width:min(340px,45vw)}
+      /* The element the pages scroll in: its corners rounded, and its scrolling the editor's own. */
+      .dx-app-doc{flex:1;min-width:0;border-radius:14px}
+      .dx-app-status .dx-sb{padding:0 6px}
+      .dx-app-status:empty{display:none}
+      .dx-narrow.dx-app{gap:6px;padding:6px}
+      .dx-narrow .dx-app-main{gap:0}
+      .dx-narrow .dx-app-panel .dx-pn{border-radius:14px}
     </style>
   </head>
   <body>
-    <div id="toolbar"></div>
-    <div id="ruler"></div>
     <input id="file" type="file" accept=".docx" hidden />
-    <div id="main"><div id="panel"></div><div id="editor"></div></div>
-    <div id="status"></div>
+    <div id="app" class="dx-app dx-app-right">
+      <div id="toolbar" class="dx-app-toolbar"></div>
+      <div id="ruler" class="dx-app-ruler"></div>
+      <div class="dx-app-main"><div id="panel" class="dx-app-panel"></div><div id="editor" class="dx-app-doc"></div></div>
+      <div id="status" class="dx-app-status"></div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

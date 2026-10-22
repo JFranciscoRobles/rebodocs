@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { colorName, spokenChar, spokenText } from '../src/a11y';
 import { setLocale } from '../src/i18n';
 
-afterEach(() => setLocale('es'));
+// The tests are written in Spanish first, as the interface was.
+beforeEach(() => setLocale('es'));
 
 describe('what a screen reader is told', () => {
   it('names a colour, not its number', () => {

@@ -25,6 +25,7 @@ who reaches the server may open and save what is in the bucket.
 | --- | --- |
 | `server/bucket.ts` | The bucket through the S3 API: list, read, write, signed addresses. The one place with the keys. |
 | `server/api.ts` | The seven routes the page asks, as a plain Node handler, versions among them. |
+| `server/refused.ts` | A request refused, with what to tell the person. |
 | `server/pdf.ts` | A template filled and drawn as a PDF. |
 | `server/dev.ts`, `vite.config.ts` | How the demo runs the pages and the backend in one process. |
 | `src/api.ts` | What the page asks of the backend, and of the bucket. |

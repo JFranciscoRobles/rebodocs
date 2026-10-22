@@ -8,17 +8,20 @@ import {
   type BorderStyle,
   type Columns,
   type ListKind,
+  type ListStyle,
   type PageNumberFormat,
   type PageNumbering,
   type ParagraphProps,
   HIGHLIGHT_COLORS,
+  formatNumber,
   isVariableName,
 } from '@rebodocs/core';
 import type { Editor, MarkKey } from './editor';
-import { styleName, t } from './i18n';
+import { getLocale, plural, styleName, t } from './i18n';
 import { fontFamilies } from './fonts';
 import { IS_MAC } from './platform';
 import { createImagePicker } from './imagegrid';
+import { paragraphDialog } from './paragraphdialog';
 import { colorName, installRegionKeys, markRegion } from './a11y';
 
 export interface ToolbarOptions {
@@ -46,6 +49,14 @@ export interface ToolbarOptions {
   onInsertVariable?: () => void;
   onInsertNote?: () => void;
   onInsertLink?: () => void;
+  /**
+   * How the controls are set out. 'row', as it comes: one row, with what does
+   * not fit under a button at its end. 'two-rows': the document above (the
+   * menu, its name, undo, search) and the formatting under it. 'tabs': the
+   * document above with tabs for the kinds of tools (Format, Insert, Page),
+   * and under it only the tools of the tab chosen.
+   */
+  layout?: 'row' | 'two-rows' | 'tabs';
 }
 
 export interface Toolbar {
@@ -66,6 +77,25 @@ const INDENT_STEP = 36;
 const SPACE_BEFORE = 12;
 const SPACE_AFTER = 8;
 /** Soft colours to put behind table cells. */
+/** The labels a numbered list is offered in, `#` where the number goes; and the bullets. */
+const NUMBER_STYLES: ListStyle[] = [
+  { format: 'decimal', text: '#.' },
+  { format: 'decimal', text: '#.-' },
+  { format: 'decimal', text: '#)' },
+  { format: 'lowerLetter', text: '#.' },
+  { format: 'lowerLetter', text: '#.-' },
+  { format: 'lowerLetter', text: '#)' },
+  { format: 'upperLetter', text: '#.' },
+  { format: 'upperLetter', text: '#.-' },
+  { format: 'lowerRoman', text: '#.' },
+  { format: 'upperRoman', text: '#.' },
+  { format: 'lowerLetter', text: '(#)' },
+  { format: 'decimal', text: '(#)' },
+];
+const BULLETS = ['•', '◦', '▪', '–', '✓', '➢'];
+/** The label of the nth item of a list in a style: "c)", "iii.", "•". */
+const listLabel = (style: ListStyle, n: number) => (style.format === 'bullet' ? style.text : style.text.replace('#', formatNumber(style.format, n)));
+
 const CELL_SHADES = [
   'F2F2F2', 'D9D9D9', 'BFBFBF', 'FFF2CC', 'FFE699', 'FCE4D6', 'F8CBAD', 'E2EFDA',
   'C6E0B4', 'DDEBF7', 'BDD7EE', 'D9E1F2', 'B4C6E7', 'EAD1DC', 'D9D2E9', 'FFFFFF',
@@ -83,50 +113,78 @@ const TIP_WARM = 600;
 const TIP_KEYS = / \(((?:⌘|Ctrl\+)[^()]+)\)$/;
 
 const CSS = `
-.dx-tb{position:relative;display:flex;align-items:center;padding:6px 10px;background:#f3f5f9;border-bottom:1px solid #d9dce3;font:13px system-ui,-apple-system,"Segoe UI",sans-serif;color:#2b2f38;user-select:none}
+.dx-tb{position:relative;display:flex;align-items:center;padding:6px 10px;background:var(--dx-ui-bar,#fbfaf8);border-bottom:1px solid var(--dx-ui-line,#e6e3dc);font:13px system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--dx-ui-ink,#2f2e2b);user-select:none}
 .dx-tb-group{flex:none;display:flex;align-items:center;gap:1px}
-.dx-tb-tray{position:absolute;right:8px;top:100%;z-index:19;display:none;flex-wrap:wrap;align-items:center;row-gap:4px;max-width:calc(100% - 16px);box-sizing:border-box;margin-top:4px;padding:6px 8px;border:1px solid #d2d6de;border-radius:8px;background:#fff;box-shadow:0 6px 20px rgba(0,0,0,.14)}
+.dx-tb.dx-tb-two-rows,.dx-tb.dx-tb-tabs{flex-direction:column;align-items:stretch;padding:0}
+.dx-tb-top{display:flex;align-items:center;gap:2px;min-width:0;padding:6px 8px}
+.dx-tb-row{position:relative;display:flex;align-items:center;min-width:0;padding:5px 8px;border-top:1px solid var(--dx-ui-line,#e6e3dc)}
+.dx-tb-top>.dx-tb-sep:first-child,.dx-tb-row>.dx-tb-sep:first-child{display:none}
+.dx-tb-tablist{display:flex;gap:2px;margin:0 auto;padding:3px;border-radius:11px;background:var(--dx-ui-hover,#f3f1ec)}
+.dx-tb-tablist button{height:28px;padding:0 14px;border:0;border-radius:8px;background:none;color:var(--dx-ui-muted,#5f5d58);font:inherit;font-weight:600;cursor:pointer}
+.dx-tb-tablist button:hover{color:var(--dx-ui-ink,#2f2e2b)}
+.dx-tb-tablist button[aria-pressed=true]{background:var(--dx-ui-bg,#fff);color:var(--dx-ui-accent,#0b57d0);box-shadow:0 1px 3px rgba(47,46,43,.14)}
+.dx-tb-tablist button:focus-visible{outline:2px solid var(--dx-ui-accent,#0b57d0);outline-offset:-2px}
+.dx-tb-tabs .dx-tb-end,.dx-tb-two-rows .dx-tb-end{margin-left:0}
+.dx-tb-two-rows .dx-tb-top .dx-tb-end{margin-left:auto}
+.dx-tb-tabs .dx-tb-top{flex-wrap:wrap;row-gap:6px}
+.dx-tb-tabs .dx-tb-top .dx-tb-end{margin-left:auto}
+.dx-tb-tabs .dx-tb-tablist{order:0}
+@media (max-width:640px){
+.dx-tb-tabs .dx-tb-tablist{order:5;flex-basis:100%;margin:0}
+.dx-tb-tablist button{flex:1}
+}
+.dx-tb-tray{position:absolute;right:8px;top:100%;z-index:19;display:none;flex-wrap:wrap;align-items:center;row-gap:4px;max-width:calc(100% - 16px);box-sizing:border-box;margin-top:4px;padding:6px 8px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:14px;background:var(--dx-ui-bg,#fff);box-shadow:0 6px 20px rgba(47,46,43,.14)}
 .dx-tb-tray.dx-open{display:flex}
 .dx-tb-group[hidden]{display:none}
 .dx-tb-tray>.dx-tb-sep:first-child{display:none}
-.dx-tb-sep{flex:none;width:1px;height:20px;margin:0 6px;background:#d2d6de}
-.dx-tb-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:2px;height:30px;min-width:30px;padding:0 6px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer}
-.dx-tb-btn:hover:not(:disabled){background:#e2e6ee}
-.dx-tb-btn.dx-on{background:#d3e3fd;color:#0b57d0}
+.dx-tb-sep{flex:none;width:1px;height:20px;margin:0 6px;background:var(--dx-ui-line,#e6e3dc)}
+.dx-tb-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:2px;height:32px;min-width:32px;padding:0 6px;border:0;border-radius:9px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.dx-tb-btn:hover:not(:disabled){background:var(--dx-ui-hover,#f3f1ec)}
+.dx-tb-btn.dx-on{background:var(--dx-ui-active,#e8f0fd);color:var(--dx-ui-accent,#0b57d0)}
 .dx-tb-btn:disabled{opacity:.35;cursor:default}
-.dx-tb-btn:focus-visible,.dx-tb-item:focus-visible,.dx-tb-select:focus-visible{outline:2px solid #0b57d0;outline-offset:-2px}
+.dx-tb-btn:focus-visible,.dx-tb-item:focus-visible,.dx-tb-select:focus-visible{outline:2px solid var(--dx-ui-accent,#0b57d0);outline-offset:-2px}
 .dx-tb-btn svg{flex:none}
 .dx-tb-btn.dx-tb-text{gap:5px;padding:0 8px}
 .dx-tb-title{position:relative;max-width:220px;padding:0 6px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dx-tb-title.dx-dirty::before{content:"•";position:absolute;left:0;width:6px;text-align:center;color:#c5221f}
 .dx-tb-end{margin-left:auto}
-.dx-tb-item svg{flex:none;color:#5f6470}
+.dx-tb-item svg{flex:none;color:var(--dx-ui-muted,#5f5d58)}
 .dx-tb-mark{font:600 15px/1 Georgia,"Times New Roman",serif}
 .dx-tb-swatch{position:absolute;left:7px;right:7px;bottom:4px;height:3px;border-radius:1px;box-shadow:0 0 0 .5px rgba(0,0,0,.25)}
-.dx-tb-num{width:72px;height:30px;padding:0 6px;border:1px solid #c4c7c5;border-radius:6px;background:transparent;color:inherit;font:inherit}
+.dx-tb-num{width:72px;height:32px;padding:0 6px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:9px;background:transparent;color:inherit;font:inherit}
 .dx-tb-unit{align-self:center;padding:0 8px 0 4px;opacity:.7}
-.dx-tb-select{height:30px;max-width:150px;padding:0 4px;border:1px solid transparent;border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer}
-.dx-tb-select:hover{background:#e2e6ee}
-.dx-tb-pop{position:absolute;z-index:20;padding:6px;border:1px solid #d2d6de;border-radius:8px;background:#fff;box-shadow:0 6px 20px rgba(0,0,0,.14)}
-.dx-tb-item{display:flex;align-items:center;gap:8px;width:100%;height:30px;padding:0 10px;border:0;border-radius:6px;background:none;color:inherit;font:inherit;text-align:left;white-space:nowrap;cursor:pointer}
-.dx-tb-item:hover:not(:disabled){background:#eef1f6}
+.dx-tb-select{height:32px;max-width:150px;padding:0 6px;border:1px solid transparent;border-radius:9px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.dx-tb-select:hover{background:var(--dx-ui-hover,#f3f1ec)}
+.dx-tb-pop{position:absolute;z-index:20;padding:6px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:14px;background:var(--dx-ui-bg,#fff);box-shadow:0 6px 20px rgba(47,46,43,.14)}
+.dx-tb-item{display:flex;align-items:center;gap:8px;width:100%;height:34px;padding:0 10px;border:0;border-radius:9px;background:none;color:inherit;font:inherit;text-align:left;white-space:nowrap;cursor:pointer}
+.dx-tb-item:hover:not(:disabled){background:var(--dx-ui-hover,#f3f1ec)}
 .dx-tb-item:disabled{opacity:.4;cursor:default}
-.dx-tb-item.dx-on::before{content:"✓";width:12px;margin-left:-4px;color:#0b57d0}
+.dx-tb-item.dx-on::before{content:"✓";width:12px;margin-left:-4px;color:var(--dx-ui-accent,#0b57d0)}
 .dx-tb-item:not(.dx-on).dx-check::before{content:"";width:12px;margin-left:-4px}
-.dx-tb-rule{height:1px;margin:6px 0;background:#e3e6ec}
-.dx-tb-head{padding:6px 10px 2px;color:#5f6470;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+.dx-tb-rule{height:1px;margin:6px 0;background:var(--dx-ui-line,#e6e3dc)}
+.dx-tb-head{padding:6px 10px 2px;color:var(--dx-ui-muted,#5f5d58);font-size:11px;letter-spacing:.04em;text-transform:uppercase}
 .dx-tb-seg{display:flex;gap:2px;padding:2px 6px 4px}
-.dx-tb-seg .dx-tb-btn{flex:1;padding:0 10px;border:1px solid #d2d6de}
-.dx-tb-seg .dx-tb-btn.dx-on{border-color:#a8c7fa}
-.dx-tb-item kbd{margin-left:auto;padding-left:16px;color:#5f6470;font:inherit}
+.dx-tb-seg .dx-tb-btn{flex:1;padding:0 10px;border:1px solid var(--dx-ui-line,#e6e3dc)}
+.dx-tb-seg .dx-tb-btn.dx-on{border-color:var(--dx-ui-active-line,#a8c7fa)}
+.dx-tb-item kbd{margin-left:auto;padding-left:16px;color:var(--dx-ui-muted,#5f5d58);font:inherit}
 .dx-tb-grid{display:grid;grid-template-columns:repeat(${GRID_COLUMNS},22px);gap:2px;padding:4px}
-.dx-tb-cell{width:22px;height:22px;padding:0;border:1px solid #c5cad3;border-radius:2px;background:#fff;cursor:pointer}
-.dx-tb-cell.dx-on{border-color:#0b57d0;background:#d3e3fd}
-.dx-tb-hint{padding:2px 6px 4px;color:#5f6470;text-align:center}
+.dx-tb-cell{width:22px;height:22px;padding:0;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:2px;background:var(--dx-ui-bg,#fff);cursor:pointer}
+.dx-tb-cell.dx-on{border-color:var(--dx-ui-accent,#0b57d0);background:var(--dx-ui-active,#e8f0fd)}
+.dx-tb-hint{padding:2px 6px 4px;color:var(--dx-ui-muted,#5f5d58);text-align:center}
+.dx-tb-btn.dx-tb-split{min-width:14px;width:14px;margin-left:-1px;padding:0}
+.dx-tb-lists{display:grid;grid-template-columns:repeat(3,76px);gap:6px;padding:4px 6px}
+.dx-tb-sample{display:flex;flex-direction:column;gap:4px;padding:7px 6px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:10px;background:var(--dx-ui-bg,#fff);color:inherit;cursor:pointer}
+.dx-tb-sample:hover{border-color:var(--dx-ui-active-line,#a8c7fa);background:var(--dx-ui-hover,#f3f1ec)}
+.dx-tb-sample.dx-on{border-color:var(--dx-ui-accent,#0b57d0);background:var(--dx-ui-active,#e8f0fd)}
+.dx-tb-sample:focus-visible{outline:2px solid var(--dx-ui-accent,#0b57d0);outline-offset:1px}
+.dx-tb-sample span{display:flex;align-items:center;gap:5px}
+.dx-tb-sample b{flex:none;width:24px;font:500 11px/1 system-ui,sans-serif;text-align:right;font-variant-numeric:tabular-nums}
+.dx-tb-sample i{flex:1;height:3px;border-radius:2px;background:var(--dx-ui-line,#e6e3dc)}
+.dx-tb-note{max-width:250px;padding:6px 10px 4px;color:var(--dx-ui-muted,#5f5d58);font-size:12px;line-height:1.4;white-space:normal}
 .dx-tb-colors{display:grid;grid-template-columns:repeat(8,22px);gap:4px;padding:4px}
 .dx-tb-color{width:22px;height:22px;padding:0;border:1px solid rgba(0,0,0,.25);border-radius:50%;cursor:pointer}
 .dx-tb-color:hover{transform:scale(1.15)}
-.dx-tb-tip{position:absolute;z-index:25;display:flex;align-items:center;gap:8px;max-width:280px;padding:5px 9px;border-radius:6px;background:#2b2f38;color:#fff;font-size:12px;line-height:1.35;box-shadow:0 4px 14px rgba(0,0,0,.22);pointer-events:none;opacity:0;transition:opacity .08s}
+.dx-tb-tip{position:absolute;z-index:25;display:flex;align-items:center;gap:8px;max-width:280px;padding:6px 10px;border-radius:8px;background:#2f2e2b;color:#fff;font-size:12px;line-height:1.35;box-shadow:0 4px 14px rgba(47,46,43,.22);pointer-events:none;opacity:0;transition:opacity .08s}
 .dx-tb-tip.dx-on{opacity:1}
 @media (pointer:coarse){
 .dx-tb-btn,.dx-tb-select{height:38px;min-width:38px}
@@ -221,6 +279,17 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   injectStyle();
   const bar = el('div', 'dx-tb');
   bar.setAttribute('role', 'toolbar');
+  const layout = options.layout ?? 'row';
+  // In one row everything is in the bar; in two, the document above and the tools under it.
+  const top = layout === 'row' ? bar : el('div', 'dx-tb-top');
+  const row = layout === 'row' ? bar : el('div', 'dx-tb-row');
+  if (layout !== 'row') {
+    bar.classList.add(`dx-tb-${layout}`);
+    bar.append(top, row);
+  }
+  /** What the groups made next are about: the document, or a kind of tool, which is a tab of its own in 'tabs'. */
+  type Section = 'document' | 'format' | 'insert' | 'page';
+  let section: Section = 'document';
   bar.setAttribute('aria-label', t('toolbar.label'));
   /** What to do, on every change of the document or the selection, to keep a control in step. */
   const updates: (() => void)[] = [];
@@ -324,14 +393,16 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   };
 
   /** The groups of the bar in their order, each with the line before it; `keep` for the ones that never leave the bar. */
-  const groups: { sep?: HTMLElement; node: HTMLElement; keep: boolean }[] = [];
+  const groups: { sep?: HTMLElement; node: HTMLElement; keep: boolean; section: Section }[] = [];
   const group = (...children: HTMLElement[]) => {
-    const sep = groups.length ? el('span', 'dx-tb-sep') : undefined;
-    if (sep) bar.appendChild(sep);
+    const into = section === 'document' ? top : row;
+    const sep = into.children.length ? el('span', 'dx-tb-sep') : undefined;
+    if (sep) into.appendChild(sep);
     const node = el('div', 'dx-tb-group');
     node.append(...children);
-    bar.appendChild(node);
-    groups.push({ sep, node, keep: false });
+    into.appendChild(node);
+    // Above the tools, the document's groups never go under the button of the rest.
+    groups.push({ sep, node, keep: layout !== 'row' && section === 'document', section });
     return groups[groups.length - 1];
   };
 
@@ -469,6 +540,8 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
 
   // --- Characters ---------------------------------------------------------------
 
+  section = 'format';
+
   // The styles are those of the document: the list is filled again when another one is opened.
   const style = el('select', 'dx-tb-select');
   style.dataset.tip = t('toolbar.style');
@@ -533,7 +606,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     const toggle = (label: string, on: boolean, patch: ParagraphProps) => item(label, () => editor.setParagraphProps(patch), false, on);
     panel.appendChild(head(t('spacing.line')));
     for (const value of SPACINGS) {
-      const label = value.toLocaleString(undefined, { minimumFractionDigits: 1 });
+      const label = value.toLocaleString(getLocale(), { minimumFractionDigits: 1 });
       panel.appendChild(toggle(label, Math.abs(props.lineHeight - value) < 0.005, { lineHeight: value }));
     }
     panel.append(
@@ -546,6 +619,9 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
       toggle(t('spacing.keepNext'), props.keepNext, { keepNext: !props.keepNext }),
       toggle(t('spacing.keepLines'), props.keepLines, { keepLines: !props.keepLines }),
       toggle(t('spacing.breakBefore'), props.pageBreakBefore, { pageBreakBefore: !props.pageBreakBefore }),
+      el('div', 'dx-tb-rule'),
+      // The indents typed in: what the handles of the ruler do, for whoever does not drag them.
+      item(t('indent.dialog'), () => paragraphDialog(editor).open()),
     );
     openPopover(spacing, panel);
   });
@@ -572,8 +648,56 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     ['bullet', t('list.bullet')],
     ['number', t('list.number')],
   ];
+  // Next to each list, the arrow of its styles: the label of the level the caret is at (a), 1.-, ➢…),
+  // and what is done with the levels and the numbering.
+  const sameStyle = (a: ListStyle | undefined, b: ListStyle) => !!a && a.format === b.format && a.text === b.text;
+  const listStyles = (kind: ListKind, label: string) => {
+    const name = `${kind}-styles`;
+    const node = menuButton(name, label, ICONS.caret, () => {
+      const panel = el('div', '');
+      const current = editor.listStyle;
+      const styles = kind === 'bullet' ? BULLETS.map((text): ListStyle => ({ format: 'bullet', text })) : NUMBER_STYLES;
+      panel.appendChild(head(t(kind === 'bullet' ? 'list.bulletsOfLevel' : 'list.numbersOfLevel')));
+      const grid = el('div', 'dx-tb-lists');
+      for (const style of styles) {
+        const on = sameStyle(current, style);
+        const sample = el('button', `dx-tb-sample${on ? ' dx-on' : ''}`);
+        sample.type = 'button';
+        sample.dataset.name = `list-style-${style.format}-${style.text}`;
+        sample.setAttribute('aria-label', t('list.styleOf', { sample: listLabel(style, 1) }));
+        sample.setAttribute('aria-pressed', String(on));
+        for (let n = 1; n <= 3; n++) {
+          const line = sample.appendChild(el('span', ''));
+          line.append(el('b', '', listLabel(style, n)), el('i', ''));
+        }
+        sample.addEventListener('click', run(() => editor.setListStyle(style)));
+        grid.appendChild(sample);
+      }
+      panel.append(grid, el('div', 'dx-tb-rule'));
+      const inList = !!editor.activeListKind();
+      panel.append(
+        item(t('list.down'), () => editor.shiftListLevel(1), !inList, undefined, 'Tab', ICONS.indent),
+        item(t('list.up'), () => editor.shiftListLevel(-1), !inList, undefined, '⇧Tab', ICONS.outdent),
+      );
+      if (kind === 'number') {
+        const numbered = editor.activeListKind() === 'number';
+        panel.append(
+          el('div', 'dx-tb-rule'),
+          item(t('list.restart'), () => editor.restartNumbering(), !numbered),
+          item(t('list.continue'), () => void editor.continueNumbering(), !numbered),
+        );
+      }
+      panel.appendChild(el('div', 'dx-tb-note', t('list.hint')));
+      openPopover(node, panel);
+    });
+    node.classList.add('dx-tb-split');
+    return node;
+  };
   group(
-    ...lists.map(([kind, label]) => button(kind, label, ICONS[kind], run(() => editor.toggleList(kind)), () => ({ on: editor.activeListKind() === kind }))),
+    ...lists.flatMap(([kind, label]) => [
+      button(kind, label, ICONS[kind], run(() => editor.toggleList(kind)), () => ({ on: editor.activeListKind() === kind })),
+      listStyles(kind, t(kind === 'bullet' ? 'list.bulletStyles' : 'list.numberStyles')),
+    ]),
     // In a list these change the level of the item; anywhere else, the indent of the paragraph.
     button(
       'outdent',
@@ -631,7 +755,8 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
           const columns = (i % GRID_COLUMNS) + 1;
           const cell = el('button', 'dx-tb-cell');
           cell.type = 'button';
-          cell.setAttribute('aria-label', t('table.size', { columns, rows }));
+          // Each number in its own plural: "1 column by 2 rows", in the order the language puts them.
+          cell.setAttribute('aria-label', t('table.cells', { columns: plural('table.columns', columns, { n: columns }), rows: plural('table.rows', rows, { n: rows }) }));
           cell.addEventListener('mouseenter', () => mark(rows, columns));
           cell.addEventListener('focus', () => mark(rows, columns));
           cell.addEventListener('click', run(() => editor.insertTable(rows, columns)));
@@ -677,6 +802,24 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     },
   );
   insert.classList.add('dx-tb-text');
+  // In tabs there is room for what is put in most, each a button with its name; the menu keeps the rest.
+  const labeled = (name: string, label: string, icon: string, action: () => void, state?: () => { disabled?: boolean }) => {
+    const node = button(`quick-${name}`, label, `${icon}<span>${label.replace('…', '')}</span>`, run(action), state);
+    node.classList.add('dx-tb-text');
+    return node;
+  };
+  const inBody = () => ({ disabled: editor.area !== 'body' });
+  const quick =
+    layout === 'tabs'
+      ? [
+          labeled('image', t('insert.image'), ICONS.image, () => picker.click()),
+          labeled('link', t('insert.link'), ICONS.link, ask(options.onInsertLink, t('link.address'), (address) => editor.setLink(address))),
+          labeled('note', t('insert.note'), ICONS.note, ask(options.onInsertNote, t('bubble.notePlaceholder'), (text) => editor.addNote(text)), inBody),
+          labeled('variable', t('insert.variable'), ICONS.variable, ask(options.onInsertVariable, t('bubble.name'), (name) => isVariableName(name) && editor.insertVariable(name))),
+          labeled('footnote', t('insert.footnote'), ICONS.footnote, () => editor.insertFootnote(), inBody),
+          labeled('page-break', t('bubble.pageBreak'), ICONS.pageBreak, () => editor.insertPageBreak(), () => ({ disabled: editor.area !== 'body' || editor.inTable })),
+        ]
+      : [];
 
   // --- Review -----------------------------------------------------------------------
 
@@ -692,10 +835,13 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
         node.dataset.name = `review-${name}`;
         return node;
       };
-      const active = !!editor.activeRevision;
-      const any = editor.hasRevisions;
+      // Shown without its changes, the document is only to be looked at: nothing to decide until they show again.
+      const marked = editor.changesView === 'all';
+      const active = marked && !!editor.activeRevision;
+      const any = marked && editor.hasRevisions;
+      const view = editor.changesView;
       panel.append(
-        entry('track', t('review.track'), () => editor.setTrackChanges(!editor.trackChanges), false, editor.trackChanges, IS_MAC ? '⌘⇧E' : 'Ctrl+Shift+E'),
+        entry('track', t('review.track'), () => editor.setTrackChanges(!editor.trackChanges), !marked, editor.trackChanges, IS_MAC ? '⌘⇧E' : 'Ctrl+Shift+E'),
         el('div', 'dx-tb-rule'),
         entry('accept', t('review.accept'), () => editor.acceptRevision(), !active),
         entry('reject', t('review.reject'), () => editor.rejectRevision(), !active),
@@ -704,6 +850,10 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
         el('div', 'dx-tb-rule'),
         entry('accept-all', t('review.acceptAll'), () => editor.acceptAllRevisions(), !any),
         entry('reject-all', t('review.rejectAll'), () => editor.rejectAllRevisions(), !any),
+        el('div', 'dx-tb-rule'),
+        entry('show-all', t('review.showAll'), () => editor.setChangesView('all'), false, view === 'all'),
+        entry('show-accepted', t('review.showAccepted'), () => editor.setChangesView('accepted'), false, view === 'accepted'),
+        entry('show-original', t('review.showOriginal'), () => editor.setChangesView('original'), false, view === 'original'),
       );
       openPopover(review, panel);
     },
@@ -827,6 +977,8 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   );
   // Off, it says what turns it on.
   updates.push(() => (table.dataset.tip = editor.inTable ? t('toolbar.tableTools') : `${t('toolbar.tableTools')} — ${t('toolbar.tableOff')}`));
+  section = 'insert';
+  if (quick.length) group(...quick);
   group(insert, review, table);
 
   // --- Page -----------------------------------------------------------------------
@@ -973,6 +1125,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     panel.append(head(t('columns.title')), choices, hint, el('div', 'dx-tb-rule'), separator, breaks);
     return panel;
   };
+  section = 'page';
   group(page, columns);
 
   // What does not fit in the bar waits under a button at its end, in the same order, instead of making a second row.
@@ -991,32 +1144,71 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   // Searching is not editing: it goes at the far end of the bar.
   const end = el('div', 'dx-tb-group dx-tb-end');
   if (options.onFind) end.appendChild(button('find', `${t('toolbar.find')} (${MOD}F)`, ICONS.find, options.onFind));
-  bar.append(more, end, tray);
+  if (layout === 'row') bar.append(more, end, tray);
+  else {
+    row.append(more, tray);
+    top.appendChild(end);
+  }
+  // The tabs of the kinds of tools, above them: only those of the one chosen are shown.
+  let shownTab: Exclude<Section, 'document'> = 'format';
+  const tabButtons: HTMLButtonElement[] = [];
+  const showTab = (next: Exclude<Section, 'document'>) => {
+    shownTab = next;
+    for (const button of tabButtons) button.setAttribute('aria-pressed', String(button.dataset.tab === next));
+    let first = true;
+    for (const one of groups) {
+      if (one.section === 'document') continue;
+      one.node.hidden = one.section !== next;
+      // The first group of a tab has no line before it.
+      if (one.sep) one.sep.hidden = one.node.hidden || first;
+      if (!one.node.hidden) first = false;
+    }
+    closePopover();
+    fit(true);
+  };
+  if (layout === 'tabs') {
+    const list = el('div', 'dx-tb-tablist');
+    list.setAttribute('role', 'group');
+    list.setAttribute('aria-label', t('toolbar.tabs'));
+    for (const [tab, label] of [['format', t('toolbar.tabFormat')], ['insert', t('toolbar.tabInsert')], ['page', t('toolbar.tabPage')]] as const) {
+      const button = el('button', '');
+      button.type = 'button';
+      button.dataset.tab = tab;
+      button.dataset.name = `tab-${tab}`;
+      button.textContent = label;
+      button.addEventListener('click', () => showTab(tab));
+      list.appendChild(button);
+      tabButtons.push(button);
+    }
+    top.insertBefore(list, end);
+  }
   const moreButton = more.querySelector('button')!;
 
   let fitted = '';
   /** Puts in the bar the groups that fit in it, and the rest under the button. */
   const fit = (force = false) => {
-    const key = `${bar.clientWidth}|${bar.querySelector('.dx-tb-title')?.textContent ?? ''}`;
-    if (!bar.clientWidth || (key === fitted && !force)) return;
+    const key = `${row.clientWidth}|${bar.querySelector('.dx-tb-title')?.textContent ?? ''}|${shownTab}`;
+    if (!row.clientWidth || (key === fitted && !force)) return;
     fitted = key;
-    for (const { sep, node } of groups) {
-      if (sep) bar.insertBefore(sep, more);
-      bar.insertBefore(node, more);
+    for (const { sep, node, section: kind } of groups) {
+      // Above the tools, the document's groups stay where they are.
+      if (layout !== 'row' && kind === 'document') continue;
+      if (sep) row.insertBefore(sep, more);
+      row.insertBefore(node, more);
     }
     more.hidden = true;
-    const style = getComputedStyle(bar);
-    const room = bar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const style = getComputedStyle(row);
+    const room = row.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const width = (node: HTMLElement) => {
       if (node.hidden) return 0;
       const margins = getComputedStyle(node);
       // The far end is pushed there by a margin that takes whatever room is left: it asks for none.
       return node.offsetWidth + (node === end ? 0 : parseFloat(margins.marginLeft) + parseFloat(margins.marginRight));
     };
-    const needed = () => groups.reduce((sum, { sep, node }) => sum + (node.parentElement === bar ? width(node) + (sep ? width(sep) : 0) : 0), width(more) + width(end));
+    const needed = () => groups.reduce((sum, { sep, node }) => sum + (node.parentElement === row ? width(node) + (sep ? width(sep) : 0) : 0), width(more) + (end.parentElement === row ? width(end) : 0));
     for (let i = groups.length - 1; i >= 0 && needed() > room; i--) {
       const { sep, node, keep } = groups[i];
-      if (keep) continue;
+      if (keep || node.hidden) continue;
       more.hidden = false;
       tray.prepend(node);
       if (sep) tray.prepend(sep);
@@ -1024,7 +1216,8 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     if (more.hidden) closeTray();
   };
   const resize = new ResizeObserver(() => fit());
-  resize.observe(bar);
+  resize.observe(row);
+  if (layout === 'tabs') showTab('format');
 
   // Clicks on the toolbar must not take the keyboard away from the document; lists need it to open.
   const keepFocus = (e: MouseEvent) => {

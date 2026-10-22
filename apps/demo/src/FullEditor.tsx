@@ -1,22 +1,41 @@
-import { DocsEditor } from '@rebodocs/react'
+import { DocsEditor, type Theme } from '@rebodocs/react'
 import { download } from './download'
+import { spellcheck } from './spelling'
+import './FullEditor.css'
 
 interface Props {
   docx?: Uint8Array
   name: string
+  /**
+   * The editor as it comes ('included': two rows of tools, the panel on the
+   * right, the zoom floating, the menu a screen), or set out another way
+   * ('another': the tools in tabs, the panel as a rail, the status bar in
+   * chips, the menu a card).
+   */
+  layout?: 'included' | 'another'
+  theme?: Theme
 }
 
-export function FullEditor({ docx, name }: Props) {
+export function FullEditor({ docx, name, layout = 'included', theme }: Props) {
   return (
-    <DocsEditor
-      className="fill"
-      docx={docx}
-      name={name}
-      author="Demo"
-      locale="es"
-      features={{ files: true, language: true }}
-      onSave={download}
-      onError={(message) => console.error(message)}
-    />
+    <div className="fe">
+      <div className="fe-frame">
+        <DocsEditor
+          docx={docx}
+          name={name}
+          author="Demo"
+          locale="en"
+          features={
+            layout === 'another'
+              ? { files: true, language: true, theme: true, toolbar: 'tabs', panel: 'rail', statusBar: 'chips', menu: 'card' }
+              : { files: true, language: true, theme: true }
+          }
+          spellcheck={spellcheck}
+          theme={theme}
+          onSave={download}
+          onError={(message) => console.error(message)}
+        />
+      </div>
+    </div>
   )
 }

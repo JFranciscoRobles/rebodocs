@@ -259,5 +259,66 @@ export function sampleDoc(): Doc {
   // After the opening words. The pages are for whoever lays the document out to give: the editor, as it opens it.
   const intro = { para: INTRO, offset: paragraphLength(doc.paragraphs[INTRO]) };
   doc = insertToc(doc, intro, { title: 'Índice', pageOf: () => 1 }).doc;
-  return addNotes(addLinks(setPageNumbering(doc, { place: 'footer', align: 'center', format: 'pageOfTotal' })));
+  doc = addNotes(addLinks(setPageNumbering(doc, { place: 'footer', align: 'center', format: 'pageOfTotal', words: { page: 'Página', of: 'de' } })));
+  return withLongContract(doc);
+}
+
+// --- A long document ------------------------------------------------------------
+
+/** The sentences the clauses of the long contract are made of, each used in its turn. */
+const SENTENCES = [
+  'El arrendatario se obliga a pagar la renta pactada dentro de los primeros cinco días de cada mes, en el domicilio del arrendador o en la cuenta bancaria que este le indique por escrito.',
+  'Cualquier modificación al presente contrato deberá constar por escrito y estar firmada por ambas partes; ningún acuerdo verbal tendrá efectos entre ellas.',
+  'El inmueble se entrega en buen estado de conservación, con las instalaciones eléctricas, hidráulicas y de gas funcionando, según el inventario que se anexa y que forma parte de este contrato.',
+  'Las reparaciones menores que se deriven del uso normal del inmueble correrán por cuenta del arrendatario; las mayores, y las que afecten la estructura, por cuenta del arrendador.',
+  'Queda prohibido subarrendar el inmueble, en todo o en parte, así como ceder los derechos de este contrato, sin el consentimiento previo y por escrito del arrendador.',
+  'El arrendatario podrá dar por terminado el contrato antes de su vencimiento, avisando con treinta días de anticipación y pagando la renta del mes en que se desocupe el inmueble.',
+  'Los servicios de agua, energía eléctrica, gas, teléfono e internet serán pagados por el arrendatario desde la fecha de entrega del inmueble y hasta su devolución.',
+  'Para garantizar el cumplimiento de sus obligaciones, el arrendatario entrega en este acto un depósito equivalente a un mes de renta, que le será devuelto al término del contrato.',
+  'El arrendador podrá visitar el inmueble para verificar su estado, previo aviso con al menos veinticuatro horas de anticipación y en horario de oficina.',
+  'Al terminar el contrato, el arrendatario devolverá el inmueble en el estado en que lo recibió, salvo el desgaste natural por el paso del tiempo y el uso adecuado.',
+  'Para la interpretación y cumplimiento del presente contrato, las partes se someten a las leyes y a los tribunales de la ciudad en que se encuentra el inmueble.',
+  'Las notificaciones entre las partes se harán por escrito en los domicilios señalados en el proemio, o por correo electrónico a las direcciones que cada una designe.',
+];
+const TOPICS = ['Renta', 'Plazo', 'Depósito', 'Servicios', 'Mantenimiento', 'Mejoras', 'Seguros', 'Visitas', 'Terminación', 'Notificaciones', 'Penas convencionales', 'Jurisdicción'];
+/** As many clauses as make the whole document about a hundred pages. */
+const CLAUSES = 202;
+
+/**
+ * After the tour, a lease of a hundred pages: to see that a long document
+ * opens, scrolls and is typed in as fast as a short one, and to try spelling
+ * on text that is spelled right. A heading for it alone, so that the table of
+ * contents and the outline stay short; each clause with its title in bold,
+ * kept with its first paragraph, and a table of payments every twenty.
+ */
+function withLongContract(doc: Doc): Doc {
+  const paragraphs: Paragraph[] = [
+    { props: { pageBreakBefore: true }, runs: [run('Anexo: un contrato largo')] },
+    { props: {}, runs: [run('Un contrato de arrendamiento de cien páginas, para ver que un documento largo se abre, se recorre y se escribe tan rápido como uno corto: solo las páginas que están a la vista tienen su texto.')] },
+  ];
+  const tables: number[] = [];
+  for (let i = 0; i < CLAUSES; i++) {
+    paragraphs.push({ props: { spacingBefore: 12, keepNext: true }, runs: [run(`Cláusula ${i + 1}. ${TOPICS[i % TOPICS.length]}`, { bold: true })] });
+    for (let k = 0; k < 4; k++) {
+      const at = (i * 5 + k * 3) % SENTENCES.length;
+      paragraphs.push({ props: { align: 'justify' }, runs: [run(`${SENTENCES[at]} ${SENTENCES[(at + 7) % SENTENCES.length]}`)] });
+    }
+    if (i % 20 === 19) {
+      tables.push(doc.paragraphs.length + paragraphs.length);
+      paragraphs.push({ props: {}, runs: [run('')] });
+    }
+  }
+  const start = doc.paragraphs.length;
+  let next: Doc = { ...doc, paragraphs: [...doc.paragraphs, ...paragraphs] };
+  next = setParagraphStyle(next, start, start, 'Heading1');
+  // From the last back: a table adds paragraphs, and the places before it stay where they are.
+  for (const para of tables.reverse()) {
+    next = addTable(next, para, [
+      ['Mes', 'Renta', 'Servicios', 'Total'],
+      ['Enero', '$12,500.00', '$1,830.00', '$14,330.00'],
+      ['Febrero', '$12,500.00', '$1,764.00', '$14,264.00'],
+      ['Marzo', '$12,500.00', '$1,902.00', '$14,402.00'],
+    ]);
+  }
+  return next;
 }

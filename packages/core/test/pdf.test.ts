@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { unzlibSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { type TextMeasurer, FontMeasurer, createDoc, exportPdf, insertTable, insertText, layoutDocument, parseTrueType, readFont, setCellProps } from '../src';
@@ -139,5 +140,25 @@ describe('PDF export', () => {
   it('does not take for a font what is not a TrueType file', () => {
     expect(parseTrueType(new Uint8Array([79, 84, 84, 79, 0, 0, 0, 0, 0, 0, 0, 0]))).toBeUndefined();
     expect(parseTrueType(new Uint8Array(4))).toBeUndefined();
+  });
+
+  it('draws a bold or italic face it has no file for with the regular one, thicker or slanted', () => {
+    const file = (name: string) => readFont(new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url))))!;
+    const regular = file('CourierPrime-Regular.ttf');
+    const bold = file('CourierPrime-Bold.ttf');
+    expect([regular.bold, bold.bold]).toEqual([false, true]);
+    const doc = createDoc([{ props: {}, runs: [{ text: 'Bold', props: { fontFamily: 'Courier Prime', bold: true } }, { text: ' slanted', props: { fontFamily: 'Courier Prime', italic: true } }] }]);
+    const draw = (fonts: (typeof regular)[]) => {
+      const measure = new FontMeasurer(fonts);
+      const pick = (spec: { bold: boolean; italic: boolean }) => (fonts.find((f) => f.bold === spec.bold && f.italic === spec.italic) ?? fonts[0]).bytes;
+      return streams(exportPdf(layoutDocument(doc, measure), { measurer: measure, font: pick }))[0];
+    };
+    const faked = draw([regular]);
+    expect(faked).toMatch(/q BT \/F1 [\d.]+ Tf 0 0 0 rg 2 Tr 0 0 0 RG [\d.]+ w\n/);
+    expect(faked).toMatch(/1 0 0\.2 1 [\d.]+ [\d.]+ Tm/);
+    // With the bold file given, the bold text is its own; the italic one is still slanted.
+    const real = draw([regular, bold]);
+    expect(real).not.toContain('2 Tr');
+    expect(real).toMatch(/1 0 0\.2 1 /);
   });
 });

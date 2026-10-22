@@ -2,8 +2,8 @@
 // measure the layout against Microsoft Word's: each picture is a block of one
 // plain colour, so where Word puts it can be read off its PDF.
 //
-//   npm run float-cases                 writes fixtures/flotantes-*.docx and our PDF of each
-//   npm run word-compare -- fixtures/flotantes-<caso>.docx --word     Word's PDF of one, and its lines against ours
+//   npm run float-cases                 writes fixtures/float-*.docx and our PDF of each
+//   npm run word-compare -- fixtures/float-<case>.docx --word     Word's PDF of one, and its lines against ours
 //   npm run float-cases -- --check      where each picture is in Word's PDF and in ours
 //
 // Needs pdftoppm (brew install poppler) for the check. The files go to
@@ -33,7 +33,7 @@ import {
 import { fontsFor } from '../packages/mcp/src/fonts';
 
 const OUT = resolve('fixtures');
-const COLORS = { rojo: [230, 0, 0], verde: [0, 170, 0], azul: [0, 0, 230], magenta: [220, 0, 220] } as const;
+const COLORS = { red: [230, 0, 0], green: [0, 170, 0], blue: [0, 0, 230], magenta: [220, 0, 220] } as const;
 type Color = keyof typeof COLORS;
 
 // --- A picture of one colour ------------------------------------------------------
@@ -123,104 +123,104 @@ const tight = (xml: string) =>
 
 const CASES: Record<string, () => Doc> = {
   // In the middle of the column, with the text down both sides; then at each edge.
-  'dos-lados': () =>
+  'both-sides': () =>
     floats(
       createDoc(text(6)),
-      { color: 'rojo', at: { para: 0, offset: 0 }, width: 120, height: 90, wrap: 'square', x: 170, y: 12, edit: gap(9) },
-      { color: 'verde', at: { para: 2, offset: 0 }, width: 140, height: 70, wrap: 'square', x: 0, y: 6 },
-      { color: 'azul', at: { para: 4, offset: 0 }, width: 140, height: 70, wrap: 'square', x: 328, y: 6 },
+      { color: 'red', at: { para: 0, offset: 0 }, width: 120, height: 90, wrap: 'square', x: 170, y: 12, edit: gap(9) },
+      { color: 'green', at: { para: 2, offset: 0 }, width: 140, height: 70, wrap: 'square', x: 0, y: 6 },
+      { color: 'blue', at: { para: 4, offset: 0 }, width: 140, height: 70, wrap: 'square', x: 328, y: 6 },
     ),
   // With little room on one side: how narrow a stretch of text Word still writes.
-  estrecho: () =>
+  narrow: () =>
     floats(
       createDoc(text(8)),
-      { color: 'rojo', at: { para: 0, offset: 0 }, width: 120, height: 60, wrap: 'square', x: 20, y: 8, edit: gap(0) },
-      { color: 'verde', at: { para: 2, offset: 0 }, width: 120, height: 60, wrap: 'square', x: 45, y: 8, edit: gap(0) },
-      { color: 'azul', at: { para: 4, offset: 0 }, width: 120, height: 60, wrap: 'square', x: 62, y: 8, edit: gap(0) },
+      { color: 'red', at: { para: 0, offset: 0 }, width: 120, height: 60, wrap: 'square', x: 20, y: 8, edit: gap(0) },
+      { color: 'green', at: { para: 2, offset: 0 }, width: 120, height: 60, wrap: 'square', x: 45, y: 8, edit: gap(0) },
+      { color: 'blue', at: { para: 4, offset: 0 }, width: 120, height: 60, wrap: 'square', x: 62, y: 8, edit: gap(0) },
       { color: 'magenta', at: { para: 6, offset: 0 }, width: 380, height: 50, wrap: 'square', x: 44, y: 8, edit: gap(0) },
     ),
   // The same with words short enough to fit anywhere: the least room Word writes in.
-  minimo: () =>
+  'least-room': () =>
     floats(
       createDoc(Array.from({ length: 8 }, () => para(Array.from({ length: 260 }, (_, i) => ['a', 'y', 'o', 'de', 'la', 'e', 'un'][i % 7]).join(' ')))),
-      { color: 'rojo', at: { para: 0, offset: 0 }, width: 120, height: 60, wrap: 'square', x: 6, y: 8, edit: gap(0) },
-      { color: 'verde', at: { para: 2, offset: 0 }, width: 120, height: 60, wrap: 'square', x: 12, y: 8, edit: gap(0) },
-      { color: 'azul', at: { para: 4, offset: 0 }, width: 120, height: 60, wrap: 'square', x: 20, y: 8, edit: gap(0) },
+      { color: 'red', at: { para: 0, offset: 0 }, width: 120, height: 60, wrap: 'square', x: 6, y: 8, edit: gap(0) },
+      { color: 'green', at: { para: 2, offset: 0 }, width: 120, height: 60, wrap: 'square', x: 12, y: 8, edit: gap(0) },
+      { color: 'blue', at: { para: 4, offset: 0 }, width: 120, height: 60, wrap: 'square', x: 20, y: 8, edit: gap(0) },
       { color: 'magenta', at: { para: 6, offset: 0 }, width: 120, height: 60, wrap: 'square', x: 30, y: 8, edit: gap(0) },
     ),
   // Which lines are beside a picture: lines 25.3 tall whose text is the 12.65 in the middle of each. The
   // first picture starts in the room under the text of the second line and ends in the room over the text
   // of the sixth; the second does the same with the room it keeps round it, 12 points, and not with itself.
-  bordes: () =>
+  edges: () =>
     floats(
       createDoc(text(4, 110, { lineHeight: 2, spacingAfter: 0 })),
-      { color: 'rojo', at: { para: 0, offset: 0 }, width: 130, height: 83.2, wrap: 'square', x: 338, y: 46.3, edit: gap(0) },
-      { color: 'verde', at: { para: 2, offset: 0 }, width: 130, height: 59.2, wrap: 'square', x: 338, y: 58.3, edit: gap(12) },
+      { color: 'red', at: { para: 0, offset: 0 }, width: 130, height: 83.2, wrap: 'square', x: 338, y: 46.3, edit: gap(0) },
+      { color: 'green', at: { para: 2, offset: 0 }, width: 130, height: 59.2, wrap: 'square', x: 338, y: 58.3, edit: gap(12) },
     ),
   // How far under the foot of its text a line is still beside a picture: the second line of each paragraph,
   // whose text ends 37.95 down it (12.65 a line of text, 25.3 a line), with a picture starting a little under.
-  alcance: () =>
+  reach: () =>
     floats(
       createDoc(text(8, 60, { lineHeight: 2, spacingAfter: 0 })),
-      ...([2.6, 3.2, 3.8, 4.4, 5, 6, 8, 11] as const).map((under, i): Float => ({ color: (['rojo', 'verde', 'azul', 'magenta'] as const)[i % 4], at: { para: i, offset: 0 }, width: 130, height: 20, wrap: 'square', x: 338, y: 37.95 + under, edit: gap(0) })),
+      ...([2.6, 3.2, 3.8, 4.4, 5, 6, 8, 11] as const).map((under, i): Float => ({ color: (['red', 'green', 'blue', 'magenta'] as const)[i % 4], at: { para: i, offset: 0 }, width: 130, height: 20, wrap: 'square', x: 338, y: 37.95 + under, edit: gap(0) })),
     ),
   // Told which side the text may go down.
-  lados: () =>
+  sides: () =>
     floats(
       createDoc(text(6)),
-      { color: 'rojo', at: { para: 0, offset: 0 }, width: 110, height: 70, wrap: 'square', x: 180, y: 8, edit: side('left') },
-      { color: 'verde', at: { para: 2, offset: 0 }, width: 110, height: 70, wrap: 'square', x: 180, y: 8, edit: side('right') },
-      { color: 'azul', at: { para: 4, offset: 0 }, width: 110, height: 70, wrap: 'square', x: 120, y: 8, edit: side('largest') },
+      { color: 'red', at: { para: 0, offset: 0 }, width: 110, height: 70, wrap: 'square', x: 180, y: 8, edit: side('left') },
+      { color: 'green', at: { para: 2, offset: 0 }, width: 110, height: 70, wrap: 'square', x: 180, y: 8, edit: side('right') },
+      { color: 'blue', at: { para: 4, offset: 0 }, width: 110, height: 70, wrap: 'square', x: 120, y: 8, edit: side('largest') },
     ),
   // The whole width of it left free, with and without room round it; and the outline of it gone round.
-  'arriba-abajo': () =>
+  'top-and-bottom': () =>
     floats(
       createDoc(text(6)),
-      { color: 'rojo', at: { para: 0, offset: 0 }, width: 200, height: 60, wrap: 'topBottom', x: 100, y: 30 },
-      { color: 'verde', at: { para: 2, offset: 0 }, width: 200, height: 60, wrap: 'topBottom', x: 40, y: 20, edit: gap(14) },
-      { color: 'azul', at: { para: 4, offset: 0 }, width: 120, height: 80, wrap: 'square', x: 60, y: 10, edit: tight },
+      { color: 'red', at: { para: 0, offset: 0 }, width: 200, height: 60, wrap: 'topBottom', x: 100, y: 30 },
+      { color: 'green', at: { para: 2, offset: 0 }, width: 200, height: 60, wrap: 'topBottom', x: 40, y: 20, edit: gap(14) },
+      { color: 'blue', at: { para: 4, offset: 0 }, width: 120, height: 80, wrap: 'square', x: 60, y: 10, edit: tight },
     ),
   // Over the text and under it: the text does not move.
-  encima: () =>
+  'in-front': () =>
     floats(
       createDoc(text(4)),
-      { color: 'rojo', at: { para: 0, offset: 0 }, width: 150, height: 50, wrap: 'none', x: 60, y: 20 },
-      { color: 'verde', at: { para: 2, offset: 0 }, width: 150, height: 50, wrap: 'behind', x: 200, y: 20 },
+      { color: 'red', at: { para: 0, offset: 0 }, width: 150, height: 50, wrap: 'none', x: 60, y: 20 },
+      { color: 'green', at: { para: 2, offset: 0 }, width: 150, height: 50, wrap: 'behind', x: 200, y: 20 },
     ),
   // Measured from the page and from its margins, and put at a side by name.
-  desde: () =>
+  'relative-to': () =>
     floats(
       createDoc(text(8)),
-      { color: 'rojo', at: { para: 0, offset: 0 }, width: 90, height: 60, wrap: 'square', edit: both(from('H', 'page', offset(40)), from('V', 'page', offset(140))) },
-      { color: 'verde', at: { para: 2, offset: 0 }, width: 90, height: 60, wrap: 'square', edit: both(from('H', 'margin', align('right')), from('V', 'paragraph', offset(10))) },
-      { color: 'azul', at: { para: 4, offset: 0 }, width: 90, height: 60, wrap: 'square', edit: both(from('H', 'margin', align('center')), from('V', 'margin', offset(430))) },
+      { color: 'red', at: { para: 0, offset: 0 }, width: 90, height: 60, wrap: 'square', edit: both(from('H', 'page', offset(40)), from('V', 'page', offset(140))) },
+      { color: 'green', at: { para: 2, offset: 0 }, width: 90, height: 60, wrap: 'square', edit: both(from('H', 'margin', align('right')), from('V', 'paragraph', offset(10))) },
+      { color: 'blue', at: { para: 4, offset: 0 }, width: 90, height: 60, wrap: 'square', edit: both(from('H', 'margin', align('center')), from('V', 'margin', offset(430))) },
       { color: 'magenta', at: { para: 6, offset: 0 }, width: 90, height: 60, wrap: 'square', edit: both(from('H', 'column', offset(20)), from('V', 'line', offset(0))) },
     ),
   // Anchored in the middle of a paragraph, above its line and below; with other line spacings.
-  parrafo: () =>
+  'mid-paragraph': () =>
     floats(
       createDoc([...text(2, 90, { lineHeight: 1 }), ...text(2, 90, { lineHeight: 1.5, spacingBefore: 12 }), ...text(2, 90, { lineHeight: 2, spacingAfter: 0 })]),
-      { color: 'rojo', at: { para: 0, offset: 260 }, width: 130, height: 80, wrap: 'square', x: 0, y: 30 },
+      { color: 'red', at: { para: 0, offset: 260 }, width: 130, height: 80, wrap: 'square', x: 0, y: 30 },
       // It starts in the room the line spacing leaves under the text of the first line, which is not beside it.
-      { color: 'verde', at: { para: 2, offset: 200 }, width: 130, height: 80, wrap: 'square', x: 338, y: 21.5 },
-      { color: 'azul', at: { para: 4, offset: 0 }, width: 130, height: 80, wrap: 'square', x: 170, y: 15 },
+      { color: 'green', at: { para: 2, offset: 200 }, width: 130, height: 80, wrap: 'square', x: 338, y: 21.5 },
+      { color: 'blue', at: { para: 4, offset: 0 }, width: 130, height: 80, wrap: 'square', x: 170, y: 15 },
     ),
   // Near the foot of a page, and taller than what is left of it.
-  'fin-de-pagina': () =>
+  'page-end': () =>
     floats(
       createDoc(text(14)),
-      { color: 'rojo', at: { para: 8, offset: 0 }, width: 150, height: 150, wrap: 'square', x: 0, y: 10 },
-      { color: 'verde', at: { para: 11, offset: 0 }, width: 150, height: 120, wrap: 'topBottom', x: 150, y: 20 },
+      { color: 'red', at: { para: 8, offset: 0 }, width: 150, height: 150, wrap: 'square', x: 0, y: 10 },
+      { color: 'green', at: { para: 11, offset: 0 }, width: 150, height: 120, wrap: 'topBottom', x: 150, y: 20 },
     ),
   // In a cell of a table, and in the header.
-  'tabla-y-encabezado': () => {
+  'table-and-header': () => {
     let doc = createDoc([...text(2), para(''), ...text(2)]);
     doc = insertTable(doc, { para: 2, offset: 0 }, 2, 2).doc;
     const cell = doc.paragraphs.findIndex((p) => p.cell);
     for (let i = 3; i >= 0; i--) doc = insertText(doc, { para: cell + i, offset: 0 }, filler(30, i * 5)).doc;
-    doc = float(doc, { color: 'rojo', at: { para: cell, offset: 0 }, width: 60, height: 40, wrap: 'square', x: 100, y: 6 });
+    doc = float(doc, { color: 'red', at: { para: cell, offset: 0 }, width: 60, height: 40, wrap: 'square', x: 100, y: 6 });
     // The header as a document of its own, with the pictures of the whole.
-    const head = float({ ...doc, paragraphs: [para('Encabezado de prueba con un texto que pasa junto a la imagen')], tables: undefined }, { color: 'azul', at: { para: 0, offset: 0 }, width: 60, height: 30, wrap: 'square', x: 380, y: -6 });
+    const head = float({ ...doc, paragraphs: [para('Encabezado de prueba con un texto que pasa junto a la imagen')], tables: undefined }, { color: 'blue', at: { para: 0, offset: 0 }, width: 60, height: 30, wrap: 'square', x: 380, y: -6 });
     return { ...doc, media: head.media, header: { paragraphs: head.paragraphs } };
   },
 };
@@ -271,20 +271,20 @@ const only = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
 mkdirSync(OUT, { recursive: true });
 for (const [name, build] of Object.entries(CASES)) {
   if (only.length && !only.includes(name)) continue;
-  const docx = join(OUT, `flotantes-${name}.docx`);
-  const ours = join(OUT, `flotantes-${name}.ours.pdf`);
-  const word = join(OUT, `flotantes-${name}.word.pdf`);
+  const docx = join(OUT, `float-${name}.docx`);
+  const ours = join(OUT, `float-${name}.ours.pdf`);
+  const word = join(OUT, `float-${name}.word.pdf`);
   const bytes = exportDocx(build());
   writeFileSync(docx, bytes);
   // Laid out from the file, as the editor would after opening it.
   const doc = importDocx(bytes);
   writeFileSync(ours, renderPdf(doc, fontsFor(doc)).pdf);
   if (!check) {
-    console.log(`Escrito ${docx}`);
+    console.log(`Wrote ${docx}`);
     continue;
   }
   if (!existsSync(word)) {
-    console.log(`${name}: falta el PDF de Word (npm run word-compare -- ${docx} --word)`);
+    console.log(`${name}: no PDF from Word yet (npm run word-compare -- ${docx} --word)`);
     continue;
   }
   const theirs = boxes(word);
@@ -292,6 +292,6 @@ for (const [name, build] of Object.entries(CASES)) {
   for (const color of Object.keys({ ...theirs, ...mine })) {
     const same = theirs[color] === mine[color];
     const near = !same && theirs[color] && mine[color] && theirs[color].split(/\D+/).every((n, i) => Math.abs(Number(n) - Number(mine[color].split(/\D+/)[i])) <= 1);
-    console.log(`${name} ${color.padEnd(8)} ${same ? 'igual   ' : near ? 'a 1 pt  ' : 'DISTINTO'} Word ${theirs[color] ?? '—'}${same ? '' : `   nosotros ${mine[color] ?? '—'}`}`);
+    console.log(`${name} ${color.padEnd(8)} ${same ? 'same    ' : near ? '1 pt off' : 'DISTINTO'} Word ${theirs[color] ?? '—'}${same ? '' : `   ours ${mine[color] ?? '—'}`}`);
   }
 }

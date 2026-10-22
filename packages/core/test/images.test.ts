@@ -1,6 +1,6 @@
 import { strFromU8, unzipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type Doc, OBJECT_CHAR, createDoc, docImage, exportDocx, importDocx, insertImage, insertImageGrid, insertText, movePicture, pictureAt, resizePicture } from '../src';
+import { type Doc, OBJECT_CHAR, altText, createDoc, docImage, exportDocx, importDocx, insertImage, insertImageGrid, insertText, movePicture, pictureAt, resizePicture, setAltText } from '../src';
 
 const PNG = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);
 const base = () => createDoc([{ props: {}, runs: [{ text: 'Hello world', props: {} }] }, { props: {}, runs: [{ text: 'Second', props: {} }] }]);
@@ -97,5 +97,21 @@ describe('pictures', () => {
     const back = importDocx(exportDocx(doc));
     expect(texts(back)).toEqual(texts(doc));
     expect(insertImageGrid(base(), { para: 0, offset: 0 }, [], 3).doc).toEqual(base());
+  });
+});
+
+describe('the description of a picture', () => {
+  it('is read from the drawing as Word keeps it, set, changed and taken away, and goes to the DOCX and back', () => {
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+    let doc = insertImage(createDoc([{ props: {}, runs: [{ text: '', props: {} }] }]), { para: 0, offset: 0 }, { bytes: png, type: 'image/png', width: 20, height: 10 }).doc;
+    const xml = () => doc.paragraphs[0].runs.find((run) => run.props.object)!.props.object;
+    expect(altText(xml())).toBeUndefined();
+    doc = setAltText(doc, { para: 0, offset: 0 }, 'A plan  of the "flat" & its rooms');
+    expect(altText(xml())).toBe('A plan of the "flat" & its rooms');
+    const back = importDocx(exportDocx(doc));
+    expect(altText(back.paragraphs[0].runs.find((run) => run.props.object)!.props.object)).toBe('A plan of the "flat" & its rooms');
+    doc = setAltText(doc, { para: 0, offset: 0 }, '');
+    expect(altText(xml())).toBeUndefined();
+    expect(setAltText(doc, { para: 0, offset: 0 }, '')).toBe(doc);
   });
 });

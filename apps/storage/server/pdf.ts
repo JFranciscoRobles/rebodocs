@@ -5,6 +5,7 @@ import { type Doc, fillVariables, renderPdf } from '@rebodocs/core';
 // Looks for .ttf and .otf files in a folder and in the fonts of the system. An application
 // of your own reads the ones it ships with `readFont`, as the server guide shows.
 import { fontsFor } from '../../../packages/mcp/src/fonts';
+import { Refused } from './refused';
 
 export interface MadePdf {
   pdf: Uint8Array;
@@ -16,7 +17,8 @@ export interface MadePdf {
 export function makePdf(template: Doc, values: Record<string, string>, title: string, fontDirs: string[] = []): MadePdf {
   const doc = fillVariables(template, values);
   const fonts = fontsFor(doc, fontDirs);
-  if (!fonts.length) throw new Error('No .ttf or .otf font was found to lay the document out with. Set FONTS_DIR to a folder that has some.');
+  // The person can mend this one, so it is said to them: 503, the server is not ready to make PDFs.
+  if (!fonts.length) throw new Refused(503, 'The server has no .ttf or .otf font to lay the document out with. Set FONTS_DIR to a folder that has some.');
   const { pdf, layout, missingFonts } = renderPdf(doc, fonts, title);
   return { pdf, pages: layout.pages.length, missingFonts: Object.fromEntries(missingFonts) };
 }

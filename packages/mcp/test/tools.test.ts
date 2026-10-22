@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { type Doc, type Paragraph, columnsAt, createDoc, exportDocx, importDocx, insertTable, linkHref, plainText, setParagraphStyle, tocRange } from '@rebodocs/core';
+import { zlibSync } from 'fflate';
+import { type Doc, type Paragraph, columnsAt, letterheadOf, createDoc, exportDocx, importDocx, insertTable, linkHref, plainText, setParagraphStyle, tocRange } from '@rebodocs/core';
 import { TOOLS, ToolError, runTool } from '../src/tools';
 
 const p = (text: string): Paragraph => ({ props: {}, runs: [{ text, props: {} }] });
@@ -46,6 +47,27 @@ describe('tools for an assistant', () => {
     expect(error(doc, 'read_document', { from: 9 })).toContain('There is no paragraph 9');
   });
 
+  it('shows each place found with the words around it, not those of the first in its paragraph', () => {
+    const long = 'The deposit reserves the house for the buyer until the day of signing at the notary. The deposit is credited to the price.';
+    const marked: Paragraph = {
+      props: {},
+      runs: [
+        { text: 'Kept after a long while of thinking it over: ', props: {} },
+        { text: 'the deposit', props: { revision: 'insert' } },
+        { text: '\tand later, much later, once all was signed, the deposit.', props: {} },
+      ],
+    };
+    const lines = runTool(createDoc([p(long), marked]), 'find_text', { query: 'deposit' }).text.split('\n');
+    expect(lines[0]).toBe('4 matches:');
+    expect(lines[1]).toMatch(/^\[1\] The deposit reserves/);
+    expect(lines[1]).not.toContain('credited');
+    expect(lines[2]).toContain('notary. The deposit is credited');
+    // Around the marks of a change and a tab, the place is that of the text as read_document shows it.
+    expect(lines[3]).toContain('over: {+the deposit+}');
+    expect(lines[4]).toMatch(/^\[2\] …/);
+    expect(lines[4]).toContain('once all was signed, the deposit.');
+  });
+
   it('finds a place by its text, and asks which when there are several', () => {
     const doc = base();
     expect(error(doc, 'replace_text', { find: 'El cliente', replace: 'La clienta' })).toContain('found 2 times, in paragraphs 3, 6');
@@ -88,12 +110,22 @@ describe('tools for an assistant', () => {
   });
 
   it('fills the variables of a template', () => {
-    const result = runTool(base(), 'fill_variables', { values: { cliente: 'ana pérez', importe: 1500, fecha: '2026-10-12', otra: 'x' } }, {});
+    const result = runTool(base(), 'fill_variables', { values: { cliente: 'ana pérez', importe: 1500, fecha: '2026-10-12', otra: 'x' }, locale: 'es-MX' }, {});
     expect(texts(result.doc!).slice(2, 5)).toEqual(['El cliente ANA PÉREZ contrata el servicio.', 'Precio', 'El precio es de $1,500.00, a pagar el 12 de octubre de 2026.']);
     expect(result.text).toBe('Filled 3 of 3 variables.\nNot variables of this document: otra.');
-    const partial = runTool(base(), 'fill_variables', { values: { cliente: 'Ana', fecha: 'mañana' } });
+    const partial = runTool(base(), 'fill_variables', { values: { cliente: 'Ana', fecha: 'mañana' }, locale: 'es-MX' });
     expect(partial.text).toContain('Filled 2 of 3 variables.\nStill without a value: importe.');
     expect(partial.text).toContain('"mañana", is not one "fecha larga" can write');
+  });
+
+  it('fills the blocks of a template with lists and yes or no, and lists them', () => {
+    const doc = createDoc(['Pedido', '{{#lineas}}', '{{lineas.cosa}}: {{lineas.precio | moneda}}', '{{/lineas}}', '{{^pagado}}Pendiente de pago.{{/pagado}}'].map((text) => ({ props: {}, runs: [{ text, props: {} }] })));
+    expect(runTool(doc, 'list_variables', {}).text).toBe(
+      'lineas.cosa — used 1×\nlineas.precio — used 1×; formats: moneda\nBlocks:\n{{#lineas}} — paragraphs, repeated for each item of a list, or kept for true\n{{^pagado}} — some text, kept when the value is not there',
+    );
+    const result = runTool(doc, 'fill_variables', { values: { lineas: [{ cosa: 'Mesa', precio: 250 }, { cosa: 'Silla', precio: 90 }], pagado: false } });
+    expect(texts(result.doc!)).toEqual(['Pedido', 'Mesa: $250.00', 'Silla: $90.00', 'Pendiente de pago.']);
+    expect(result.text).toBe('Filled 2 of 2 variables.\nWrote out 2 of 2 blocks.');
   });
 
   it('puts in a table, signatures, a page break and a table of contents', () => {
@@ -142,9 +174,9 @@ describe('tools for an assistant', () => {
     expect(error(headed, 'read_document', { area: 'margin' })).toContain('"area" must be');
     // The number of the page goes in a paragraph of its own, and what was there stays.
     const numbered = apply(headed, 'set_page_number', { place: 'footer', format: 'pageOfTotal' });
-    expect(runTool(numbered, 'read_document', { area: 'footer' }).text).toMatch(/^\[1\] Página \d+ de \d+$/);
+    expect(runTool(numbered, 'read_document', { area: 'footer' }).text).toMatch(/^\[1\] Page \d+ of \d+$/);
     expect(runTool(apply(numbered, 'set_page_number', { place: 'header', align: 'right' }), 'read_document', { area: 'header' }).text).toMatch(/Contrato · \{\{cliente\}\}/);
-    expect(runTool(apply(numbered, 'set_page_number', { place: 'none' }), 'read_document', { area: 'footer' }).text).not.toMatch(/Página/);
+    expect(runTool(apply(numbered, 'set_page_number', { place: 'none' }), 'read_document', { area: 'footer' }).text).not.toMatch(/Page \d/);
     const back = importDocx(exportDocx(numbered));
     expect(runTool(back, 'read_document', { area: 'header' }).text).toBe('[1] Contrato · {{cliente}}');
   });
@@ -200,6 +232,48 @@ describe('tools for an assistant', () => {
     expect(Object.keys(importDocx(exportDocx(result.doc!)).source!.files).some((name) => /media\/.*\.png$/.test(name))).toBe(true);
   });
 
+  it('gives the document a letterhead, with the margins to clear it, and takes it away', () => {
+    // A PNG the shape of a Letter page, 34 × 44, with a dark band across its top four rows.
+    const width = 34;
+    const height = 44;
+    const rows = new Uint8Array(height * (1 + width * 4));
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) rows.set(y < 4 ? [20, 40, 90, 255] : [255, 255, 255, 255], y * (1 + width * 4) + 1 + x * 4);
+    const crc = (bytes: Uint8Array) => {
+      let c = ~0;
+      for (const byte of bytes) {
+        c ^= byte;
+        for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+      }
+      return ~c >>> 0;
+    };
+    const chunk = (name: string, body: Uint8Array) => {
+      const out = new Uint8Array(12 + body.length);
+      const view = new DataView(out.buffer);
+      view.setUint32(0, body.length);
+      out.set([...name].map((c) => c.charCodeAt(0)), 4);
+      out.set(body, 8);
+      view.setUint32(8 + body.length, crc(out.subarray(4, 8 + body.length)));
+      return out;
+    };
+    const head = new Uint8Array(13);
+    new DataView(head.buffer).setUint32(0, width);
+    new DataView(head.buffer).setUint32(4, height);
+    head.set([8, 6, 0, 0, 0], 8);
+    const parts = [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', head), chunk('IDAT', zlibSync(rows)), chunk('IEND', new Uint8Array())];
+    const png = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
+    parts.reduce((at, part) => (png.set(part, at), at + part.length), 0);
+    const given = runTool(base(), 'set_letterhead', { path: 'paper.png', data: btoa(String.fromCharCode(...png)), type: 'image/png' });
+    // Four rows of 44 are 72 points of the page; 18 more of room.
+    expect(given.text).toBe('Letterhead set, behind the text of every page. Top margin 3.2 cm, bottom 2.5 cm, to clear what it prints.');
+    expect(letterheadOf(given.doc!)).toBeDefined();
+    expect(given.doc!.page.marginTop).toBe(90);
+    expect(runTool(given.doc!, 'get_overview', {}).text).toContain('It has a letterhead');
+    const removed = runTool(given.doc!, 'set_letterhead', { remove: true });
+    expect(letterheadOf(removed.doc!)).toBeUndefined();
+    expect(runTool(base(), 'set_letterhead', { remove: true }).text).toBe('The document has no letterhead.');
+    expect(error(base(), 'set_letterhead', {})).toContain('Give "path"');
+  });
+
   it('moves a picture, gives it another size and takes it away', () => {
     const png = new Uint8Array(33);
     png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 200, 0, 0, 0, 100, 8, 6, 0, 0, 0]);
@@ -223,6 +297,12 @@ describe('tools for an assistant', () => {
     expect(error(doc, 'edit_image', { paragraph: 2, action: 'delete' })).toContain('has no picture');
     expect(error(doc, 'edit_image', { paragraph: 3, occurrence: 2, action: 'delete' })).toContain('has 1 picture');
     expect(picture(importDocx(exportDocx(sized)), 2)).toMatchObject({ objectWidth: 72, objectHeight: 36 });
+    // A description, for whoever cannot see it: read back with the picture, and taken away with an empty one.
+    const described = runTool(doc, 'edit_image', { paragraph: 3, action: 'describe', description: 'The logo of the firm' });
+    expect(described.text).toBe('The picture is described as: The logo of the firm');
+    expect(runTool(described.doc!, 'read_document', { from: 3, to: 3 }).text).toBe('[3] [image: The logo of the firm]');
+    expect(runTool(described.doc!, 'read_document', { from: 3, to: 3 }).text).toBe(runTool(importDocx(exportDocx(described.doc!)), 'read_document', { from: 3, to: 3 }).text);
+    expect(runTool(apply(described.doc!, 'edit_image', { paragraph: 3, action: 'describe', description: '' }), 'read_document', { from: 3, to: 3 }).text).toBe('[3] [image]');
   });
 
   it('puts tables and pictures in a header, which a DOCX carries', () => {
@@ -381,6 +461,24 @@ describe('tools for an assistant', () => {
     expect(runTool(settled, 'list_changes').text).toContain('There are no tracked changes');
     // What it writes is Word's tracked changes.
     expect(runTool(importDocx(exportDocx(edited)), 'list_changes').text).toContain('2 tracked changes');
+  });
+
+  it('accepts or rejects the changes of one person, and one change alone where two people changed the same text', () => {
+    const as = (who: string) => (doc: Doc, name: string, args: Record<string, unknown>) => runTool(doc, name, args, { reviser: who, now: new Date('2026-10-12T12:00:00Z') }).doc!;
+    const on = apply(base(), 'track_changes', { on: true });
+    const luis = as('Luis')(on, 'replace_text', { find: 'El cliente acepta.', replace: 'El cliente acepta las condiciones.' });
+    // Ana takes out what Luis put in: it stays, as two changes.
+    const ana = as('Ana')(luis, 'replace_text', { find: 'El cliente acepta las condiciones.', replace: 'El cliente acepta.' });
+    const listed = runTool(ana, 'list_changes').text;
+    expect(listed).toContain('1. Luis put in " las condiciones"');
+    expect(listed).toContain('2. Ana took out " las condiciones"');
+    // Ana's taking out rejected alone: Luis's words are his again.
+    const back = apply(ana, 'reject_changes', { changes: [2] });
+    expect(runTool(back, 'list_changes').text).toContain('1 tracked change:\n1. Luis put in " las condiciones"');
+    // All of Luis's accepted: what is left is Ana's taking out.
+    const theirs = apply(ana, 'accept_changes', { author: 'Luis' });
+    expect(runTool(theirs, 'list_changes').text).toContain('1 tracked change:\n1. Ana took out " las condiciones"');
+    expect(error(ana, 'accept_changes', { author: 'Pedro' })).toContain('"Luis", "Ana"');
   });
 
   it('says what changed from another version of the document', () => {

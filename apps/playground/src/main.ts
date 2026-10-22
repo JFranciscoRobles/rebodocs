@@ -1,5 +1,5 @@
 import { DEFAULT_COLLAB_PORT, type Session, createRoom, joinRoom, pingServer } from '@rebodocs/collab/browser';
-import { type VersionInfo, type Versions, Editor, addFont, addLocale, createBubble, createFindBar, createPanel, createResponsive, createRuler, createSidebar, createStatusBar, createToolbar, getLocale, recallAuthor, setAuthor, setLocale, t } from '@rebodocs/editor';
+import { type VersionInfo, type Versions, Editor, addFont, addLocale, createBubble, createFindBar, createFocusMode, createPanel, createResponsive, createRuler, createSidebar, createStatusBar, createToolbar, createSpellChecker, applyTheme, getLocale, recallAuthor, setAuthor, setLocale, t } from '@rebodocs/editor';
 import { connectAssistant } from '@rebodocs/mcp/browser';
 import { sampleDoc } from './sample';
 
@@ -20,6 +20,8 @@ setLocale(storedLocale() ?? navigator.language);
 document.documentElement.lang = getLocale();
 
 const editor = new Editor($('editor'), sampleDoc());
+// The sample is written in Spanish: said so, for spelling, a screen reader and the DOCX it makes.
+editor.language = 'es-MX';
 // The table of contents of the sample comes without pages: they are those of its layout here. Loaded again, that is not a step to undo.
 if (editor.updateToc()) editor.load(editor.doc);
 const fileInput = $<HTMLInputElement>('file');
@@ -149,7 +151,7 @@ async function save(): Promise<void> {
 // The usual keys, which would otherwise save or open a web page.
 window.addEventListener('keydown', (e) => {
   if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
-  const key = e.key.toLowerCase();
+  const key = e.key?.toLowerCase();
   if (key !== 's' && key !== 'o' && key !== 'p') return;
   e.preventDefault();
   if (key === 'p') editor.print();
@@ -173,12 +175,22 @@ function mount(): Mounted {
     onSave: () => void save(),
     onSaveAs: () => void saveAs(),
     onLocale: changeLocale,
+    // Light, dark or as the system is: on the islands and on the editor.
+    onTheme: (theme) => {
+      applyTheme($('app'), theme);
+      editor.theme = theme;
+    },
+    // As DocsEditor comes: a screen of its own, over the editor and not the whole page.
+    variant: 'screen',
+    within: $('app'),
+    dirty,
   });
   const findBar = createFindBar(editor);
   const panel = createPanel($('panel'), editor, { versions });
   const bubble = createBubble(editor);
   editor.onLinkKey = () => bubble.ask('link');
   const toolbar = createToolbar($('toolbar'), editor, {
+    layout: 'two-rows',
     onMenu: sidebar.toggle,
     onPanel: panel.toggle,
     onFind: () => findBar.open(),
@@ -189,6 +201,8 @@ function mount(): Mounted {
     onInsertLink: () => bubble.ask('link'),
   });
   const status = createStatusBar($('status'), editor, {
+    layout: 'floating',
+    focus: { on: () => focus.on, toggle: focus.toggle },
     assistant: { state: () => assistant.state, toggle: () => (assistant.state === 'off' ? assistant.connect() : assistant.disconnect()) },
     collab: {
       state: () => (session ? (session.state === 'closed' ? 'off' : session.state) : starting ? 'connecting' : 'off'),
@@ -305,10 +319,23 @@ function leaveRoom(): void {
   mounted.status.refresh();
 }
 
+// The pages alone, full screen: the button at the end of the bar at the bottom, or ⌘⇧. (Ctrl+Shift+.).
+// Made once, outside `mount`: a change of language does not take the person out of it.
+const focus = createFocusMode(editor, { onChange: () => mounted.status.refresh() });
+
 recallAuthor(editor);
+// Spelling, with Hunspell's dictionaries from a CDN; an application would serve them itself.
+const dictionary = (language: string) => ({ aff: `https://cdn.jsdelivr.net/npm/dictionary-${language}@4.0.0/index.aff`, dic: `https://cdn.jsdelivr.net/npm/dictionary-${language}@4.0.0/index.dic` });
+editor.spellChecker = createSpellChecker({ dictionaries: { es: dictionary('es'), en: dictionary('en') } });
+// `?theme=dark` (or `auto`) for the dark interface, on the islands and on the editor.
+const theme = query.get('theme');
+if (theme === 'dark' || theme === 'auto') {
+  applyTheme($('app'), theme);
+  editor.theme = theme;
+}
 let mounted = mount();
 // A narrow window, as a phone's: the text set to its width, and the panel over the document.
-createResponsive(document.body, editor);
+createResponsive($('app'), editor);
 if (query.get('room')) void findServer().then((url) => enterRoom(query.get('room')!, url));
 
 function changeLocale(locale: string): void {
@@ -328,4 +355,4 @@ editor.focus();
 
 // Handle for poking at the engine from the browser console.
 // At hand in the console, to try a font or a language out: `addFont({ family, src })`, `addLocale('fr', texts)`.
-Object.assign(window, { editor, changeLocale, assistant, collab: () => session, addFont, addLocale });
+Object.assign(window, { editor, changeLocale, assistant, focus, collab: () => session, addFont, addLocale });

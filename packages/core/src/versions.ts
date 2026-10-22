@@ -7,12 +7,14 @@
 // later one, with what was taken out struck through and what was put in
 // underlined, as Word shows a comparison.
 
-import { type Doc, type Media, type Paragraph, type Position, type Run, type RunProps, type Story, ANCHOR_CHAR, OBJECT_CHAR, defined, paragraphText, resolveParagraph, resolveRun } from './model';
+import { type Doc, type Media, type Note, type Paragraph, type Position, type Run, type RunProps, type Story, ANCHOR_CHAR, OBJECT_CHAR, defined, paragraphText, resolveParagraph, resolveRun } from './model';
 import { sliceRuns } from './ops';
 import { commonPairs } from './diffing';
 import { docImage, mediaKey } from './images';
 import { type StoryPart, footnotePart, storyOf, storyParts, withStory } from './stories';
 import { shownFootnotes } from './footnotes';
+import { decideAllRevisions, hasRevisions } from './revisions';
+import { textBoxPart } from './textboxes';
 import { paragraphStyles } from './styles';
 
 export type ChangeKind = 'added' | 'removed' | 'changed' | 'formatted';
@@ -34,8 +36,21 @@ export interface Change {
   pieces: ChangePiece[];
 }
 
+/** A note on the text (what Word calls a comment) written, taken out, or whose text changed. */
+export interface NoteChange {
+  kind: 'added' | 'removed' | 'changed';
+  author: string;
+  date?: string;
+  /** Its id in the earlier version and in the later one; one is missing when it is only in the other. */
+  before?: string;
+  after?: string;
+  pieces: ChangePiece[];
+}
+
 export interface Comparison {
   changes: Change[];
+  /** The notes on the text written, taken out or changed: listed, not marked in `doc`. */
+  notes: NoteChange[];
   /**
    * The later version with the changes marked: what was taken out struck
    * through in red, in its place, and what was put in underlined in green.
@@ -68,9 +83,9 @@ function tokens(text: string): Token[] {
   return out;
 }
 
-/** How much two texts have of the same words, from 0 to 1. */
+/** How much two texts have of the same words, from 0 to 1: the words alone, without the marks beside them. */
 function likeness(a: string, b: string): number {
-  const words = (text: string) => text.split(/\s+/).filter(Boolean);
+  const words = (text: string) => text.match(/[\p{L}\p{N}_]+/gu) ?? [];
   const wa = words(a);
   const wb = words(b);
   if (!wa.length && !wb.length) return 1;
@@ -356,19 +371,44 @@ function marked(story: Story, from: Doc, to: Doc, before: Paragraph[], part: Sto
   return { paragraphs: out, marks };
 }
 
-/** The parts both versions have text in besides the body: headers, footers, and the notes their references show. */
+/** The parts both versions have text in besides the body: headers, footers, the notes their references show, and text boxes. */
 function partsOf(before: Doc, after: Doc): StoryPart[] {
   const parts = new Set<StoryPart>([...storyParts(before), ...storyParts(after)]);
   for (const doc of [after, before]) for (const note of shownFootnotes(doc)) parts.add(footnotePart(note.id));
+  for (const doc of [after, before]) for (const box of doc.textBoxes ?? []) parts.add(textBoxPart(box.id));
   return [...parts];
+}
+
+/**
+ * The notes on the text of two versions, each with its own in the other:
+ * by who wrote it and when, which Word keeps when it saves, though not the
+ * id; without a date, by who wrote it and what it says.
+ */
+function compareNotes(before: Note[], after: Note[]): NoteChange[] {
+  const left = before.slice();
+  const out: NoteChange[] = [];
+  const same = (a: Note, b: Note) => a.author === b.author && (a.date || b.date ? a.date === b.date : a.text === b.text);
+  for (const now of after) {
+    const k = left.findIndex((was) => same(was, now));
+    const was = k < 0 ? undefined : left.splice(k, 1)[0];
+    if (was && was.text === now.text) continue;
+    const kind = was ? 'changed' : 'added';
+    out.push(defined({ kind, author: now.author, date: now.date, before: was?.id, after: now.id, pieces: piecesOf(kind, was?.text ?? '', now.text) }));
+  }
+  for (const was of left) out.push(defined({ kind: 'removed' as const, author: was.author, date: was.date, before: was.id, pieces: piecesOf('removed', was.text, '') }));
+  return out;
 }
 
 /**
  * What changed from `before` to `after`, two versions of a document: the
  * paragraphs put in, taken out and changed, of the text and of its headers,
- * footers and notes, and the later version with them marked.
+ * footers, notes at the foot of the page and text boxes; the notes on the
+ * text; and the later version with them marked. A version with tracked
+ * changes is compared as if they were accepted, as Word compares it.
  */
 export function compareDocs(before: Doc, after: Doc): Comparison {
+  if (hasRevisions(before)) before = decideAllRevisions(before, true);
+  if (hasRevisions(after)) after = decideAllRevisions(after, true);
   const changes: Change[] = [];
   const marks: Comparison['marks'] = [];
   const marking: Marking = { media: {} };
@@ -399,7 +439,7 @@ export function compareDocs(before: Doc, after: Doc): Comparison {
     if (shown && shown !== now) doc = withStory(doc, part, shown);
   }
   if (Object.keys(marking.media).length) doc = { ...doc, media: { ...doc.media, ...marking.media } };
-  return { changes, doc, marks };
+  return { changes, notes: compareNotes(before.notes ?? [], after.notes ?? []), doc, marks };
 }
 
 // --- Going back to a version --------------------------------------------------------
@@ -456,8 +496,8 @@ export function restoreVersion(current: Doc, version: Doc): Doc {
 }
 
 /** The changes of a comparison as plain text: `[-taken out-]` and `{+put in+}`, with some of the words around them. */
-export function describeChange(change: Change, context = 40): string {
-  const text = (piece: ChangePiece) => piece.text.replaceAll(OBJECT_CHAR, '[imagen]');
+export function describeChange(change: Pick<Change, 'kind' | 'pieces'>, context = 40): string {
+  const text = (piece: ChangePiece) => piece.text.replaceAll(OBJECT_CHAR, '[image]');
   return change.pieces
     .map((piece, i) => {
       if (piece.kind === 'removed') return `[-${text(piece)}-]`;

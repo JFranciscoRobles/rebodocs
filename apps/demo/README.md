@@ -17,13 +17,12 @@ npm run build:demo    # apps/demo/dist, a static site
 It is also on the site, at [rebodocs.com/demo](https://rebodocs.com/demo/):
 `apps/site` takes these same components from here.
 
-`/#headless` opens on the second tab. It starts with a sample contract that
+`/#headless` opens on the second tab. It starts with a sample agreement, in English, that
 `scripts/sample.ts` writes with the engine: headings, variables with a type,
-text in two columns, a table with a heading row, places to sign. `Abrir .docx` opens a file of the disk in both tabs.
+text in two columns, a table with a heading row, places to sign. `Open a .docx` opens a file of the disk in both tabs.
 Saving hands the DOCX back as a download: there is no backend.
 
-It opens in Spanish, the language the editor speaks unless told otherwise. The
-selector in the status bar changes it for what the library writes and for the
+Its interface opens in English (`setLocale('en')` in `src/main.tsx`). The selector in the status bar changes it for what the library writes and for the
 labels of the demo, which are in `src/headless/texts.ts`.
 
 ## Purpose

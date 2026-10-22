@@ -19,7 +19,7 @@ import { TOOLS, toolProperties } from './tools';
 export const ASSISTANT_MODEL = 'claude-opus-5-5';
 
 /** What a page cannot do: read a picture from a path on the machine. */
-const NOT_IN_A_PAGE = new Set(['insert_image']);
+const NOT_IN_A_PAGE = new Set(['insert_image', 'set_letterhead']);
 
 /** The tools of the document, as the Claude API takes them. Always in the same order, so the cache of the request holds. */
 export function assistantTools(): Anthropic.Beta.BetaTool[] {

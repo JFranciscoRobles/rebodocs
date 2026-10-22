@@ -6,43 +6,44 @@
 import { MAX_GRID_COLUMNS } from '@rebodocs/core';
 import { holdFocus } from './a11y';
 import type { Editor } from './editor';
-import { t } from './i18n';
+import { plural, t } from './i18n';
+import { applyTheme } from './theme';
 
 const STYLE_ID = 'dx-imagegrid-style';
 const ACCEPT = 'image/png,image/jpeg,image/gif';
 
 const CSS = `
 .dx-ig-scrim{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(20,24,32,.32)}
-.dx-ig{display:flex;flex-direction:column;width:640px;max-width:100%;max-height:100%;border-radius:12px;background:#fff;box-shadow:0 12px 40px rgba(0,0,0,.28);font:13px system-ui,-apple-system,"Segoe UI",sans-serif;color:#2b2f38}
-.dx-ig-top{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #e3e6ec}
+.dx-ig{display:flex;flex-direction:column;width:640px;max-width:100%;max-height:100%;border-radius:18px;background:var(--dx-ui-bg,#fff);box-shadow:0 12px 40px rgba(47,46,43,.28);font:13px system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--dx-ui-ink,#2f2e2b)}
+.dx-ig-top{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--dx-ui-line,#e6e3dc)}
 .dx-ig-title{flex:1;font-weight:600;font-size:14px}
-.dx-ig-cols{display:flex;align-items:center;gap:4px;color:#4a4f5a}
-.dx-ig-cols button{width:30px;height:30px;border:1px solid #d2d6de;border-radius:6px;background:#fff;color:inherit;font:inherit;cursor:pointer}
-.dx-ig-cols button:hover:not(:disabled){background:#eef1f6}
-.dx-ig-cols button.dx-on{border-color:#a8c7fa;background:#d3e3fd;color:#0b57d0}
+.dx-ig-cols{display:flex;align-items:center;gap:4px;color:var(--dx-ui-muted,#5f5d58)}
+.dx-ig-cols button{width:30px;height:30px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:9px;background:var(--dx-ui-bg,#fff);color:inherit;font:inherit;cursor:pointer}
+.dx-ig-cols button:hover:not(:disabled){background:var(--dx-ui-hover,#f3f1ec)}
+.dx-ig-cols button.dx-on{border-color:var(--dx-ui-active-line,#a8c7fa);background:var(--dx-ui-active,#e8f0fd);color:var(--dx-ui-accent,#0b57d0)}
 .dx-ig-cols button:disabled{opacity:.35;cursor:default}
-.dx-ig-body{flex:1;min-height:120px;overflow-y:auto;padding:16px;background:#eef0f4}
-.dx-ig-sheet{display:grid;gap:6px;padding:14px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.18)}
-.dx-ig-cell{position:relative;aspect-ratio:1;border:1px dashed #c9d6ee;border-radius:2px;background:#fff;cursor:grab}
+.dx-ig-body{flex:1;min-height:120px;overflow-y:auto;padding:16px;background:var(--dx-ui-line,#e6e3dc)}
+.dx-ig-sheet{display:grid;gap:6px;padding:14px;background:var(--dx-ui-bg,#fff);box-shadow:0 1px 4px rgba(47,46,43,.18)}
+.dx-ig-cell{position:relative;aspect-ratio:1;border:1px dashed var(--dx-ui-active,#e8f0fd);border-radius:2px;background:var(--dx-ui-bg,#fff);cursor:grab}
 .dx-ig-cell img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
 .dx-ig-cell.dx-ig-drag{opacity:.35}
-.dx-ig-cell.dx-ig-drop{border:2px solid #0b57d0}
-.dx-ig-n{position:absolute;left:4px;top:4px;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:rgba(32,36,44,.72);color:#fff;font-size:11px;line-height:18px;text-align:center}
-.dx-ig-x{position:absolute;right:4px;top:4px;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:rgba(32,36,44,.72);color:#fff;font:15px/24px system-ui,sans-serif;cursor:pointer;opacity:0}
-.dx-ig-mv{position:absolute;bottom:4px;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:rgba(32,36,44,.72);color:#fff;font:15px/24px system-ui,sans-serif;cursor:pointer;opacity:0}
+.dx-ig-cell.dx-ig-drop{border:2px solid var(--dx-ui-accent,#0b57d0)}
+.dx-ig-n{position:absolute;left:4px;top:4px;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:rgba(32,36,44,.72);color:var(--dx-ui-on-accent,#fff);font-size:11px;line-height:18px;text-align:center}
+.dx-ig-x{position:absolute;right:4px;top:4px;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:rgba(32,36,44,.72);color:var(--dx-ui-on-accent,#fff);font:15px/24px system-ui,sans-serif;cursor:pointer;opacity:0}
+.dx-ig-mv{position:absolute;bottom:4px;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:rgba(32,36,44,.72);color:var(--dx-ui-on-accent,#fff);font:15px/24px system-ui,sans-serif;cursor:pointer;opacity:0}
 .dx-ig-mv:disabled{display:none}
 .dx-ig-earlier{left:4px}
 .dx-ig-later{right:4px}
 .dx-ig-cell:hover .dx-ig-x,.dx-ig-x:focus-visible,.dx-ig-cell:hover .dx-ig-mv,.dx-ig-mv:focus-visible{opacity:1}
 @media (hover:none){.dx-ig-x,.dx-ig-mv{opacity:1}}
-.dx-ig-foot{display:flex;align-items:center;gap:8px;padding:12px 16px 16px;border-top:1px solid #e3e6ec}
-.dx-ig-note{flex:1;color:#5f6470;font-size:12px;line-height:1.4}
-.dx-ig-foot button{height:32px;padding:0 16px;border:1px solid #d2d6de;border-radius:6px;background:#fff;color:inherit;font:inherit;white-space:nowrap;cursor:pointer}
-.dx-ig-foot button:hover:not(:disabled){background:#eef1f6}
-.dx-ig-foot button.dx-main{border-color:#0b57d0;background:#0b57d0;color:#fff}
-.dx-ig-foot button.dx-main:hover:not(:disabled){background:#0a4dba}
+.dx-ig-foot{display:flex;align-items:center;gap:8px;padding:12px 16px 16px;border-top:1px solid var(--dx-ui-line,#e6e3dc)}
+.dx-ig-note{flex:1;color:var(--dx-ui-muted,#5f5d58);font-size:12px;line-height:1.4}
+.dx-ig-foot button{height:32px;padding:0 16px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:9px;background:var(--dx-ui-bg,#fff);color:inherit;font:inherit;white-space:nowrap;cursor:pointer}
+.dx-ig-foot button:hover:not(:disabled){background:var(--dx-ui-hover,#f3f1ec)}
+.dx-ig-foot button.dx-main{border-color:var(--dx-ui-accent,#0b57d0);background:var(--dx-ui-accent,#0b57d0);color:var(--dx-ui-on-accent,#fff)}
+.dx-ig-foot button.dx-main:hover:not(:disabled){background:var(--dx-ui-accent-hover,#08398a)}
 .dx-ig-foot button:disabled{opacity:.4;cursor:default}
-.dx-ig button:focus-visible{outline:2px solid #0b57d0;outline-offset:2px}
+.dx-ig button:focus-visible{outline:2px solid var(--dx-ui-accent,#0b57d0);outline-offset:2px}
 `;
 
 function injectStyle(): void {
@@ -121,7 +122,7 @@ export function openImageGrid(editor: Editor, files: File[]): Promise<number> {
       const count = items.length;
       const across = Math.min(columns, Math.max(count, 1));
       const rows = Math.ceil(count / across);
-      title.textContent = t(count === 1 ? 'grid.one' : 'grid.many', { n: count });
+      title.textContent = plural('grid.many', count, { n: count });
       note.textContent = count ? t('grid.note', { across, rows }) : t('grid.empty');
       colButtons.forEach((node, i) => {
         node.classList.toggle('dx-on', i + 1 === across);
@@ -236,6 +237,7 @@ export function openImageGrid(editor: Editor, files: File[]): Promise<number> {
       if (e.target === scrim) close(0);
     });
     document.addEventListener('keydown', onKey, true);
+    applyTheme(scrim, editor.theme);
     document.body.appendChild(scrim);
     render();
     const release = holdFocus(dialog, () => editor.focus());

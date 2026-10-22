@@ -38,5 +38,5 @@ export function templateDoc(): Doc {
   });
   doc = insertSignatures(doc, { para: LINES.length - 1, offset: 0 }, ['El Propietario', 'La Agencia'], 'NOMBRE COMPLETO').doc;
   doc = { ...doc, header: { paragraphs: [{ props: { align: 'right' }, runs: [run('Inmobiliaria de ejemplo · Contrato de mediación', { fontSize: 9, color: '6B7568' })] }] } };
-  return setPageNumbering(doc, { place: 'footer', align: 'center', format: 'pageOfTotal' });
+  return setPageNumbering(doc, { place: 'footer', align: 'center', format: 'pageOfTotal', words: { page: 'Página', of: 'de' } });
 }

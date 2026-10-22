@@ -2563,8 +2563,8 @@ export function layoutDocument(doc: Doc, measurer: TextMeasurer, cache?: LayoutC
     const own = (base: BasePart) => sectionPart(base, section.last ? undefined : section.index);
     if (first && section.firstPage) return { story: section.firstPage[kind], part: own(kind === 'header' ? 'firstHeader' : 'firstFooter') };
     if (section[kind]) return { story: section[kind], part: own(kind) };
-    // One that shows none has a place for its own.
-    if (kind === 'header' ? section.noHeader : section.noFooter) return { part: own(kind) };
+    // One that shows none has a place for its own. The last shows the document's once it has one: a file without one, given one here.
+    if ((kind === 'header' ? section.noHeader : section.noFooter) && !(section.last && doc[kind]?.paragraphs.length)) return { part: own(kind) };
     return { story: doc[kind], part: kind };
   };
   const frameFor = (section: FlowSection, _pageIndex: number, first: boolean) => {

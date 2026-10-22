@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type Paragraph, createDoc, exportMarkdown, insertTable, insertText, setParagraphStyle, shiftListLevel, toggleList } from '../src';
+import { type Paragraph, createDoc, exportMarkdown, insertTable, insertText, setParagraphStyle, shiftListLevel, toggleList, trackEdit } from '../src';
 
 const p = (text: string, props: Paragraph['runs'][0]['props'] = {}): Paragraph => ({ props: {}, runs: [{ text, props }] });
 
@@ -46,4 +46,12 @@ describe('Markdown export', () => {
   it('gives nothing for an empty document', () => {
     expect(exportMarkdown(createDoc())).toBe('');
   });
+
+  it('writes one text of a document with tracked changes: accepted, as it was, or marked', () => {
+    const tracked = trackEdit(createDoc([p('Paid within 15 days.')]), createDoc([p('Paid within 30 days, in writing.')]), { author: 'Luis' }, { words: true }).doc;
+    expect(exportMarkdown(tracked)).toBe('Paid within 30 days, in writing.\n');
+    expect(exportMarkdown(tracked, { changes: 'original' })).toBe('Paid within 15 days.\n');
+    expect(exportMarkdown(tracked, { changes: 'marked' })).toBe('Paid within [-15-]{+30+} days{+, in writing+}.\n');
+  });
 });
+

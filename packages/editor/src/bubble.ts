@@ -7,9 +7,10 @@ import { type FormatId, NOTE_COLORS, cleanHref, isVariableName } from '@rebodocs
 import { recallAuthor, setAuthor } from './author';
 import type { Editor, MarkKey } from './editor';
 import { arrowsThrough, colorName } from './a11y';
-import { type MessageKey, t } from './i18n';
+import { type MessageKey, speaks, t } from './i18n';
 import { IS_MAC } from './platform';
 import { createImagePicker } from './imagegrid';
+import { applyTheme } from './theme';
 
 export interface Bubble {
   /** Shows the bar beside the selection. */
@@ -34,25 +35,25 @@ const HIGHLIGHT = 'FFFF00';
 const SHADE = 'E8EEF9';
 
 const CSS = `
-.dx-bb{position:fixed;z-index:30;display:none;align-items:center;gap:2px;max-width:calc(100vw - 16px);flex-wrap:wrap;padding:4px;border:1px solid #d2d6de;border-radius:10px;background:#fff;box-shadow:0 6px 22px rgba(0,0,0,.18);font:13px system-ui,-apple-system,"Segoe UI",sans-serif;color:#2b2f38;user-select:none}
+.dx-bb{position:fixed;z-index:30;display:none;align-items:center;gap:2px;max-width:calc(100vw - 16px);flex-wrap:wrap;padding:4px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:14px;background:var(--dx-ui-bg,#fff);box-shadow:0 6px 22px rgba(47,46,43,.18);font:13px system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--dx-ui-ink,#2f2e2b);user-select:none}
 .dx-bb.dx-bb-open{display:flex}
-.dx-bb-what{padding:0 8px 0 6px;color:#5f6470;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
-.dx-bb button{display:inline-flex;align-items:center;justify-content:center;height:28px;min-width:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;white-space:nowrap;cursor:pointer}
-.dx-bb button:hover:not(:disabled){background:#e2e6ee}
-.dx-bb button.dx-on{background:#d3e3fd;color:#0b57d0}
+.dx-bb-what{padding:0 8px 0 6px;color:var(--dx-ui-muted,#5f5d58);font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+.dx-bb button{display:inline-flex;align-items:center;justify-content:center;height:30px;min-width:30px;padding:0 9px;border:0;border-radius:10px;background:transparent;color:inherit;font:inherit;white-space:nowrap;cursor:pointer}
+.dx-bb button:hover:not(:disabled){background:var(--dx-ui-hover,#f3f1ec)}
+.dx-bb button.dx-on{background:var(--dx-ui-active,#e8f0fd);color:var(--dx-ui-accent,#0b57d0)}
 .dx-bb button:disabled{opacity:.35;cursor:default}
-.dx-bb button:focus-visible{outline:2px solid #0b57d0;outline-offset:-2px}
+.dx-bb button:focus-visible{outline:2px solid var(--dx-ui-accent,#0b57d0);outline-offset:-2px}
 @media (pointer:coarse){.dx-bb button{height:38px;min-width:38px;padding:0 10px}.dx-bb input{height:38px}}
 .dx-bb button.dx-bb-mark{padding:0;font:15px Georgia,serif}
 .dx-bb button.dx-bb-danger:hover{background:#fce8e6;color:#b3261e}
-.dx-bb input{width:150px;height:28px;padding:0 8px;border:1px solid #d2d6de;border-radius:6px;font:inherit;color:inherit}
-.dx-bb input:focus-visible{outline:2px solid #0b57d0;outline-offset:-2px}
+.dx-bb input{width:150px;height:30px;padding:0 9px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:9px;font:inherit;color:inherit}
+.dx-bb input:focus-visible{outline:2px solid var(--dx-ui-accent,#0b57d0);outline-offset:-2px}
 .dx-bb input.dx-bb-author{width:120px}
 .dx-bb-dots{display:inline-flex;align-items:center;gap:6px;padding:0 6px}
-.dx-bb button.dx-bb-dot{width:18px;min-width:18px;height:18px;padding:0;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
-.dx-bb button.dx-bb-dot.dx-on{box-shadow:0 0 0 2px #2b2f38}
+.dx-bb button.dx-bb-dot{width:18px;min-width:18px;height:18px;padding:0;border:2px solid var(--dx-ui-bg,#fff);border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
+.dx-bb button.dx-bb-dot.dx-on{box-shadow:0 0 0 2px var(--dx-ui-ink,#2f2e2b)}
 .dx-bb-words{max-width:360px;padding:0 6px;line-height:1.35;white-space:normal}
-.dx-bb-sep{flex:none;width:1px;height:18px;margin:0 4px;background:#d9dce3}
+.dx-bb-sep{flex:none;width:1px;height:18px;margin:0 4px;background:var(--dx-ui-line,#e6e3dc)}
 `;
 
 function injectStyle(): void {
@@ -92,11 +93,12 @@ export function createBubble(editor: Editor): Bubble {
   bar.className = 'dx-bb';
   bar.setAttribute('role', 'toolbar');
   bar.setAttribute('aria-label', t('bubble.label'));
+  speaks(bar);
   let isOpen = false;
   /** True while one of its own buttons changes the document: the bar stays for the next one. */
   let acting = false;
   /** What it is asking for in a field of its own: the name of a variable to insert, the text of a note, or the address of a link. */
-  let naming: 'variable' | 'note' | 'link' | false = false;
+  let naming: 'variable' | 'note' | 'link' | 'describe' | false = false;
 
   const picker = createImagePicker(editor);
 
@@ -126,6 +128,8 @@ export function createBubble(editor: Editor): Bubble {
       : [...[0.25, 0.5, 1].map((fraction): Action => ({ label: `${fraction * 100} %`, title: t('bubble.fit', { n: fraction * 100 }), run: () => editor.fitSelectedPicture(fraction) })), 'sep', ...wraps()];
   const picture = (): Item[] => [
     ...shaping(),
+    // What a screen reader says of it: Word's "Alt Text".
+    { label: t('alt.word'), title: t('alt.title'), on: !!editor.pictureDescription, run: () => (naming = 'describe') },
     { label: t('bubble.delete'), title: t('bubble.deleteTitle'), className: 'dx-bb-danger', closes: true, run: () => editor.deleteBackward() },
   ];
 
@@ -166,6 +170,32 @@ export function createBubble(editor: Editor): Bubble {
     { label: t('link.edit'), title: t('link.editTitle'), run: () => (naming = 'link') },
     { label: t('link.remove'), title: t('link.removeTitle'), className: 'dx-bb-danger', closes: true, run: () => editor.removeLink() },
   ];
+
+  /** The suggestions of the word spelled wrong last asked about, once they come. */
+  let suggested: { word: string; words?: string[] } | undefined;
+  /** A word spelled wrong: what it could be instead, leaving it as it is, and taking it as right. */
+  const spelling = (word: string): Item[] => {
+    if (suggested?.word !== word) {
+      suggested = { word };
+      void editor.spellingSuggestions().then((words) => {
+        if (suggested?.word !== word) return;
+        suggested.words = words.slice(0, 5);
+        if (isOpen && !naming) refresh();
+      });
+    }
+    const words = suggested.words;
+    const offered: Item[] = !words
+      ? [{ label: t('spell.looking'), title: t('spell.looking'), plain: true, run: () => undefined }]
+      : words.length
+        ? words.map((other): Action => ({ label: other, title: t('spell.replace', { word: other }), closes: true, css: 'font-weight:600', run: () => editor.replaceMisspelling(other) }))
+        : [{ label: t('spell.none'), title: t('spell.none'), plain: true, run: () => undefined }];
+    return [
+      ...offered,
+      'sep',
+      { label: t('spell.ignore'), title: t('spell.ignoreTitle'), closes: true, run: () => editor.ignoreMisspelling() },
+      ...(editor.canAddWords ? [{ label: t('spell.add'), title: t('spell.addTitle'), closes: true, run: () => editor.addMisspelling() } as Action] : []),
+    ];
+  };
 
   /** The note the caret is in: what it says, and taking it away. */
   const note = (id: string): Item[] => {
@@ -241,6 +271,7 @@ export function createBubble(editor: Editor): Bubble {
       { label: t('bubble.copy'), title: t('bubble.copy'), closes: true, run: () => void editor.copy() },
       { label: t('bubble.cut'), title: t('bubble.cut'), closes: true, run: () => void editor.cut() },
       ...paste,
+      all,
       'sep',
     ];
   };
@@ -254,6 +285,8 @@ export function createBubble(editor: Editor): Bubble {
     if (editor.pictureSelected) return { what: t('bubble.image'), items: picture() };
     const name = editor.activeVariable;
     if (name) return { what: 'Variable', items: variable(name) };
+    const wrong = editor.misspelling;
+    if (wrong) return { what: t('spell.word'), items: spelling(wrong.word) };
     const linked = editor.collapsed ? editor.activeLink : undefined;
     if (linked) return { what: t('link.word'), items: link(linked.href) };
     const noted = editor.collapsed ? editor.activeNote : undefined;
@@ -288,28 +321,32 @@ export function createBubble(editor: Editor): Bubble {
     label.className = 'dx-bb-what';
     const forNote = naming === 'note';
     const forLink = naming === 'link';
-    label.textContent = forNote ? t('note.word') : forLink ? t('link.word') : 'Variable';
+    const forAlt = naming === 'describe';
+    label.textContent = forNote ? t('note.word') : forLink ? t('link.word') : forAlt ? t('alt.word') : 'Variable';
     const name = document.createElement('input');
     name.type = 'text';
-    name.placeholder = forNote ? t('bubble.notePlaceholder') : forLink ? t('link.placeholder') : t('bubble.namePlaceholder');
-    name.spellcheck = forNote;
-    if (forNote || forLink) name.style.width = '260px';
-    name.setAttribute('aria-label', forNote ? t('bubble.notePlaceholder') : forLink ? t('link.address') : t('bubble.name'));
+    name.placeholder = forNote ? t('bubble.notePlaceholder') : forLink ? t('link.placeholder') : forAlt ? t('alt.placeholder') : t('bubble.namePlaceholder');
+    name.spellcheck = forNote || forAlt;
+    if (forNote || forLink || forAlt) name.style.width = '260px';
+    name.setAttribute('aria-label', forNote ? t('bubble.notePlaceholder') : forLink ? t('link.address') : forAlt ? t('alt.title') : t('bubble.name'));
+    if (forAlt) name.value = editor.pictureDescription ?? '';
     // A link already there shows where it goes, to be changed.
     const current = forLink ? editor.activeLink : undefined;
     if (forLink) {
       name.type = 'url';
       name.value = current?.href ?? '';
     }
-    const valid = () => (forNote ? !!name.value.trim() : forLink ? cleanHref(name.value) !== undefined : isVariableName(name.value.trim()));
+    // An empty description takes the one there was away.
+    const valid = () => (forAlt ? true : forNote ? !!name.value.trim() : forLink ? cleanHref(name.value) !== undefined : isVariableName(name.value.trim()));
     const add = document.createElement('button');
     add.type = 'button';
-    add.textContent = current ? t('link.save') : forLink && !editor.collapsed ? t('link.apply') : t('insert');
+    add.textContent = current || forAlt ? t('link.save') : forLink && !editor.collapsed ? t('link.apply') : t('insert');
     add.disabled = !valid();
     const done = () => {
       if (!valid()) return;
       if (forNote) editor.addNote(name.value);
       else if (forLink) editor.setLink(name.value);
+      else if (forAlt) editor.setPictureDescription(name.value);
       else editor.insertVariable(name.value);
       close();
       editor.focus();
@@ -365,7 +402,7 @@ export function createBubble(editor: Editor): Bubble {
       bar.append(colors, author);
     }
     bar.appendChild(add);
-    bar.dataset.kind = forNote ? 'Nota' : forLink ? 'Enlace' : 'Variable';
+    bar.dataset.kind = forNote ? 'Nota' : forLink ? 'Enlace' : forAlt ? 'Descripción' : 'Variable';
     name.focus();
     name.select();
   };
@@ -440,6 +477,7 @@ export function createBubble(editor: Editor): Bubble {
   const open = () => {
     naming = false;
     isOpen = true;
+    applyTheme(bar, editor.theme);
     bar.classList.add('dx-bb-open');
     refresh();
     // Shown by the key, it says what it is about and how to reach it: the keyboard stays in the text.
@@ -515,6 +553,7 @@ export function createBubble(editor: Editor): Bubble {
   };
   document.addEventListener('touchstart', onTouchStart, true);
   editor.onTouchSelect = () => open();
+  editor.onSpellingMenu = () => open();
   document.addEventListener('keydown', onKeyDown, true);
   document.addEventListener('keyup', onKeyUp, true);
   document.addEventListener('mousedown', onMouseDown, true);
@@ -550,6 +589,7 @@ export function createBubble(editor: Editor): Bubble {
       document.removeEventListener('mousedown', onMouseDown, true);
       document.removeEventListener('touchstart', onTouchStart, true);
       editor.onTouchSelect = undefined;
+      editor.onSpellingMenu = undefined;
       window.removeEventListener('blur', disarm);
       window.removeEventListener('resize', onMove);
       document.removeEventListener('scroll', onMove, true);

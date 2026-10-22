@@ -37,6 +37,14 @@ const ES = {
   'a11y.lineBreak': 'salto de línea',
   'a11y.pageBreak': 'salto de página',
   'a11y.object': 'objeto',
+  'a11y.footnoteRef': 'Nota al pie {n}',
+  'a11y.picture': 'Imagen: {alt}',
+  'a11y.pictureNoAlt': 'Imagen sin descripción',
+  'a11y.textBox': 'Cuadro de texto',
+  'status.language': 'Idioma del texto: para la ortografía, la voz de un lector de pantalla y cómo se escriben fechas y números',
+  'alt.word': 'Descripción',
+  'alt.title': 'Qué muestra la imagen, para quien no la ve: lo que dice un lector de pantalla',
+  'alt.placeholder': 'Qué muestra la imagen',
   'a11y.long': '{start}… ({count} caracteres)',
   'a11y.selected': '{text}, seleccionado',
   'a11y.unselected': '{text}, sin seleccionar',
@@ -51,6 +59,7 @@ const ES = {
   'a11y.link': 'Enlace a {href}',
   'a11y.inserted': 'Insertado por {author}',
   'a11y.removed': 'Eliminado por {author}',
+  'a11y.formatted': 'Formato cambiado por {author}',
   'a11y.noted': 'Con nota',
   'a11y.on': 'Se activó {name}',
   'a11y.off': 'Se desactivó {name}',
@@ -106,7 +115,11 @@ const ES = {
   'toolbar.more': 'Más herramientas',
   'toolbar.undo': 'Deshacer',
   'toolbar.redo': 'Rehacer',
-  'table.size': '{columns} columnas por {rows} filas',
+  'table.cells': '{columns} por {rows}',
+  'table.column': '1 columna',
+  'table.columns': '{n} columnas',
+  'table.row': '1 fila',
+  'table.rows': '{n} filas',
   'menu.title': 'Menú del documento',
   'toolbar.panel': 'Esquema y variables',
   'toolbar.open': 'Abrir un documento',
@@ -132,6 +145,15 @@ const ES = {
   'spacing.breakBefore': 'Salto de página antes',
   'indent.less': 'Reducir sangría',
   'indent.more': 'Aumentar sangría',
+  'indent.dialog': 'Sangrías…',
+  'indent.title': 'Sangrías del párrafo',
+  'indent.left': 'Izquierda',
+  'indent.right': 'Derecha',
+  'indent.special': 'Especial',
+  'indent.none': 'Ninguna',
+  'indent.firstLine': 'Primera línea',
+  'indent.hanging': 'Francesa',
+  'indent.by': 'En',
   'table.insert': 'Insertar tabla',
   'table.signatures': 'Insertar firmas',
   'table.merge': 'Combinar celdas',
@@ -192,6 +214,19 @@ const ES = {
   'pageNumber.right': 'A la derecha',
   'list.bullet': 'Lista con viñetas',
   'list.number': 'Lista numerada',
+  'focus.mode': 'Modo concentración',
+  'focus.enter': 'Modo concentración ({keys})',
+  'focus.exit': 'Salir',
+  'list.bulletStyles': 'Formatos de viñeta',
+  'list.numberStyles': 'Formatos de numeración',
+  'list.bulletsOfLevel': 'Viñetas del nivel',
+  'list.numbersOfLevel': 'Números del nivel',
+  'list.styleOf': 'Formato {sample}',
+  'list.down': 'Bajar un nivel (sublista)',
+  'list.up': 'Subir un nivel',
+  'list.restart': 'Reiniciar en 1 desde aquí',
+  'list.continue': 'Continuar la numeración anterior',
+  'list.hint': 'Tab y ⇧Tab cambian el nivel desde cualquier parte del renglón. Enter en un renglón vacío sube un nivel; en el primero, termina la lista.',
   'table.word': 'Tabla',
   'status.page': 'Página {page} de {pages}',
   'status.word': 'palabra',
@@ -249,6 +284,28 @@ const ES = {
   'menu.save': 'Guardar',
   'menu.saveAs': 'Guardar como…',
   'menu.export': 'Exportar',
+  'menu.openShort': 'Abrir',
+  'toolbar.tabs': 'Herramientas',
+  'toolbar.tabFormat': 'Formato',
+  'toolbar.tabInsert': 'Insertar',
+  'toolbar.tabPage': 'Página',
+  'menu.pages': '{n} páginas',
+  'menu.page': '{n} página',
+  'menu.unsaved': 'Sin guardar',
+  'menu.document': 'Documento',
+  'menu.back': 'Volver al documento',
+  'menu.docxNote': 'Para seguir editándolo, aquí o en Word',
+  'menu.pdfNote': 'Para enviar o imprimir; etiquetado para lectores de pantalla',
+  'menu.mdNote': 'Solo el texto, para notas y la web',
+  'menu.printNote': 'Con las fuentes de esta computadora',
+  'menu.noLetterhead': 'Sin membrete',
+  'menu.letterheadOn': 'Un membrete bajo cada página',
+  'menu.marginsCustom': 'márgenes propios',
+  'menu.interface': 'Idioma de la interfaz',
+  'menu.theme': 'Apariencia',
+  'theme.light': 'Claro',
+  'theme.dark': 'Oscuro',
+  'theme.auto': 'Como el sistema',
   'menu.print': 'Imprimir…',
   'pageSetup.title': 'Configuración de la página',
   'pageSetup.applyTo': 'Aplicar a',
@@ -270,11 +327,11 @@ const ES = {
   'pageSetup.right': 'Derecho',
   'cancel': 'Cancelar',
   'type.text': 'Texto',
-  'type.date': 'Fecha 12/10/2026',
-  'type.dateLong': 'Fecha 12 de octubre de 2026',
-  'type.dateFull': 'Fecha lunes, 12 de octubre de 2026',
-  'type.number': 'Número 1,234.5',
-  'type.currency': 'Moneda $1,234.50',
+  'type.date': 'Fecha',
+  'type.dateLong': 'Fecha larga',
+  'type.dateFull': 'Fecha completa',
+  'type.number': 'Número',
+  'type.currency': 'Moneda',
   'case.none': 'Aa',
   'case.upper': 'MAYÚSCULAS',
   'case.lower': 'minúsculas',
@@ -282,15 +339,36 @@ const ES = {
   'panel.outline': 'Esquema',
   'panel.variables': 'Variables',
   'panel.outlineEmpty': 'Aquí aparecen los títulos del documento. Da a un párrafo el estilo <b>Título 1</b>, o empieza una línea con <code>#</code> y un espacio.',
-  'panel.variablesEmpty': 'Una variable es un hueco para un dato: escribe <code>{{cliente}}</code> en el documento, o selecciona un texto e insértala arriba.',
+  'panel.variablesEmpty': 'Una variable es un hueco para un dato: escribe <code>{{cliente}}</code> en el documento, o selecciona un texto e insértala abajo.',
   'var.valueOf': 'Valor de {name}',
   'var.controlOf': '{title} de {name}',
   'var.uses': '{n} veces',
   'var.note': 'Rellenar cambia el documento; se deshace de una vez, y los valores se conservan.',
   'var.namePlaceholder': 'nombre_de_la_variable',
-  'var.newName': 'Nombre de la variable nueva',
+  'var.newHere': 'Variable nueva, donde está el cursor',
   'var.insertTitle': 'Pone la variable en el cursor, o en lugar del texto seleccionado',
-  'var.fill': 'Rellenar documento',
+  'var.fillNone': 'Escribe valores para rellenar',
+  'var.fillOneField': 'Rellenar 1 variable en el documento',
+  'var.fillFields': 'Rellenar {n} variables en el documento',
+  'var.fillOne': 'Rellenar solo esta (Enter)',
+  'var.intro': 'Los datos que cambian en cada documento. Escribe un valor y se pone en todos los lugares donde aparece.',
+  'var.other': 'Otros datos',
+  'var.search': 'Buscar una variable',
+  'var.blocks': 'Bloques',
+  'var.blockText': 'Un texto dentro de un párrafo',
+  'var.blockRow': 'Una fila de la tabla',
+  'var.blockParagraphs': 'Los párrafos entre sus marcas',
+  'var.blockInverted': 'se queda cuando el valor no está',
+  'var.blockUnset': 'Sin decidir',
+  'var.blockYes': 'Se queda',
+  'var.blockNo': 'Se quita',
+  'var.blockList': 'Una vez por cada uno de los {n} de los datos',
+  'var.blockListOne': 'Una vez, por el único de los datos',
+  'var.blockHint': 'Para repetir un bloque, carga una lista con «Cargar datos…».',
+  'var.noMatch': 'Ninguna variable tiene “{query}”.',
+  'var.formats': 'Cómo se escribe',
+  'var.datePlaceholder': '12/10/2026 u hoy',
+  'var.numberPlaceholder': '1250000',
   'var.load': 'Cargar datos…',
   'var.loadTitle': 'Toma los valores de un archivo .json',
   'var.badJson': 'El archivo no es un JSON válido.',
@@ -298,6 +376,12 @@ const ES = {
   'var.value': 'Valor',
   'var.type': 'Tipo de dato',
   'var.case': 'Mayúsculas y minúsculas',
+  'var.decimals': 'Decimales',
+  'var.decimalsAuto': 'Decimales: los que traiga',
+  'var.currencyCode': 'Moneda: EUR, MXN…',
+  'var.currencyTitle': 'El código de la moneda (EUR, MXN, USD), o cuántos decimales; vacío, con el signo de pesos',
+  'var.datePattern': 'Patrón: dd/MM/yyyy',
+  'var.datePatternTitle': 'd, dd, dddd (el día de la semana), M, MM, MMM, MMMM, yy y yyyy se reemplazan; las demás palabras se quedan',
   'var.notNumber': 'No es un número: se pondrá tal cual.',
   'var.notDate': 'No es una fecha (12/10/2026, 2026-10-12 u hoy): se pondrá tal cual.',
   'insert': 'Insertar',
@@ -411,7 +495,8 @@ const ES = {
   'compare.count': '{n} cambios',
   'compare.one': '1 cambio',
   'compare.none': 'Sin cambios en el texto',
-  'compare.elsewhere': '{n} en encabezados, pies o notas',
+  'compare.elsewhere': '{n} en encabezados, pies, notas al pie o cuadros de texto',
+  'compare.notes': '{n} en notas',
   'compare.prev': 'Cambio anterior',
   'compare.next': 'Cambio siguiente',
   'compare.close': 'Cerrar',
@@ -461,6 +546,9 @@ const ES = {
   'review.prev': 'Cambio anterior',
   'review.acceptAll': 'Aceptar todos los cambios',
   'review.rejectAll': 'Rechazar todos los cambios',
+  'review.showAll': 'Mostrar los cambios',
+  'review.showAccepted': 'Ver como quedaría, con todos aceptados',
+  'review.showOriginal': 'Ver el original, sin los cambios',
   'panel.changes': 'Cambios',
   'changes.empty': 'No hay cambios marcados. Con <b>Controlar cambios</b> activado, lo que se escribe queda subrayado y lo que se borra, tachado, hasta aceptarlo o rechazarlo. En Word se ven como control de cambios.',
   'changes.inserted': 'Añadió',
@@ -469,6 +557,19 @@ const ES = {
   'changes.accept': 'Aceptar',
   'changes.reject': 'Rechazar',
   'changes.goTo': 'Ir al cambio',
+  'changes.movedFrom': 'Movió a otro lugar',
+  'changes.movedTo': 'Movió aquí',
+  'changes.by': 'De',
+  'changes.everyone': 'Todos',
+  'changes.acceptBy': 'Aceptar los de {author}',
+  'changes.rejectBy': 'Rechazar los de {author}',
+  'changes.formatted': 'Cambió el formato de',
+  'changes.rowInserted': 'Añadió una fila',
+  'changes.rowDeleted': 'Eliminó una fila',
+  'changes.list': 'la lista',
+  'changes.spacing': 'el espaciado',
+  'changes.indent': 'la sangría',
+  'changes.layout': 'cómo se reparte en las páginas',
   'insert.pageNumber': 'Número de página…',
   'wrap.inline': 'En línea',
   'wrap.inlineTitle': 'La imagen va en la línea, como una letra más',
@@ -484,6 +585,14 @@ const ES = {
   'wrap.noneTitle': 'La imagen va encima del texto, que no se aparta',
   'insert.link': 'Enlace…',
   'link.word': 'Enlace',
+  'spell.word': 'Ortografía',
+  'spell.looking': 'Buscando sugerencias…',
+  'spell.none': 'Sin sugerencias',
+  'spell.replace': 'Cambiar por «{word}»',
+  'spell.ignore': 'Omitir',
+  'spell.ignoreTitle': 'Dejar esta palabra sin marcar en el documento',
+  'spell.add': 'Añadir al diccionario',
+  'spell.addTitle': 'Tomar esta palabra como bien escrita de ahora en adelante',
   'link.title': 'Convierte el texto en un enlace ({key}K)',
   'link.address': 'Dirección del enlace',
   'link.placeholder': 'Pega o escribe una dirección: ejemplo.com',
@@ -515,6 +624,12 @@ const ES = {
 
 export type MessageKey = keyof typeof ES;
 export type Messages = Record<MessageKey, string>;
+/**
+ * The texts a language gives: any of the keys, and, for a text said of a
+ * number of things, a form for each plural category of the language beyond
+ * what the key says (`'status.words.few': 'слова'`). See `PLURALS`.
+ */
+export type Texts = Partial<Messages> & Partial<Record<`${MessageKey}.${Intl.LDMLPluralRule}`, string>>;
 
 const EN: Messages = {
   'locale.name': 'English',
@@ -549,6 +664,14 @@ const EN: Messages = {
   'a11y.lineBreak': 'line break',
   'a11y.pageBreak': 'page break',
   'a11y.object': 'object',
+  'a11y.footnoteRef': 'Footnote {n}',
+  'a11y.picture': 'Picture: {alt}',
+  'a11y.pictureNoAlt': 'Picture without a description',
+  'a11y.textBox': 'Text box',
+  'status.language': 'Language of the text: for spelling, the voice of a screen reader, and how dates and numbers are written',
+  'alt.word': 'Description',
+  'alt.title': 'What the picture shows, for whoever cannot see it: what a screen reader says',
+  'alt.placeholder': 'What the picture shows',
   'a11y.long': '{start}… ({count} characters)',
   'a11y.selected': '{text}, selected',
   'a11y.unselected': '{text}, unselected',
@@ -563,6 +686,7 @@ const EN: Messages = {
   'a11y.link': 'Link to {href}',
   'a11y.inserted': 'Inserted by {author}',
   'a11y.removed': 'Deleted by {author}',
+  'a11y.formatted': 'Formatting changed by {author}',
   'a11y.noted': 'With a note',
   'a11y.on': '{name}, on',
   'a11y.off': '{name}, off',
@@ -618,7 +742,11 @@ const EN: Messages = {
   'toolbar.more': 'More tools',
   'toolbar.undo': 'Undo',
   'toolbar.redo': 'Redo',
-  'table.size': '{columns} columns by {rows} rows',
+  'table.cells': '{columns} by {rows}',
+  'table.column': '1 column',
+  'table.columns': '{n} columns',
+  'table.row': '1 row',
+  'table.rows': '{n} rows',
   'menu.title': 'Document menu',
   'toolbar.panel': 'Outline and variables',
   'toolbar.open': 'Open a document',
@@ -644,6 +772,15 @@ const EN: Messages = {
   'spacing.breakBefore': 'Page break before',
   'indent.less': 'Decrease indent',
   'indent.more': 'Increase indent',
+  'indent.dialog': 'Indents…',
+  'indent.title': 'Paragraph indents',
+  'indent.left': 'Left',
+  'indent.right': 'Right',
+  'indent.special': 'Special',
+  'indent.none': 'None',
+  'indent.firstLine': 'First line',
+  'indent.hanging': 'Hanging',
+  'indent.by': 'By',
   'table.insert': 'Insert table',
   'table.signatures': 'Insert signatures',
   'table.merge': 'Merge cells',
@@ -704,6 +841,19 @@ const EN: Messages = {
   'pageNumber.right': 'Right',
   'list.bullet': 'Bulleted list',
   'list.number': 'Numbered list',
+  'focus.mode': 'Focus mode',
+  'focus.enter': 'Focus mode ({keys})',
+  'focus.exit': 'Leave',
+  'list.bulletStyles': 'Bullet styles',
+  'list.numberStyles': 'Numbering styles',
+  'list.bulletsOfLevel': 'Bullets of this level',
+  'list.numbersOfLevel': 'Numbers of this level',
+  'list.styleOf': 'Style {sample}',
+  'list.down': 'Down a level (sublist)',
+  'list.up': 'Up a level',
+  'list.restart': 'Restart at 1 here',
+  'list.continue': 'Continue the previous numbering',
+  'list.hint': 'Tab and ⇧Tab change the level from anywhere in the line. Enter on an empty line goes up a level; on the first, it ends the list.',
   'table.word': 'Table',
   'status.page': 'Page {page} of {pages}',
   'status.word': 'word',
@@ -761,6 +911,28 @@ const EN: Messages = {
   'menu.save': 'Save',
   'menu.saveAs': 'Save as…',
   'menu.export': 'Export',
+  'menu.openShort': 'Open',
+  'toolbar.tabs': 'Tools',
+  'toolbar.tabFormat': 'Format',
+  'toolbar.tabInsert': 'Insert',
+  'toolbar.tabPage': 'Page',
+  'menu.pages': '{n} pages',
+  'menu.page': '{n} page',
+  'menu.unsaved': 'Not saved',
+  'menu.document': 'Document',
+  'menu.back': 'Back to the document',
+  'menu.docxNote': 'To go on editing it, here or in Word',
+  'menu.pdfNote': 'To send or print; tagged for screen readers',
+  'menu.mdNote': 'The text alone, for notes and the web',
+  'menu.printNote': 'With the fonts of this computer',
+  'menu.noLetterhead': 'No letterhead',
+  'menu.letterheadOn': 'A letterhead under every page',
+  'menu.marginsCustom': 'own margins',
+  'menu.interface': 'Interface language',
+  'menu.theme': 'Appearance',
+  'theme.light': 'Light',
+  'theme.dark': 'Dark',
+  'theme.auto': 'As the system',
   'menu.print': 'Print…',
   'pageSetup.title': 'Page setup',
   'pageSetup.applyTo': 'Apply to',
@@ -782,11 +954,11 @@ const EN: Messages = {
   'pageSetup.right': 'Right',
   'cancel': 'Cancel',
   'type.text': 'Text',
-  'type.date': 'Date 12/10/2026',
-  'type.dateLong': 'Long date (12 de octubre de 2026)',
-  'type.dateFull': 'Full date (lunes, 12 de octubre de 2026)',
-  'type.number': 'Number 1,234.5',
-  'type.currency': 'Currency $1,234.50',
+  'type.date': 'Date',
+  'type.dateLong': 'Long date',
+  'type.dateFull': 'Full date',
+  'type.number': 'Number',
+  'type.currency': 'Currency',
   'case.none': 'Aa',
   'case.upper': 'UPPERCASE',
   'case.lower': 'lowercase',
@@ -794,15 +966,36 @@ const EN: Messages = {
   'panel.outline': 'Outline',
   'panel.variables': 'Variables',
   'panel.outlineEmpty': 'The headings of the document appear here. Give a paragraph the style <b>Heading 1</b>, or start a line with <code>#</code> and a space.',
-  'panel.variablesEmpty': 'A variable is a blank for a piece of data: type <code>{{client}}</code> in the document, or select some text and insert one above.',
+  'panel.variablesEmpty': 'A variable is a blank for a piece of data: type <code>{{client}}</code> in the document, or select some text and insert one below.',
   'var.valueOf': 'Value of {name}',
   'var.controlOf': '{title} of {name}',
   'var.uses': '{n} uses',
   'var.note': 'Filling changes the document; it is undone in one step, and the values are kept.',
   'var.namePlaceholder': 'variable_name',
-  'var.newName': 'Name of the new variable',
+  'var.newHere': 'New variable, at the cursor',
   'var.insertTitle': 'Puts the variable at the cursor, or in place of the selected text',
-  'var.fill': 'Fill document',
+  'var.fillNone': 'Type values to fill',
+  'var.fillOneField': 'Fill 1 variable in the document',
+  'var.fillFields': 'Fill {n} variables in the document',
+  'var.fillOne': 'Fill only this one (Enter)',
+  'var.intro': 'The data that changes in each document. Type a value and it goes in every place it appears.',
+  'var.other': 'Other data',
+  'var.search': 'Find a variable',
+  'var.blocks': 'Blocks',
+  'var.blockText': 'Some text in a paragraph',
+  'var.blockRow': 'A row of a table',
+  'var.blockParagraphs': 'The paragraphs between its marks',
+  'var.blockInverted': 'kept when the value is not there',
+  'var.blockUnset': 'Not set',
+  'var.blockYes': 'Kept',
+  'var.blockNo': 'Taken out',
+  'var.blockList': 'Once for each of the {n} in the data',
+  'var.blockListOne': 'Once, for the one in the data',
+  'var.blockHint': 'To repeat a block, load a list with “Load data…”.',
+  'var.noMatch': 'No variable has “{query}”.',
+  'var.formats': 'How it is written',
+  'var.datePlaceholder': '12/10/2026 or today',
+  'var.numberPlaceholder': '1250000',
   'var.load': 'Load data…',
   'var.loadTitle': 'Takes the values from a .json file',
   'var.badJson': 'The file is not valid JSON.',
@@ -810,8 +1003,14 @@ const EN: Messages = {
   'var.value': 'Value',
   'var.type': 'Data type',
   'var.case': 'Letter case',
+  'var.decimals': 'Decimals',
+  'var.decimalsAuto': 'Decimals: as given',
+  'var.currencyCode': 'Currency: EUR, MXN…',
+  'var.currencyTitle': 'The code of the currency (EUR, MXN, USD), or how many decimals; empty, with a dollar sign',
+  'var.datePattern': 'Pattern: dd/MM/yyyy',
+  'var.datePatternTitle': 'd, dd, dddd (the day of the week), M, MM, MMM, MMMM, yy and yyyy are replaced; other words are kept',
   'var.notNumber': 'Not a number: it will be inserted as is.',
-  'var.notDate': 'Not a date (12/10/2026, 2026-10-12 or hoy): it will be inserted as is.',
+  'var.notDate': 'Not a date (12/10/2026, 2026-10-12 or today): it will be inserted as is.',
   'insert': 'Insert',
   'bubble.fit': 'At {n}% of the text width',
   'bubble.toVariable': 'Turns the selection into the variable {{{name}}}',
@@ -923,7 +1122,8 @@ const EN: Messages = {
   'compare.count': '{n} changes',
   'compare.one': '1 change',
   'compare.none': 'No changes in the text',
-  'compare.elsewhere': '{n} in headers, footers or notes',
+  'compare.elsewhere': '{n} in headers, footers, footnotes or text boxes',
+  'compare.notes': '{n} in notes',
   'compare.prev': 'Previous change',
   'compare.next': 'Next change',
   'compare.close': 'Close',
@@ -973,6 +1173,9 @@ const EN: Messages = {
   'review.prev': 'Previous change',
   'review.acceptAll': 'Accept all changes',
   'review.rejectAll': 'Reject all changes',
+  'review.showAll': 'Show the changes',
+  'review.showAccepted': 'See it with all changes accepted',
+  'review.showOriginal': 'See the original, without the changes',
   'panel.changes': 'Changes',
   'changes.empty': 'There are no tracked changes. With <b>Track changes</b> on, what is typed is underlined and what is deleted struck through, until it is accepted or rejected. Word shows them as tracked changes.',
   'changes.inserted': 'Added',
@@ -981,6 +1184,19 @@ const EN: Messages = {
   'changes.accept': 'Accept',
   'changes.reject': 'Reject',
   'changes.goTo': 'Go to the change',
+  'changes.movedFrom': 'Moved away',
+  'changes.movedTo': 'Moved here',
+  'changes.by': 'By',
+  'changes.everyone': 'Everyone',
+  'changes.acceptBy': 'Accept all by {author}',
+  'changes.rejectBy': 'Reject all by {author}',
+  'changes.formatted': 'Formatted',
+  'changes.rowInserted': 'Added a row',
+  'changes.rowDeleted': 'Deleted a row',
+  'changes.list': 'list',
+  'changes.spacing': 'spacing',
+  'changes.indent': 'indent',
+  'changes.layout': 'page flow',
   'insert.pageNumber': 'Page number…',
   'wrap.inline': 'In line',
   'wrap.inlineTitle': 'The picture goes in the line, like one more letter',
@@ -996,6 +1212,14 @@ const EN: Messages = {
   'wrap.noneTitle': 'The picture goes over the text, which does not move',
   'insert.link': 'Link…',
   'link.word': 'Link',
+  'spell.word': 'Spelling',
+  'spell.looking': 'Looking for suggestions…',
+  'spell.none': 'No suggestions',
+  'spell.replace': 'Change to “{word}”',
+  'spell.ignore': 'Ignore',
+  'spell.ignoreTitle': 'Leave this word unmarked in the document',
+  'spell.add': 'Add to dictionary',
+  'spell.addTitle': 'Take this word as spelled right from now on',
   'link.title': 'Turns the text into a link ({key}K)',
   'link.address': 'Address of the link',
   'link.placeholder': 'Paste or type an address: example.com',
@@ -1028,7 +1252,6 @@ const EN: Messages = {
 const LOCALES: Record<string, Messages> = { es: ES, en: EN };
 /** The language texts are given in when the one asked for is not known. */
 const FALLBACK = 'en';
-let current = 'es';
 const listeners = new Set<() => void>();
 
 /** The language of a tag like `en-US` or `es_MX`, when the interface speaks it. */
@@ -1036,6 +1259,9 @@ function known(locale: string): string | undefined {
   const code = locale.toLowerCase().split(/[-_]/)[0];
   return LOCALES[locale] ? locale : LOCALES[code] ? code : undefined;
 }
+
+/** Until one is set: the first of the browser's languages the interface speaks, or English. */
+let current = (typeof navigator === 'undefined' ? [] : (navigator.languages ?? [navigator.language])).map((one) => one && known(one)).find(Boolean) ?? FALLBACK;
 
 /** The language the interface is in. */
 export function getLocale(): string {
@@ -1070,9 +1296,9 @@ export function onLocaleChange(listener: () => void): () => void {
  * said in English. Its name in the list of languages is its `locale.name`,
  * or, without one, what the browser calls it.
  */
-export function addLocale(locale: string, texts: Partial<Messages>): void {
+export function addLocale(locale: string, texts: Texts): void {
   const name = texts['locale.name'] ?? LOCALES[locale]?.['locale.name'] ?? nameOf(locale);
-  LOCALES[locale] = { ...EN, ...LOCALES[locale], ...texts, 'locale.name': name };
+  LOCALES[locale] = { ...EN, ...LOCALES[locale], ...texts, 'locale.name': name } as Messages;
   // The language being shown has other words now: whoever drew them is told to draw them again.
   if (locale === current) for (const listener of [...listeners]) listener();
 }
@@ -1098,8 +1324,53 @@ export function messages(locale = FALLBACK): Messages {
 
 /** The text for `key` in the language of the interface, with each `{name}` replaced by its value. */
 export function t(key: MessageKey, values?: Record<string, string | number>): string {
-  const text = (LOCALES[current] ?? EN)[key] ?? EN[key];
+  return fill((LOCALES[current] ?? EN)[key] ?? EN[key], values);
+}
+
+function fill(text: string, values?: Record<string, string | number>): string {
   return values ? text.replace(/\{(\w+)\}/g, (whole, name: string) => (name in values ? String(values[name]) : whole)) : text;
+}
+
+/**
+ * The texts said of a number of things, each with the one it says of exactly
+ * one where there is one. Spanish and English need no more; a language with
+ * other plural categories (Russian: one, few, many) gives a form for each as
+ * `<key>.<category>`, and `npm run locale` puts them in its file to translate.
+ */
+export const PLURALS: Partial<Record<MessageKey, MessageKey | null>> = {
+  'status.words': 'status.word',
+  'menu.pages': 'menu.page',
+  'status.chars': 'status.char',
+  'var.fillFields': 'var.fillOneField',
+  'var.blockList': 'var.blockListOne',
+  'compare.count': 'compare.one',
+  'grid.many': 'grid.one',
+  'table.columns': 'table.column',
+  'table.rows': 'table.row',
+  'var.uses': null,
+  'a11y.long': null,
+};
+
+/**
+ * The text for `key` said of `n` things: the form the language gives for the
+ * plural category of `n` in it, or else the text of one when that category
+ * is "one", or else the text of the key. With each `{name}` replaced, as `t`.
+ */
+export function plural(key: MessageKey, n: number, values?: Record<string, string | number>): string {
+  const category = new Intl.PluralRules(current).select(n);
+  const form = ((LOCALES[current] ?? EN) as Record<string, string | undefined>)[`${key}.${category}`];
+  if (form !== undefined) return fill(form, values);
+  const one = PLURALS[key];
+  return t(category === 'one' && one ? one : key, values);
+}
+
+/**
+ * Marks an element of the interface as being in its language, for a screen
+ * reader to read it with the right voice. The document is not marked: its
+ * text is the person's, in whatever language they wrote it.
+ */
+export function speaks(node: HTMLElement): void {
+  node.lang = current;
 }
 
 /** The names Word knows the standard styles by, and the key of what each is called here. */
@@ -1116,4 +1387,22 @@ const STYLE_KEYS: Record<string, MessageKey> = {
 export function styleName(style: { name: string; wordName?: string }): string {
   const key = STYLE_KEYS[style.wordName?.toLowerCase() ?? ''];
   return key ? t(key) : style.name;
+}
+
+/**
+ * A language with its region, as Word knows languages: 'es' alone is none to
+ * it. The browser's own, when it speaks that language ('es-MX'); else the one
+ * where the language is most spoken ('es-ES', 'en-US').
+ */
+export function withRegion(tag: string): string {
+  const [language, region] = tag.replace('_', '-').split('-');
+  if (region) return `${language}-${region.toUpperCase()}`;
+  const browser = typeof navigator === 'undefined' ? undefined : navigator.languages?.find((one) => one.split('-')[0].toLowerCase() === language.toLowerCase() && one.includes('-'));
+  if (browser) return browser;
+  try {
+    const likely = new Intl.Locale(language).maximize().region;
+    return likely ? `${language}-${likely}` : language;
+  } catch {
+    return language;
+  }
 }

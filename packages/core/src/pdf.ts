@@ -7,12 +7,19 @@
 // same widths as Arial, Times New Roman and Courier New. Words are placed one
 // by one where the layout measured them, so lines keep their length whatever
 // the reader draws them with.
+//
+// The PDF is tagged (see pdftags.ts): a screen reader finds in it the
+// headings, the lists, the tables, the notes and what each picture shows, in
+// the order of the document, and the headings are its bookmarks too.
 
 import { zlibSync } from 'fflate';
 import { type Band, type FontSpec, type Fragment, type Layout, type LayoutPage, type Line, type TextBoxBand, type TextMeasurer, boxLines } from './layout';
-import { type Border, DEFAULT_BORDER } from './model';
+import { type Border, type Doc, DEFAULT_BORDER } from './model';
 import { linkHref } from './links';
-import type { StoryPart } from './docx/source';
+import { altText, isDecorative } from './images';
+import { outline } from './outline';
+import { type Element, StructTree } from './pdftags';
+import { type StoryPart, documentLanguage } from './docx/source';
 
 /** A picture ready for a PDF: a JPEG as it is, or its pixels. */
 export interface PdfImage {
@@ -33,6 +40,14 @@ export interface PdfResources {
   /** The picture of an object, by its XML and the part it lives in. */
   image?(xml: string, part?: StoryPart): PdfImage | undefined;
   title?: string;
+  /**
+   * The document the layout was made from. With it, a screen reader finds its
+   * headings, lists, tables and notes in the PDF, and the headings are
+   * bookmarks; without it, each paragraph is just a paragraph.
+   */
+  doc?: Doc;
+  /** The language of the text, as a tag such as es-MX: the one the document says, when not given. */
+  language?: string;
 }
 
 // --- Bytes ----------------------------------------------------------------------
@@ -379,8 +394,10 @@ export function parseTrueType(bytes: Uint8Array): TrueType | undefined {
  * A TrueType file with only the outlines of `glyphs`, and of the glyphs they
  * are built from, and only the tables a PDF reader draws with. Glyphs keep
  * their numbers. Undefined when the file is not laid out as expected.
+ * `keepTables` keeps every other table as it is, for a program that reads the
+ * font as a font, as Word does: its names, its map of characters, its metrics.
  */
-export function subsetTrueType(bytes: Uint8Array, glyphs: Iterable<number>): Uint8Array | undefined {
+export function subsetTrueType(bytes: Uint8Array, glyphs: Iterable<number>, keepTables = false): Uint8Array | undefined {
   try {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const tables = new Map<string, { at: number; length: number }>();
@@ -442,7 +459,9 @@ export function subsetTrueType(bytes: Uint8Array, glyphs: Iterable<number>): Uin
     new DataView(newHead.buffer).setUint32(8, 0);
 
     const parts: [string, Uint8Array][] = [];
-    for (const tag of ['cvt ', 'fpgm', 'glyf', 'head', 'hhea', 'hmtx', 'loca', 'maxp', 'prep']) {
+    // A signature no longer matches what it signed.
+    const tags = keepTables ? [...tables.keys()].filter((tag) => tag !== 'DSIG').sort() : ['cvt ', 'fpgm', 'glyf', 'head', 'hhea', 'hmtx', 'loca', 'maxp', 'prep'];
+    for (const tag of tags) {
       const table = tables.get(tag);
       const data = tag === 'glyf' ? newGlyf : tag === 'loca' ? places : tag === 'head' ? newHead : table && bytes.subarray(table.at, table.at + table.length);
       if (data) parts.push([tag, data]);
@@ -469,6 +488,13 @@ export function subsetTrueType(bytes: Uint8Array, glyphs: Iterable<number>): Uin
       out.setUint32(record + 12, data.length);
       place += (data.length + 3) & ~3;
     });
+    if (keepTables) {
+      // What the header says the whole file adds up to, as a font that is read as one must.
+      let sum = 0;
+      for (let k = 0; k < file.length; k += 4) sum = (sum + out.getUint32(k)) >>> 0;
+      const headAt = out.getUint32(12 + parts.findIndex(([tag]) => tag === 'head') * 16 + 8);
+      out.setUint32(headAt + 8, (0xb1b0afba - sum) >>> 0);
+    }
     return file;
   } catch {
     return undefined;
@@ -511,6 +537,8 @@ interface PdfFont {
   /** The font file, for one that goes into the PDF. */
   file?: { bytes: Uint8Array; font: TrueType; used: Map<number, number> };
   standard?: string;
+  /** What the file lacks of the face asked for, drawn as the browser draws it: thicker, or slanted. */
+  fake?: { bold: boolean; italic: boolean };
   /** `text` as the string operand that shows it in this font. */
   encode(text: string): string;
 }
@@ -539,6 +567,76 @@ const rgb = (color: string) => [0, 2, 4].map((i) => num(parseInt(color.slice(i, 
 /** An address as a PDF string: only the characters every reader takes, the rest in the way addresses write them. */
 const uriString = (href: string) => `(${href.replace(/[^\x21-\x7e]/g, (c) => encodeURIComponent(c)).replace(/[\\()]/g, (c) => `\\${c}`)})`;
 
+/** A part of a page to draw, and what its text is in the tree: the body, a note, a text box, or none (a header, a footer). */
+interface PageBand {
+  band: Band;
+  part?: StoryPart;
+  kind: 'body' | 'note' | 'box' | 'artifact';
+  /** The note's id, the text box's. */
+  id?: string;
+}
+
+const escapeXmp = (text: string) => text.replace(/[<>&"]/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/**
+ * The description of the file in XMP, as readers of tagged PDFs look for it:
+ * its title and its language, and that it is made to be read by anyone
+ * (PDF/UA) when it is.
+ */
+function xmp(title: string | undefined, language: string | undefined, universal: boolean): string {
+  const lang = language || 'x-default';
+  return (
+    '<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>\n<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
+    '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/">' +
+    '<pdf:Producer>Rebodocs</pdf:Producer>' +
+    (title ? `<dc:title><rdf:Alt><rdf:li xml:lang="x-default">${escapeXmp(title)}</rdf:li></rdf:Alt></dc:title>` : '') +
+    (language ? `<dc:language><rdf:Bag><rdf:li>${escapeXmp(lang)}</rdf:li></rdf:Bag></dc:language>` : '') +
+    '</rdf:Description>' +
+    (universal ? '<rdf:Description rdf:about="" xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"><pdfuaid:part>1</pdfuaid:part></rdf:Description>' : '') +
+    '</rdf:RDF></x:xmpmeta>\n<?xpacket end="w"?>'
+  );
+}
+
+/** The headings of the document as the PDF's bookmarks, each going to the top of its first line, nested by level. Returns 0 when it has none. */
+function writeOutlines(out: Writer, doc: Doc, layout: Layout, pageIds: number[]): number {
+  interface Mark {
+    title: string;
+    page: number;
+    y: number;
+    level: number;
+    kids: Mark[];
+    id: number;
+  }
+  const top: Mark[] = [];
+  const open: Mark[] = [];
+  for (const item of outline(doc)) {
+    const line = layout.lines[layout.paraFirstLine[item.para]];
+    if (!line || !pageIds[line.page]) continue;
+    const mark: Mark = { title: item.text, page: line.page, y: line.y, level: item.level, kids: [], id: 0 };
+    while (open.length && open[open.length - 1].level >= item.level) open.pop();
+    (open.length ? open[open.length - 1].kids : top).push(mark);
+    open.push(mark);
+  }
+  if (!top.length) return 0;
+  const rootId = out.reserve();
+  const number = (marks: Mark[]) => marks.forEach((mark) => ((mark.id = out.reserve()), number(mark.kids)));
+  number(top);
+  /** All under it, each shown: every bookmark is open. */
+  const count = (marks: Mark[]): number => marks.reduce((sum, mark) => sum + 1 + count(mark.kids), 0);
+  const ends = (marks: Mark[]) => (marks.length ? ` /First ${marks[0].id} 0 R /Last ${marks[marks.length - 1].id} 0 R /Count ${count(marks)}` : '');
+  const write = (marks: Mark[], parent: number) =>
+    marks.forEach((mark, i) => {
+      const height = (layout.pages[mark.page]?.setup ?? layout.page).height;
+      const prev = i > 0 ? ` /Prev ${marks[i - 1].id} 0 R` : '';
+      const next = i < marks.length - 1 ? ` /Next ${marks[i + 1].id} 0 R` : '';
+      out.write(mark.id, `<< /Title ${textString(mark.title)} /Parent ${parent} 0 R${prev}${next}${ends(mark.kids)} /Dest [${pageIds[mark.page]} 0 R /XYZ 0 ${num(height - mark.y)} null] >>`);
+      write(mark.kids, mark.id);
+    });
+  write(top, rootId);
+  out.write(rootId, `<< /Type /Outlines${ends(top)} >>`);
+  return rootId;
+}
+
 export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
   const out = new Writer();
   /** The size of a page: its section's. The page being drawn is `height` tall, which PDF counts up from its bottom. */
@@ -546,6 +644,10 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
   let { width, height } = layout.page;
   const fonts = new Map<string, PdfFont>();
   const images = new Map<string, { name: string; id: number } | null>();
+  const { doc } = resources;
+  const tree = new StructTree(doc);
+  /** Pictures read with no description to read. */
+  let undescribed = 0;
 
   const fontFor = (spec: FontSpec): PdfFont => {
     const key = `${spec.family}|${spec.bold}|${spec.italic}`;
@@ -560,6 +662,8 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
         name,
         id: out.reserve(),
         file: { bytes, font: parsed, used },
+        // The regular face given for a bold or italic one the application did not give.
+        fake: { bold: spec.bold && !parsed.bold, italic: spec.italic && !parsed.italic && !parsed.italicAngle },
         encode(text) {
           let codes = '';
           for (const ch of text) {
@@ -620,16 +724,24 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
     href?: string;
     anchor?: string;
     line: Line;
+    /** The element of its text, which the link is part of. */
+    element?: Element;
   }
   /** Where each bookmark of the document is: its page, and how far down it. */
   const bookmarks = new Map<string, { page: number; y: number }>();
   let links: LinkBox[] = [];
   let pageIndex = 0;
-  /** Notes the link a fragment is part of, joined to the one before it on its line when they go to the same place. */
-  const noteLink = (f: Fragment, line: Line) => {
+  /** Where the link a fragment is part of goes, when it is part of one. */
+  const targetOf = (f: Fragment) => {
     const anchor = f.props.wrap ? /<w:hyperlink\b[^>]*\bw:anchor="([^"]*)"/.exec(f.props.wrap)?.[1] : undefined;
     const href = linkHref(f.props);
-    if (href === undefined && anchor === undefined) return;
+    return href === undefined && anchor === undefined ? undefined : { href, anchor };
+  };
+  /** Notes the link a fragment is part of, joined to the one before it on its line when they go to the same place. */
+  const noteLink = (f: Fragment, line: Line, element?: Element) => {
+    const target = targetOf(f);
+    if (!target) return;
+    const { href, anchor } = target;
     const top = line.baseline - f.ascent;
     const bottom = line.baseline + f.descent;
     const last = links[links.length - 1];
@@ -641,16 +753,59 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
       last.width = f.x + f.width - last.x;
       return;
     }
-    links.push({ x: f.x, y: top, width: f.width, height: bottom - top, href, anchor, line });
+    links.push({ x: f.x, y: top, width: f.width, height: bottom - top, href, anchor, line, element });
+  };
+  /** The lines already given to the tree: a heading row of a table, drawn again at the top of the next page, is not read twice. */
+  const told = new Set<string>();
+  /** The link being written, while the text of an element goes on being part of it. */
+  let link: { owner: Element; key: string; element: Element } | undefined;
+  /** The element a fragment's text goes in: its paragraph's, or the link it is part of. */
+  const ownerOf = (f: Fragment, owner: Element | undefined) => {
+    const target = owner && targetOf(f);
+    if (!owner || !target) {
+      if (f.width > 0) link = undefined;
+      return owner;
+    }
+    const key = `${target.href}\n${target.anchor}`;
+    if (link?.owner !== owner || link.key !== key) link = { owner, key, element: tree.child(owner, 'Link') };
+    return link.element;
   };
 
   /** The operators that draw a page. PDF measures up from the bottom of the page: `y` is turned over. */
-  const pageContent = (bands: { band: Band; part?: StoryPart }[]): string => {
+  const pageContent = (bands: PageBand[]): string => {
     let ops = '';
+    /** What the content being written is part of: an element of the tree, the artifacts, or nothing yet. */
+    let open: Element | 'artifact' | undefined;
+    const close = () => {
+      if (open) ops += 'EMC\n';
+      open = undefined;
+    };
+    const artifact = () => {
+      if (open === 'artifact') return;
+      close();
+      ops += '/Artifact BMC\n';
+      open = 'artifact';
+    };
+    /** What follows is part of `element`; of the artifacts, when it is part of none. */
+    const tag = (element: Element | undefined) => {
+      if (!element) return artifact();
+      if (open === element) return;
+      close();
+      ops += `/${element.type} <</MCID ${tree.mark(element, pageIndex)}>> BDC\n`;
+      open = element;
+    };
     const rect = (x: number, y: number, w: number, h: number) => `${num(x)} ${num(height - y - h)} ${num(w)} ${num(h)} re`;
-    const picture = (xml: string, x: number, y: number, w: number, h: number, part?: StoryPart) => {
+    /** A picture, read by its description as part of `owner`; a decorative one, or one of a header, is skipped. */
+    const picture = (xml: string, x: number, y: number, w: number, h: number, part: StoryPart | undefined, owner: Element | undefined) => {
       const image = imageFor(xml, part);
-      if (image) ops += `q ${num(w)} 0 0 ${num(h)} ${num(x)} ${num(height - y - h)} cm /${image.name} Do Q\n`;
+      if (!image) return;
+      if (owner && !isDecorative(xml)) {
+        const box: [number, number, number, number] = [num(x), num(height - y - h), num(x + w), num(height - y)].map(Number) as [number, number, number, number];
+        const alt = altText(xml);
+        if (!alt) undescribed++;
+        tag(tree.child(owner, 'Figure', { alt: alt ?? '', bbox: box }));
+      } else artifact();
+      ops += `q ${num(w)} 0 0 ${num(h)} ${num(x)} ${num(height - y - h)} cm /${image.name} Do Q\n`;
     };
     /** A border from one point to another, centred on the line between them. */
     const stroke = (border: Border, x1: number, y1: number, x2: number, y2: number): string => {
@@ -666,21 +821,28 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
       const size = f.font.size;
       if (f.props.highlight) ops += `${rgb(f.props.highlight)} rg ${rect(f.x, line.baseline - f.ascent, f.width, f.ascent + f.descent)} f\n`;
       const font = fontFor(f.font);
-      ops += `BT /${font.name} ${num(size)} Tf ${rgb(f.props.color)} rg\n`;
+      const bold = font.fake?.bold;
+      const slant = font.fake?.italic ? 0.2 : 0;
+      // Bold as an outline round each letter in its own colour; italic as a slant of the letters.
+      ops += `${bold ? 'q ' : ''}BT /${font.name} ${num(size)} Tf ${rgb(f.props.color)} rg${bold ? ` 2 Tr ${rgb(f.props.color)} RG ${num(size * 0.03)} w` : ''}\n`;
       // Word by word, each where the layout measured it to start: a word and the spaces after it.
       for (const match of f.text.matchAll(/\S+\s*|\s+/g)) {
         const before = f.text.slice(0, match.index);
         const spaces = f.wordSpacing ? (before.match(/ /g)?.length ?? 0) * f.wordSpacing : 0;
         const x = f.x + (before ? resources.measurer.width(before, f.font) : 0) + spaces;
         const word = match[0].replace(/\s+$/, ' ');
-        if (word.trim()) ops += `1 0 0 1 ${num(x)} ${num(height - line.baseline)} Tm ${font.encode(word)} Tj\n`;
+        // A space alone too, where a stretch starts with one: it shows nothing, and a reader takes it for the gap between two words.
+        ops += `1 0 ${slant} 1 ${num(x)} ${num(height - line.baseline)} Tm ${font.encode(word)} Tj\n`;
       }
-      ops += 'ET\n';
+      ops += bold ? 'ET Q\n' : 'ET\n';
       const rule = (y: number) => (ops += `${rgb(f.props.color)} rg ${rect(f.x, y, f.width, Math.max(0.5, size * 0.05))} f\n`);
       if (f.props.underline) rule(line.baseline + size * 0.1);
       if (f.props.strike) rule(line.baseline - size * 0.3);
     };
-    for (const { band, part } of bands) {
+    for (const { band, part, kind, id } of bands) {
+      /** The element the text of a paragraph of the band goes in: none for a header or a footer, which are artifacts. */
+      const leaf = (para: number) => (kind === 'body' ? tree.paragraph(para) : kind === 'note' ? tree.note(id!, para) : kind === 'box' ? tree.box(id!, para) : undefined);
+      artifact();
       // A text box: what fills it and the line round it, under its text.
       const frame = (band as TextBoxBand).frame;
       if (frame) {
@@ -689,7 +851,8 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
         if (look.line) ops += `q ${rgb(look.line.color)} RG ${num(look.line.width)} w ${rect(frame.x, frame.y, frame.width, frame.height)} S Q\n`;
       }
       // The pictures that go under the text first; the ones over it, once it is drawn.
-      for (const float of band.floats) if (float.behind) picture(float.xml, float.x, float.y, float.width, float.height, float.part);
+      for (const float of band.floats) if (float.behind) picture(float.xml, float.x, float.y, float.width, float.height, float.part, leaf(float.para));
+      artifact();
       for (const cell of band.cells) {
         if (cell.shade) ops += `${rgb(cell.shade)} rg ${rect(cell.x, cell.y, cell.width, cell.height)} f\n`;
       }
@@ -705,6 +868,9 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
       const notesRule = (band as LayoutPage).footnotes?.rule;
       if (notesRule) ops += `0 0 0 rg ${rect(notesRule.x, notesRule.y, notesRule.width, notesRule.height)} f\n`;
       for (const line of band.lines) {
+        const seen = `${kind}:${id ?? ''}:${line.para}:${line.start}`;
+        const owner = told.has(seen) ? undefined : leaf(line.para);
+        told.add(seen);
         const box = line.turn && line.cell !== undefined ? band.cells[line.cell] : undefined;
         if (line.turn && box) {
           // Text set vertically: cut to its cell, and turned about its corner. PDF turns the other way, its y going up.
@@ -713,22 +879,29 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
           const turn = line.turn.angle < 0 ? `0 1 -1 0 ${num(a + b)} ${num(b - a)}` : `0 -1 1 0 ${num(a - b)} ${num(b + a)}`;
           ops += `q ${rect(box.x, box.y, box.width, box.height)} W n ${turn} cm\n`;
         }
-        if (line.label) text(line.label, line);
+        if (line.label) {
+          tag(kind === 'body' && owner ? (tree.label(line.para) ?? owner) : owner);
+          text(line.label, line);
+        }
         for (const f of line.fragments) {
+          const element = ownerOf(f, owner);
+          if (f.kind !== 'object') tag(element);
           if (f.kind === 'text') text(f, line);
           // The number of a note: smaller, and raised.
           else if (f.mark) text({ ...f, kind: 'text', text: f.mark.text, font: f.mark.font, wordSpacing: 0, props: { ...f.props, underline: false, strike: false, highlight: '' } }, { ...line, baseline: line.baseline - f.mark.rise });
           else if (f.leader) text({ ...f, kind: 'text', ...f.leader, wordSpacing: 0 }, line);
-          else if (f.kind === 'object' && f.width > 0) picture(f.props.object, f.x, line.baseline - f.ascent, f.width, f.ascent, part);
+          else if (f.kind === 'object' && f.width > 0) picture(f.props.object, f.x, line.baseline - f.ascent, f.width, f.ascent, part, element);
           // The whole of an entry of a table of contents is its link: its dots and its page too. A turned one is not marked.
-          if (f.kind !== 'break' && f.width > 0 && !line.turn) noteLink(f, line);
+          if (f.kind !== 'break' && f.width > 0 && !line.turn) noteLink(f, line, element === owner ? undefined : element);
           const mark = !part && f.kind === 'object' && f.props.anchor ? /<w:bookmarkStart\b[^>]*\bw:name="([^"]*)"/.exec(f.props.object)?.[1] : undefined;
           if (mark !== undefined && !bookmarks.has(mark)) bookmarks.set(mark, { page: pageIndex, y: line.y });
         }
+        close();
         if (line.turn && box) ops += 'Q\n';
       }
-      for (const float of band.floats) if (!float.behind) picture(float.xml, float.x, float.y, float.width, float.height, float.part);
+      for (const float of band.floats) if (!float.behind) picture(float.xml, float.x, float.y, float.width, float.height, float.part, leaf(float.para));
     }
+    close();
     return ops;
   };
 
@@ -738,14 +911,15 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
   const pageIds = layout.pages.map(() => out.reserve());
   const drawn = layout.pages.map((page, index) => {
     // Where the pictures of a band live is said by its floats' own part: the first page may have a header of its own.
-    const bands: { band: Band; part?: StoryPart }[] = [];
-    // Text boxes under the text first, the others over it once it is drawn.
-    for (const box of page.textBoxes ?? []) if (box.behind) bands.push({ band: box, part: box.part });
-    if (page.header) bands.push({ band: page.header, part: page.header.part ?? 'header' });
-    bands.push({ band: page });
-    if (page.footer) bands.push({ band: page.footer, part: page.footer.part ?? 'footer' });
-    for (const note of page.footnotes?.notes ?? []) bands.push({ band: note, part: note.part });
-    for (const box of page.textBoxes ?? []) if (!box.behind) bands.push({ band: box, part: box.part });
+    const bands: PageBand[] = [];
+    // Text boxes under the text first, the others over it once it is drawn. One in a header is part of it.
+    const boxKind = (box: TextBoxBand) => (tree.readsBox(box.id) ? 'box' : 'artifact');
+    for (const box of page.textBoxes ?? []) if (box.behind) bands.push({ band: box, part: box.part, kind: boxKind(box), id: box.id });
+    if (page.header) bands.push({ band: page.header, part: page.header.part ?? 'header', kind: 'artifact' });
+    bands.push({ band: page, kind: 'body' });
+    if (page.footer) bands.push({ band: page.footer, part: page.footer.part ?? 'footer', kind: 'artifact' });
+    for (const note of page.footnotes?.notes ?? []) bands.push({ band: note, part: note.part, kind: 'note', id: note.id });
+    for (const box of page.textBoxes ?? []) if (!box.behind) bands.push({ band: box, part: box.part, kind: boxKind(box), id: box.id });
     links = [];
     pageIndex = index;
     ({ width, height } = sizeOf(index));
@@ -761,10 +935,17 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
         box.href !== undefined ? `/A << /S /URI /URI ${uriString(box.href)} >>` : target ? `/Dest [${pageIds[target.page]} 0 R /XYZ 0 ${num(sizeOf(target.page).height - target.y)} null]` : undefined;
       if (!action) continue;
       const rect = `[${num(box.x)} ${num(height - box.y - box.height)} ${num(box.x + box.width)} ${num(height - box.y)}]`;
-      annots.push(out.add(`<< /Type /Annot /Subtype /Link /Rect ${rect} /Border [0 0 0] ${action} >>`));
+      const id = out.reserve();
+      // The element of its text names it, and it says where it goes.
+      const tagged = box.element ? ` /StructParent ${tree.link(box.element, index, id, pageIds.length)} /Contents ${textString(box.href ?? box.anchor ?? '')}` : '';
+      annots.push(out.write(id, `<< /Type /Annot /Subtype /Link /Rect ${rect} /Border [0 0 0]${tagged} ${action} >>`));
     }
     const list = annots.length ? ` /Annots [${annots.map((id) => `${id} 0 R`).join(' ')}]` : '';
-    out.write(pageIds[index], `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${num(width)} ${num(height)}] /Resources ${resourcesId} 0 R /Contents ${content} 0 R${list} >>`);
+    // Tab goes through the links in the order of the tree.
+    out.write(
+      pageIds[index],
+      `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${num(width)} ${num(height)}] /Resources ${resourcesId} 0 R /Contents ${content} 0 R${list} /StructParents ${index} /Tabs /S >>`,
+    );
   });
 
   for (const font of fonts.values()) {
@@ -813,7 +994,21 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
   const imageList = [...images.values()].filter((image) => image !== null).map((image) => `/${image.name} ${image.id} 0 R`).join(' ');
   out.write(resourcesId, `<< /Font << ${fontList} >> /XObject << ${imageList} >> >>`);
   out.write(pagesId, `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`);
-  const root = out.add(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`);
-  const info = out.add(`<< /Producer (Docs)${resources.title ? ` /Title ${textString(resources.title)}` : ''} >>`);
+  const structure = tree.write(() => out.reserve(), (id, dict) => out.write(id, dict), pageIds, textString);
+  const headings = doc ? writeOutlines(out, doc, layout, pageIds) : 0;
+  const language = (resources.language ?? (doc && documentLanguage(doc)))?.replace(/[^A-Za-z0-9-]/g, '');
+  const { title } = resources;
+  // What a checker can tell of PDF/UA: a title, a language, every font in the file, every picture described.
+  const universal = !!doc && !!title && !!language && !undescribed && [...fonts.values()].every((font) => font.file);
+  const metadata = out.add('<< /Type /Metadata /Subtype /XML >>', new TextEncoder().encode(xmp(title, language, universal)));
+  const root = out.add(
+    `<< /Type /Catalog /Pages ${pagesId} 0 R /MarkInfo << /Marked true >> /StructTreeRoot ${structure} 0 R /Metadata ${metadata} 0 R` +
+      (language ? ` /Lang (${language})` : '') +
+      // The title, not the name of the file, at the top of the reader's window.
+      (title ? ' /ViewerPreferences << /DisplayDocTitle true >>' : '') +
+      (headings ? ` /Outlines ${headings} 0 R` : '') +
+      ' >>',
+  );
+  const info = out.add(`<< /Producer (Rebodocs)${title ? ` /Title ${textString(title)}` : ''} >>`);
   return out.finish(root, info);
 }

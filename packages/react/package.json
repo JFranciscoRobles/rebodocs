@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/react",
-  "version": "0.8.7",
+  "version": "0.9.0",
   "description": "The DOCX editor as a React component, or as headless hooks, with everything it needs inside.",
   "license": "MIT",
   "homepage": "https://rebodocs.com",
@@ -27,7 +27,8 @@
   "type": "module",
   "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -43,10 +44,15 @@
     }
   },
   "scripts": {
-    "build": "vite build && node scripts/types.mjs",
+    "build": "vite build && node scripts/types.mjs && node -e \"require('fs').copyFileSync('../../THIRD_PARTY_NOTICES.md','THIRD_PARTY_NOTICES.md')\"",
     "prepack": "npm run build"
   },
   "peerDependencies": {
     "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   }
 }

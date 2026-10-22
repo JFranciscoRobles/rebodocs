@@ -1,69 +1,29 @@
-# @rebodocs/mcp
+<h1 align="center">@rebodocs/mcp</h1>
 
-[npm](https://www.npmjs.com/package/@rebodocs/mcp) · `npx @rebodocs/mcp`
+<p align="center">
+  A <a href="https://modelcontextprotocol.io">Model Context Protocol</a> server for Word documents: AI assistants read and edit real DOCX files, keeping their layout and formatting.
+</p>
 
-A [Model Context Protocol](https://modelcontextprotocol.io) server for DOCX
-documents: what an AI assistant (Claude Desktop, Claude Code, Cursor…) uses
-to read and change them.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@rebodocs/mcp"><img src="https://img.shields.io/npm/v/@rebodocs/mcp?label=npm&color=0b57d0" alt="npm version"></a>
+  <a href="https://github.com/JFranciscoRobles/rebodocs/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-2e6b3c" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/tools-44-0b57d0" alt="44 tools">
+</p>
 
-## Purpose
+<p align="center">
+  <a href="https://rebodocs.com/docs/assistants/">Documentation</a> ·
+  <a href="https://rebodocs.com/docs/assistants/#tools">Every tool</a> ·
+  <a href="https://github.com/JFranciscoRobles/rebodocs/tree/main/apps/assistant">Chat example</a>
+</p>
 
-To give an assistant the same operations a person has in the editor, as
-tools, so that "fill this contract", "add a clause after the third one" or
-"turn these into a table" are done on the real document, with its layout and
-formatting intact, instead of on a copy of its text.
+---
 
-## Three ways in, the same tools
+"Fill this contract", "add a clause after the third one", "turn these lines
+into a table": done on the document itself, by the same engine as the
+editor, instead of on a copy of its text. Works with Claude Desktop, Claude
+Code, Cursor and any other MCP client.
 
-- **Files.** `open_document` reads a `.docx` into memory; the tools change it
-  there; nothing is written until `save_document`, which saves DOCX, PDF or
-  Markdown by extension and does not overwrite an existing file unless told
-  to. The editor does not have to be open.
-- **The open editor.** With the "AI" button of the editor's status bar the
-  page connects to the server on this machine, and the assistant works on the
-  document the person is looking at. Each thing it does is one step to undo,
-  and the view jumps to where it changed. The person switches it on; it does
-  not connect by itself or remember between reloads.
-- **Claude in your application.** No server on the person's machine: a chat
-  in the page talks to your backend, and your backend to the Claude API with
-  your key. `assistantRoute` (`@rebodocs/mcp/claude`, `src/claude.ts`) is the
-  route of the backend: it takes the conversation to Claude and sends the
-  answer back as it is written, a line of JSON at a time. `createAssistantChat`
-  (`src/chat.ts`, also in `@rebodocs/react`) is the conversation in the page:
-  it runs the tools Claude asks for on the editor and sends back the results.
-  `apps/assistant` is the demo.
-
-## Tools
-
-| Group | Tools |
-| --- | --- |
-| Reading | `get_overview`, `read_document`, `read_formatting`, `find_text`, `list_links`, `list_notes`, `list_variables`, `compare_documents` |
-| Text | `replace_text`, `rewrite_paragraph`, `insert_paragraphs`, `delete_paragraphs`, `set_style`, `set_list`, `set_link` |
-| Formatting | `format_text` (font, size, marks, colour), `format_paragraphs` (alignment, indents, spacing) |
-| Notes | `add_note`, `remove_note` |
-| Tracked changes | `track_changes`, `list_changes`, `accept_changes`, `reject_changes`: while on, what the other tools change is tracked, signed "Assistant" |
-| Templates | `fill_variables` |
-| Tables and pictures | `insert_table`, `edit_table`, `insert_signatures`, `insert_image`, `edit_image` |
-| Pages and columns | `set_page_setup`, `set_columns`, `insert_column_break`, `set_page_number`, `insert_page_break`, `insert_footnote`, `insert_text_box`, `insert_table_of_contents`, `update_table_of_contents` |
-
-`read_formatting` says how each paragraph and each stretch of its text looks.
-With it an assistant keeps the look of what it changes: `rewrite_paragraph`
-writes a paragraph anew (a translation, say) in the look it had, its bold
-words given as `segments`, and `insert_paragraphs` with `like_paragraph` makes
-new ones like one that is there. `edit_table` also sets row heights, heading
-rows, where the text sits in the cells and the lines around them.
-| Files | `open_document`, `save_document`, `list_documents` |
-
-## Running it
-
-From npm, with nothing to clone: its command is `rebodocs-mcp`, and npm
-brings the engine, `@rebodocs/core`, with it.
-
-```bash
-npx @rebodocs/mcp --root ~/Documents/contracts --fonts ~/Library/Fonts
-```
-
-In the configuration of an MCP client:
+## Quick start
 
 ```json
 {
@@ -73,75 +33,78 @@ In the configuration of an MCP client:
 }
 ```
 
-With Node installed by nvm, Claude Desktop does not see the `npx` of your
-terminal: put its whole path in `command` (`which npx`).
+With Node installed through nvm, Claude Desktop may not find `npx`: put the
+full path from `which npx` in `command`.
 
-From this repository, the same server from its sources: `npm run mcp -- …`,
-or `node packages/mcp/bin/rebodocs-mcp.mjs …` in a client's configuration.
+## Three ways in, the same tools
 
-## In your application
+- **Files.** `open_document` reads a `.docx`; nothing is written until
+  `save_document`, which saves DOCX, PDF or Markdown and does not overwrite a
+  file unless told to.
+- **The editor open in the browser.** The person presses "AI" in the
+  editor's status bar, and the assistant works on the document they are
+  looking at: each change is one step to undo.
+- **Claude in your application.** A chat in the page (`createAssistantChat`,
+  also in `@rebodocs/react`) runs the tools on the editor; your backend takes
+  it to the Claude API with your key (`assistantRoute` from
+  `@rebodocs/mcp/claude`). The key never reaches the browser.
 
-```bash
-npm install @rebodocs/mcp
-```
+## Tools
 
-| Import | What it is | Where it runs |
-| --- | --- | --- |
-| `@rebodocs/mcp` | The tools: `TOOLS`, `runTool(doc, name, args)`. | Anywhere |
-| `@rebodocs/mcp/claude` | `assistantRoute()`: the route of your backend that takes a chat to the Claude API with your key. | Node |
-| `@rebodocs/mcp/browser` | `createAssistantChat(editor)` and the editor's side of the MCP server. Also in `@rebodocs/react`. | Browser |
+| Area | Tools |
+| --- | --- |
+| Files | `open_document`, `new_document`, `save_document`, `list_documents`, `close_document` |
+| Reading | `get_overview`, `read_document`, `read_formatting`, `find_text`, `compare_documents`, `list_links`, `list_notes` |
+| Text | `replace_text`, `rewrite_paragraph`, `insert_paragraphs`, `delete_paragraphs` |
+| Formatting | `set_style`, `set_list`, `format_text`, `format_paragraphs`, `set_link` |
+| Review | `add_note`, `remove_note`, `track_changes`, `list_changes`, `accept_changes`, `reject_changes` |
+| Templates | `list_variables`, `fill_variables` |
+| Tables and pictures | `insert_table`, `edit_table`, `insert_signatures`, `insert_image`, `edit_image` |
+| Pages | `set_page_setup`, `set_letterhead`, `set_columns`, `insert_column_break`, `set_page_number`, `insert_page_break`, `insert_footnote`, `insert_text_box`, `insert_table_of_contents`, `update_table_of_contents` |
 
-| Option | What it is |
+`read_formatting` tells an assistant how each paragraph looks, so that
+`rewrite_paragraph` and `insert_paragraphs` keep that look.
+
+## Options
+
+| Option | Description |
 | --- | --- |
 | `--root DIR` | Folders files may be read from and written to. Without one, anywhere. |
-| `--fonts DIR` | Folders to look for fonts in before the system's, to lay out and make PDFs. |
-| `--port` | Where the editor in the browser connects; 7411. `--no-editor` to not listen. |
+| `--fonts DIR` | Folders searched for fonts before the system's, for layout and PDF. |
+| `--port`, `--no-editor` | Where the browser editor connects (7411), or not listening for it. |
 | `--origin URL` | Pages allowed to connect, besides `localhost`. |
-| `--host`, `--token` | To listen for editors on other machines; a token of 12 characters or more is then required (`REBODOCS_MCP_TOKEN`). |
+| `--host`, `--token` | Listen for editors on other machines; a token of 12+ characters is then required (`REBODOCS_MCP_TOKEN`). |
 
-## How it works
-
-The tools are functions over `@rebodocs/core` documents (`tools.ts`), so they are
-the same whether the document is a file held by the server or the one in a
-browser tab. For the tab, the server sends the call over a local bridge and
-the page runs the same function on its editor (`browser.ts`).
-
-Paragraphs are addressed by number, and every tool that changes text answers
-with what it did, so the assistant does not have to read the document again
-after each step.
-
-## Building and publishing
-
-As every package but `@rebodocs/react`, from the root of the repository:
+## Filling templates from the command line
 
 ```bash
-npm run build:packages              # packages/<name>/dist is each package
-npm publish ./packages/core/dist    # the engine first: the others ask for it
-npm publish ./packages/mcp/dist
+npx -p @rebodocs/mcp rebodocs-generate template.docx data.json -o out.pdf [--fonts ./fonts] [--locale en-US] [--currency EUR]
+npx -p @rebodocs/mcp rebodocs-generate template.docx --list
 ```
 
-`dist/` has a package.json of its own, written by `tools/package.mjs`: the
-one beside the sources stays the one the repository uses, which points at
-them.
+Nested objects fill dotted names (`{{client.name}}`), and a list fills a
+block (`{{#lines}} … {{/lines}}`): a table row, paragraphs or text, once per
+item.
 
-## Where it can improve
+## In your code
 
-- **Addressing by paragraph number is fragile.** After an insertion every
-  later number shifts. Stable ids (the collaboration package already gives
-  paragraphs one) would let an assistant plan several edits at once.
-- **Letterhead.** There is no tool for the letterhead.
-- **Mixed formatting in a rewrite.** `rewrite_paragraph` keeps the look most
-  of the paragraph had; anything else has to be given back in `segments`.
-- **Reading long documents.** `read_document` returns text by range. A
-  search by meaning, or summaries per heading, would cost an assistant fewer
-  calls.
-- **One transport.** Standard input and output only. Streamable HTTP would
-  let a hosted assistant use it.
-- **Remote editors** are possible (`--host`, `--token`) but were only tried
-  on one machine.
-- **In a shared room, through one person.** An assistant does not join a
-  room by itself: it works in the editor of the person who asked, and the
-  others see its changes as that person's. They do not see the conversation.
-- **Tests** cover the tools and the chat against a Claude of their own; the
-  bridge to the browser was checked by hand, and the chat has not been run
-  against the real API in the repository's tests.
+| Import | What it is | Runs in |
+| --- | --- | --- |
+| `@rebodocs/mcp` | The tools: `TOOLS`, `runTool(doc, name, args)`. | Anywhere |
+| `@rebodocs/mcp/claude` | `assistantRoute()`: the backend route to the Claude API. | Node |
+| `@rebodocs/mcp/browser` | `createAssistantChat(editor)` and the editor's side of the bridge. | Browser |
+
+## Limits
+
+- Paragraphs are addressed by number, which shifts after an insertion: the tools answer with what changed, so an assistant can follow.
+- Standard input and output only; no Streamable HTTP transport yet.
+- In a shared room, an assistant works through the editor of the person who asked.
+
+## Status
+
+0.9: ready to try in production; the API may change before 1.0. See the
+[changelog](https://github.com/JFranciscoRobles/rebodocs/blob/main/CHANGELOG.md).
+
+## License
+
+[MIT](https://github.com/JFranciscoRobles/rebodocs/blob/main/LICENSE). `@anthropic-ai/sdk` (MIT) is installed as a dependency.

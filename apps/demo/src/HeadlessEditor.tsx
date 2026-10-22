@@ -24,6 +24,7 @@ import { Panels } from './headless/Panels'
 import { useTexts } from './headless/texts'
 import { FONT_SIZES, INDENT_STEP, ZOOMS, hex, withCurrent } from './headless/options'
 import './HeadlessEditor.css'
+import { spellcheck } from './spelling'
 
 interface Props {
   docx?: Uint8Array
@@ -230,7 +231,7 @@ function Rail({ finding, onFind }: { finding: boolean; onFind: () => void }) {
       <IconButton icon="link" label={tr('Enlace')} on={!!link.active} disabled={!link.possible} onClick={() => bubble?.ask('link')} />
       <IconButton icon="variable" label={tr('Insertar variable')} on={!!variables.active} onClick={() => bubble?.ask('variable')} />
       <IconButton icon="note" label={tr('Añadir nota')} on={!!notes.active} onClick={() => bubble?.ask('note')} />
-      <IconButton icon="signature" label={tr('Insertar firmas')} onClick={() => commands.insertSignatures(['El Cliente', 'El Prestador'])} />
+      <IconButton icon="signature" label={tr('Insertar firmas')} onClick={() => commands.insertSignatures(['The Client', 'The Provider'])} />
       <IconButton icon="pageBreak" label={tr('Salto de página')} onClick={() => commands.insertPageBreak()} />
       <IconButton icon="search" label={tr('Buscar y reemplazar')} on={finding} onClick={onFind} />
     </div>
@@ -355,7 +356,7 @@ export function HeadlessEditor({ docx, name }: Props) {
   const [finding, setFinding] = useState(false)
 
   return (
-    <DocsProvider docx={docx} name={name} author="Demo" onSave={download} bubble onFindKey={() => setFinding(true)}>
+    <DocsProvider docx={docx} name={name} author="Demo" onSave={download} bubble spellcheck={spellcheck} onFindKey={() => setFinding(true)}>
       <Shell finding={finding} setFinding={setFinding} />
     </DocsProvider>
   )

@@ -7,6 +7,7 @@
 import type { TabStop } from '@rebodocs/core';
 import { installRegionKeys, markRegion } from './a11y';
 import type { Editor } from './editor';
+import { paragraphDialog } from './paragraphdialog';
 import { type MessageKey, getLocale, t } from './i18n';
 
 export interface Ruler {
@@ -28,20 +29,21 @@ const BAND_BOTTOM = 19;
 const STYLE_ID = 'dx-ruler-style';
 
 const CSS = `
-.dx-ruler{position:relative;flex:none;height:${HEIGHT}px;overflow:hidden;background:var(--dx-ruler,#f3f5f9);border-bottom:1px solid var(--dx-ruler-line,#d9dce3);user-select:none}
+.dx-ruler{position:relative;flex:none;height:${HEIGHT}px;overflow:hidden;background:var(--dx-ruler,#fbfaf8);border-bottom:1px solid var(--dx-ruler-line,#e6e3dc);user-select:none}
 .dx-ruler canvas{position:absolute;left:0;top:0;width:100%;height:100%}
+.dx-ruler canvas{border:0 solid;border-left-color:var(--dx-ruler-margin,#e6e3dc);border-right-color:var(--dx-ruler-text,#fff);border-top-color:var(--dx-ruler-ink,#5f5d58);transition:border-color 1ms}
 .dx-ruler-h{position:absolute;width:11px;margin-left:-5.5px;cursor:pointer;z-index:2}
-.dx-ruler-h svg{display:block;fill:var(--dx-ruler-ink,#5f6470);stroke:var(--dx-ruler-text,#fff);stroke-width:.6}
+.dx-ruler-h svg{display:block;fill:var(--dx-ruler-ink,#5f5d58);stroke:var(--dx-ruler-text,#fff);stroke-width:.6}
 .dx-ruler-h:hover svg,.dx-ruler-h.dx-on svg{fill:var(--dx-ruler-on,#0b57d0)}
 .dx-ruler-first{top:0;height:9px}
 .dx-ruler-hanging,.dx-ruler-right{top:11px;height:8px}
 .dx-ruler-left{top:19px;height:5px}
 .dx-ruler-m{position:absolute;top:0;width:9px;height:100%;cursor:ew-resize;z-index:1}
 .dx-ruler-tab{position:absolute;top:13px;width:9px;height:8px;margin-left:-4.5px;cursor:pointer;z-index:2}
-.dx-ruler-tab svg,.dx-ruler-kind svg{display:block;fill:none;stroke:var(--dx-ruler-ink,#5f6470);stroke-width:1.5}
+.dx-ruler-tab svg,.dx-ruler-kind svg{display:block;fill:none;stroke:var(--dx-ruler-ink,#5f5d58);stroke-width:1.5}
 .dx-ruler-tab:hover svg,.dx-ruler-tab.dx-on svg{stroke:var(--dx-ruler-on,#0b57d0)}
-.dx-ruler-kind{position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:3}
-.dx-ruler-kind:hover{background:var(--dx-ruler-margin,#cfd4dd)}
+.dx-ruler-kind{position:absolute;left:0;top:0;width:24px;height:24px;border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:3}
+.dx-ruler-kind:hover{background:var(--dx-ruler-margin,#e6e3dc)}
 .dx-ruler-guide{position:fixed;width:0;border-left:1px dashed var(--dx-ruler-on,#0b57d0);pointer-events:none;z-index:30}
 `;
 
@@ -98,6 +100,8 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
     node.title = t(label);
     node.dataset.name = name;
     node.addEventListener('mousedown', (e) => startDrag(e, name));
+    // The indents typed in, to the millimetre, as a double click on them does in Word.
+    if (html) node.addEventListener('dblclick', () => paragraphDialog(editor).open());
     // From the keyboard, each marker is a slider: the arrows move it a quarter of a centimetre, with Shift a whole one.
     node.tabIndex = 0;
     node.setAttribute('role', 'slider');
@@ -228,7 +232,7 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
     const styles = getComputedStyle(bar);
     const colour = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
     // The page, with the room for text in white and what is outside it in grey.
-    g.fillStyle = colour('--dx-ruler-margin', '#cfd4dd');
+    g.fillStyle = colour('--dx-ruler-margin', '#e6e3dc');
     g.fillRect(x(0), BAND_TOP, state.width * scale, BAND_BOTTOM - BAND_TOP);
     g.fillStyle = colour('--dx-ruler-text', '#fff');
     g.fillRect(x(state.left), BAND_TOP, (state.right - state.left) * scale, BAND_BOTTOM - BAND_TOP);
@@ -237,7 +241,7 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
     const cm = PT_PER_CM * scale;
     const middle = (BAND_TOP + BAND_BOTTOM) / 2;
     const every = cm < 22 ? 2 : 1;
-    g.fillStyle = colour('--dx-ruler-ink', '#5f6470');
+    g.fillStyle = colour('--dx-ruler-ink', '#5f5d58');
     g.font = '9px system-ui,-apple-system,"Segoe UI",sans-serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
@@ -517,6 +521,9 @@ export function createRuler(container: HTMLElement, editor: Editor): Ruler {
   const observer = new ResizeObserver(schedule);
   observer.observe(bar);
   observer.observe(editor.element);
+  // The colours the canvas is drawn in are those of the variables when it was drawn: a change of them, which the
+  // borders of the canvas follow with a transition of no length, draws it again, whatever brought it (a theme, dark mode).
+  canvas.addEventListener('transitionend', schedule);
   container.appendChild(bar);
   refresh();
 

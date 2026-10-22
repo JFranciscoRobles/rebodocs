@@ -16,6 +16,10 @@ import {
   insertText,
   paragraphText,
   restoreVersion,
+  addNote,
+  insertTextBox,
+  textBoxPart,
+  trackEdit,
   withStory,
 } from '../src';
 
@@ -72,6 +76,50 @@ describe('comparing two versions', () => {
     expect(marked.paragraphs[gone].cell).toEqual(after.paragraphs[cell].cell);
     expect(changes.find((c) => c.part === 'header')).toMatchObject({ kind: 'changed' });
     expect(shown({ ...marked, paragraphs: marked.header!.paragraphs })).toEqual(['Membrete [-viejo-]{+nuevo+}']);
+  });
+});
+
+describe('what else a comparison takes in', () => {
+  it('compares a version with tracked changes as if they were accepted, as Word does', () => {
+    const tracked = trackEdit(doc('Pago a 15 días.'), doc('Pago a 30 días.'), { author: 'Luis' }).doc;
+    const { changes } = compareDocs(tracked, doc('Pago a 30 días.'));
+    expect(changes).toEqual([]);
+    expect(describeChange(compareDocs(doc('Pago a 15 días.'), tracked).changes[0])).toBe('Pago a [-15-]{+30+} días.');
+  });
+
+  it('finds the changes of a text box', () => {
+    const made = insertTextBox(doc('Uno'), { para: 0, offset: 3 }, { text: 'Precio: cien' });
+    const part = textBoxPart(made.id);
+    const later = withStory(made.doc, part, { paragraphs: [para('Precio: doscientos')] });
+    const { changes, doc: marked } = compareDocs(made.doc, later);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({ kind: 'changed', part });
+    expect(describeChange(changes[0])).toBe('Precio: [-cien-]{+doscientos+}');
+    expect(marked.textBoxes?.[0].paragraphs.map((p) => paragraphText(p))).toEqual(['Precio: ciendoscientos']);
+  });
+
+  it('lists the notes on the text written, taken out and changed, by who wrote them and when', () => {
+    const range = { from: { para: 0, offset: 0 }, to: { para: 0, offset: 3 } };
+    const one = addNote(doc('Uno dos'), range, { text: 'Revisar el monto', author: 'Ana', date: '2026-10-01T10:00:00Z' }).doc;
+    const both = addNote(one, range, { text: 'Falta la firma', author: 'Luis', date: '2026-10-02T10:00:00Z' }).doc;
+    const later = { ...both, notes: [{ ...both.notes![0], text: 'Revisar el monto final' }, { id: '9', author: 'Eva', date: '2026-10-03T10:00:00Z', text: 'De acuerdo' }] };
+    const { notes, changes } = compareDocs(both, later);
+    expect(changes).toEqual([]);
+    expect(notes.map((n) => [n.kind, n.author, describeChange(n)])).toEqual([
+      ['changed', 'Ana', 'Revisar el monto{+ final+}'],
+      ['added', 'Eva', '{+De acuerdo+}'],
+      ['removed', 'Luis', '[-Falta la firma-]'],
+    ]);
+  });
+
+  it('weighs the words of two paragraphs without the marks beside them', () => {
+    const { changes } = compareDocs(doc('Recibo de reserva'), doc('Recibo de reserva, cuarto 12'));
+    expect(changes.map((c) => c.kind)).toEqual(['changed']);
+  });
+
+  it('names a picture in English, as read_document does', () => {
+    const later = insertImage(doc('Logo:'), { para: 0, offset: 5 }, { bytes: PNG, type: 'image/png', width: 10, height: 10 }).doc;
+    expect(describeChange(compareDocs(doc('Logo:'), later).changes[0])).toContain('[image]');
   });
 });
 

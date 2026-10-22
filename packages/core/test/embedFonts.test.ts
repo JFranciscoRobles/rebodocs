@@ -1,6 +1,7 @@
-import { strFromU8, unzipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { createDoc, embeddedFonts, exportDocx, importDocx } from '../src';
+import { readFileSync } from 'node:fs';
+import { type Doc, createDoc, documentLanguage, embeddedFonts, exportDocx, importDocx, parseTrueType, textByFamily } from '../src';
 
 /**
  * The least a font file needs to be told embeddable or not: the TrueType
@@ -64,5 +65,110 @@ describe('fonts carried in the DOCX', () => {
     expect(text(twice, 'word/settings.xml').match(/embedTrueTypeFonts/g)).toHaveLength(1);
     // Without fonts given, a file goes as it was.
     expect(parts(exportDocx(doc))['word/fontTable.xml']).toBeUndefined();
+  });
+});
+
+describe('fonts cut down in the DOCX', () => {
+  // A real font, OFL: what Word is to read back as a font.
+  const courier = new Uint8Array(readFileSync(new URL('./fixtures/CourierPrime-Regular.ttf', import.meta.url)));
+  const brand = createDoc([{ props: {}, runs: [{ text: 'Héllo', props: { fontFamily: 'Brand' } }] }]);
+  const unobfuscate = (docx: Uint8Array) => {
+    const table = text(docx, 'word/fontTable.xml');
+    const key = table.match(/w:fontKey="\{([0-9A-F-]+)\}"/)![1].replace(/-/g, '');
+    const bytes = Object.entries(parts(docx)).find(([path]) => path.endsWith('.odttf'))![1].slice();
+    for (let i = 0; i < 32; i++) bytes[i] ^= parseInt(key.slice(30 - 2 * (i % 16), 32 - 2 * (i % 16)), 16);
+    return bytes;
+  };
+  /** How long the outline of a character is in a TrueType file: 0 for one left out. */
+  const outline = (bytes: Uint8Array, ch: string) => {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const tables = new Map<string, number>();
+    for (let i = 0; i < view.getUint16(4); i++) tables.set(String.fromCharCode(...bytes.slice(12 + i * 16, 16 + i * 16)), view.getUint32(12 + i * 16 + 8));
+    const glyph = parseTrueType(bytes)!.glyph(ch.codePointAt(0)!);
+    const long = view.getInt16(tables.get('head')! + 50) === 1;
+    const at = (g: number) => (long ? view.getUint32(tables.get('loca')! + g * 4) : view.getUint16(tables.get('loca')! + g * 2) * 2);
+    return at(glyph + 1) - at(glyph);
+  };
+
+  it('keeps the characters of the document and of the keyboard, and says it is cut down', () => {
+    const docx = exportDocx(brand, { fonts: [{ family: 'Brand', bold: false, italic: false, bytes: courier }], subsetFonts: true });
+    expect(text(docx, 'word/fontTable.xml')).toMatch(/<w:embedRegular r:id="rId\d+" w:fontKey="\{[0-9A-F-]{36}\}" w:subsetted="1"\/>/);
+    expect(text(docx, 'word/settings.xml')).toContain('<w:embedTrueTypeFonts/><w:saveSubsetFonts/>');
+    const cut = unobfuscate(docx);
+    expect(cut.length).toBeLessThan(courier.length / 2);
+    // Still a font: its name, its map of characters, and a header that adds up.
+    expect(parseTrueType(cut)?.family).toBe('Courier Prime');
+    const view = new DataView(cut.buffer);
+    let sum = 0;
+    for (let i = 0; i < cut.length; i += 4) sum = (sum + view.getUint32(i)) >>> 0;
+    expect(sum).toBe(0xb1b0afba);
+    expect(outline(cut, 'é')).toBeGreaterThan(0);
+    expect(outline(cut, 'Z')).toBeGreaterThan(0);
+    expect(outline(cut, 'ñ')).toBe(0);
+    expect(outline(courier, 'ñ')).toBeGreaterThan(0);
+  });
+
+  it('goes whole when the licence says it may not be cut down, or when not asked', () => {
+    const locked = courier.slice();
+    const view = new DataView(locked.buffer);
+    for (let i = 0; i < view.getUint16(4); i++) {
+      if (String.fromCharCode(...locked.slice(12 + i * 16, 16 + i * 16)) === 'OS/2') view.setUint16(view.getUint32(12 + i * 16 + 8) + 8, 0x0100);
+    }
+    const docx = exportDocx(brand, { fonts: [{ family: 'Brand', bold: false, italic: false, bytes: locked }], subsetFonts: true });
+    expect(text(docx, 'word/fontTable.xml')).not.toContain('w:subsetted');
+    expect(text(docx, 'word/settings.xml')).not.toContain('saveSubsetFonts');
+    expect(unobfuscate(docx)).toEqual(locked);
+    expect(unobfuscate(exportDocx(brand, { fonts: [{ family: 'Brand', bold: false, italic: false, bytes: courier }] }))).toEqual(courier);
+  });
+});
+
+describe('textByFamily', () => {
+  it('reads the text of every part of the document, and the families of its styles', () => {
+    const run = (text: string, fontFamily: string) => ({ text, props: { fontFamily } });
+    const base = createDoc([{ props: {}, runs: [run('ab', 'Body'), run('c', 'Other')] }]);
+    const doc = {
+      ...base,
+      header: { paragraphs: [{ props: {}, runs: [run('h', 'Head')] }] },
+      footnotes: [{ id: '1', paragraphs: [{ props: {}, runs: [run('n', 'Note')] }] }],
+      textBoxes: [{ id: '2', paragraphs: [{ props: {}, runs: [run('x', 'Body')] }] }],
+      styles: [...(base.styles ?? []), { id: 'Brand', name: 'Brand', paragraph: {}, run: { fontFamily: 'Styled' } }],
+    } as Doc;
+    const text = textByFamily(doc);
+    expect(text.get('body')).toBe('abx');
+    expect(text.get('other')).toBe('c');
+    expect(text.get('head')).toBe('h');
+    expect(text.get('note')).toBe('n');
+    expect(text.get('styled')).toBe('');
+  });
+});
+
+describe('the language of the document', () => {
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const plain = createDoc([{ props: {}, runs: [{ text: 'Hola', props: {} }] }]);
+
+  it('says it in the defaults of the styles of a new document', () => {
+    const styles = text(exportDocx(plain, { language: 'es-MX' }), 'word/styles.xml');
+    expect(styles).toContain('<w:docDefaults><w:rPrDefault><w:rPr><w:lang w:val="es-MX"/></w:rPr></w:rPrDefault></w:docDefaults>');
+    // Without one, nothing is said: the file is as it was made before.
+    expect(parts(exportDocx(plain))['word/styles.xml']).toBeUndefined();
+  });
+
+  it('adds it to the defaults of a file that has none, and keeps the one a file says', () => {
+    const file = (styles: string) =>
+      zipSync({
+        'word/document.xml': strToU8(`<w:document ${W}><w:body><w:p><w:r><w:t>Hola</w:t></w:r></w:p></w:body></w:document>`),
+        'word/styles.xml': strToU8(styles),
+        'word/_rels/document.xml.rels': strToU8(
+          '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
+        ),
+      });
+    const none = importDocx(file(`<w:styles ${W}><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults></w:styles>`));
+    expect(text(exportDocx(none, { language: 'en-US' }), 'word/styles.xml')).toContain('<w:rPr><w:sz w:val="22"/><w:lang w:val="en-US"/></w:rPr>');
+    const said = `<w:styles ${W}><w:docDefaults><w:rPrDefault><w:rPr><w:lang w:val="fr-FR"/></w:rPr></w:rPrDefault></w:docDefaults></w:styles>`;
+    expect(text(exportDocx(importDocx(file(said)), { language: 'en-US' }), 'word/styles.xml')).toBe(said);
+    // What a file says is read back, for a screen reader to use; a language a person chose goes over it.
+    expect(documentLanguage(importDocx(file(said)))).toBe('fr-FR');
+    expect(documentLanguage(none)).toBeUndefined();
+    expect(text(exportDocx(importDocx(file(said)), { language: 'es-MX', replaceLanguage: true }), 'word/styles.xml')).toContain('<w:lang w:val="es-MX"/>');
   });
 });

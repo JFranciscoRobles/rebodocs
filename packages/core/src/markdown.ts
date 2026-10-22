@@ -6,12 +6,25 @@
 import { type Doc, type Paragraph, type Run, cellOfTable, resolveRun } from './model';
 import { listKindAt } from './ops';
 import { paragraphStyles } from './styles';
+import { decideAllRevisions, hasRevisions } from './revisions';
 
 interface Piece {
   text: string;
   bold: boolean;
   italic: boolean;
   strike: boolean;
+  /** A tracked change, written as `[-…-]` or `{+…+}` when the changes are marked. */
+  revision?: 'insert' | 'delete';
+}
+
+export interface MarkdownOptions {
+  /**
+   * The tracked changes of the document: the text as it would be with all of
+   * them accepted (the default), as it was before them (`original`), or with
+   * what was taken out as `[-…-]` and what was put in as `{+…+}` (`marked`),
+   * as an assistant's read_document shows them.
+   */
+  changes?: 'accepted' | 'original' | 'marked';
 }
 
 /** Characters that would be read as Markdown where they stand. */
@@ -35,9 +48,10 @@ function inline(runs: Run[], plainBold = false): string {
     const text = run.text.replace(/\f/g, '').replace(/\t/g, '    ');
     if (!text) continue;
     const props = resolveRun(run.props);
-    const piece = { text, bold: props.bold && !plainBold, italic: props.italic, strike: props.strike };
+    const revision = run.props.revision === 'insert' || run.props.revision === 'delete' ? run.props.revision : undefined;
+    const piece: Piece = { text, bold: props.bold && !plainBold, italic: props.italic, strike: props.strike, ...(revision ? { revision } : {}) };
     const last = pieces[pieces.length - 1];
-    if (last && last.bold === piece.bold && last.italic === piece.italic && last.strike === piece.strike) last.text += text;
+    if (last && last.bold === piece.bold && last.italic === piece.italic && last.strike === piece.strike && last.revision === piece.revision) last.text += text;
     else pieces.push(piece);
   }
   return pieces
@@ -47,7 +61,8 @@ function inline(runs: Run[], plainBold = false): string {
       if (!core) return piece.text;
       const mark = `${piece.strike ? '~~' : ''}${piece.bold ? '**' : ''}${piece.italic ? '*' : ''}`;
       const close = [...mark].reverse().join('');
-      return `${lead}${mark}${escapeText(core)}${close}${trail}`;
+      const [open, shut] = piece.revision === 'insert' ? ['{+', '+}'] : piece.revision === 'delete' ? ['[-', '-]'] : ['', ''];
+      return `${lead}${open}${mark}${escapeText(core)}${close}${shut}${trail}`;
     })
     .join('')
     .trim();
@@ -86,7 +101,10 @@ function tableBlock(doc: Doc, paragraphs: Paragraph[], tableIndex: number): stri
   return [line(head), line(Array.from({ length: width }, () => '---')), ...body.map(line)].join('\n');
 }
 
-export function exportMarkdown(doc: Doc): string {
+export function exportMarkdown(doc: Doc, options: MarkdownOptions = {}): string {
+  const changes = options.changes ?? 'accepted';
+  // Decided first, unless marked: what a reader gets is one text, not both.
+  if (changes !== 'marked' && hasRevisions(doc)) doc = decideAllRevisions(doc, changes === 'accepted');
   const styles = new Map(paragraphStyles(doc).map((style) => [style.id, style]));
   /** Blocks of the output and whether each one is a list item, which sits right under the one before it. */
   const blocks: { text: string; item: boolean }[] = [];

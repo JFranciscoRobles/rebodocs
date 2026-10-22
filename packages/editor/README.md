@@ -1,42 +1,41 @@
-# @rebodocs/editor
+<h1 align="center">@rebodocs/editor</h1>
 
-[npm](https://www.npmjs.com/package/@rebodocs/editor) · `npm install @rebodocs/editor`
+<p align="center">
+  A DOCX editor for any web page: the pages, caret and selection, and the interface around them. Plain TypeScript and the DOM, no framework.
+</p>
 
-The editor in the browser: the pages, the caret and the selection, and the
-pieces of interface around them. Plain TypeScript and the DOM, with no
-framework.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@rebodocs/editor"><img src="https://img.shields.io/npm/v/@rebodocs/editor?label=npm&color=0b57d0" alt="npm version"></a>
+  <a href="https://github.com/JFranciscoRobles/rebodocs/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-2e6b3c" alt="MIT license"></a>
+</p>
 
-## Purpose
+<p align="center">
+  <a href="https://rebodocs.com/docs/vanilla/">Without a framework</a> ·
+  <a href="https://rebodocs.com/docs/editor-api/">Editor API</a> ·
+  <a href="https://rebodocs.com/docs/styling/">Styling</a> ·
+  <a href="https://rebodocs.com/docs/accessibility/">Accessibility</a>
+</p>
 
-To be the one place where a person's keys, clicks and touches become changes
-to a document, and where the layout `@rebodocs/core` computes becomes something to
-look at. It is separate from React so that it can be used anywhere, and its
-interface pieces are separate from the `Editor` class so that an application
-can take only the ones it wants, or none.
+---
 
-## What is in it
+The `Editor` holds the document, the selection and the undo history, paints
+the layout `@rebodocs/core` computes, and takes keys, clicks and touches. The
+pieces of interface around it are separate functions, so you take the ones
+you want, or none. For React, use [`@rebodocs/react`](https://www.npmjs.com/package/@rebodocs/react),
+which is built on this package.
 
-| Piece | What it is |
-| --- | --- |
-| `Editor` | The pages in an element. Holds the document, the selection and the undo history; paints the layout; takes the keyboard, the mouse and touch. The edges of a table's columns and rows, and its bottom right corner, are dragged to resize it. Headers, footers, footnotes and text boxes are edited in place (a click inside a text box writes in it, one on its edge moves it). Tracks changes (⌘⇧E) and accepts or rejects them; `readOnly` shows a document without letting it change. Everything else talks to it through public methods. |
-| Clipboard | What is copied goes as text, as HTML and whole for another Rebodocs editor. Pasting keeps the formatting of where it comes from (`paste.ts` reads the HTML of Word, Google Docs and web pages, their style sheets among it); Ctrl+Shift+V (⌘⇧V) or `paste({ plain: true })` pastes the text alone. |
-| `createToolbar` | One row of formatting; what does not fit folds into a "more" tray. Its table menu has rows, columns, merging, heading rows, row height, where the text sits in a cell and the lines around it, and deleting the table; its columns menu sets the text in one, two or three columns. Insert has footnotes and text boxes; Review turns tracked changes on and goes through them. |
-| `createSidebar` | The document menu: open, save, export, page setup, letterhead, language. |
-| `createPanel` | Side panel: outline, template variables, notes, tracked changes, and the versions the application keeps. |
-| `createVersionView` | What changed between two versions, over the document, and going back to one. |
-| `createStatusBar` | Page count, words, view, zoom, who is on the document. Drops what matters least as it gets narrower. |
-| `createBubble` | A small bar beside the selection with what can be done to it: to text, a link, a note, a picture, or a table (deleting it among it). A tap on ⌘ (Ctrl elsewhere) shows it. |
-| `createFindBar`, `createRuler` | Find and replace; the ruler with indents and margins. |
-| `createResponsive` | Makes do with a narrow window and an on-screen keyboard. |
-| `addLocale`, `setLocale`, `t` | The texts of the interface, by key. |
-| `addFont`, `addFonts` | Fonts of the application's own. |
+## Install
 
-## Using it
+```bash
+npm install @rebodocs/editor
+```
+
+## Usage
 
 ```ts
 import { Editor, createToolbar, createStatusBar, createBubble, createResponsive } from '@rebodocs/editor';
 
-const editor = new Editor(document.querySelector('#pages')!);
+const editor = new Editor(document.querySelector('#pages')!); // the element needs a height
 createToolbar(document.querySelector('#toolbar')!, editor);
 createStatusBar(document.querySelector('#status')!, editor);
 createBubble(editor);
@@ -44,82 +43,81 @@ createResponsive(document.body, editor);
 
 editor.loadDocx(bytes);
 editor.onChange(() => console.log(editor.pageCount));
+
 const docx = editor.exportDocx();
 const pdf = await editor.exportPdf('Contract');
 ```
 
-The element the editor is given needs a height. Colours can be changed with
-CSS variables (`--dx-canvas`, `--dx-page-shadow`, `--dx-selection`,
-`--dx-caret`, `--dx-handle`); the base rule sits in a CSS layer, so utility
-classes from a framework such as Tailwind win over it.
+## Pieces
 
-### Languages
+| Function | What it adds |
+| --- | --- |
+| `createToolbar` | Formatting, insert and review, in two rows, tabs or one row. What does not fit folds into a tray. |
+| `createSidebar` | The document menu: open, save, export, page setup, letterhead, language, appearance. A screen or a card. |
+| `createPanel` | The side panel: outline, variables, comments, tracked changes, versions. |
+| `createStatusBar` | Pages, words, the language of the text, the view, the zoom, who else is on the document. |
+| `createRuler` | Margins, indents and tab stops, by mouse or keyboard. |
+| `createBubble` | The bar beside the selection, with spelling suggestions and, on a phone, copy and paste. |
+| `createFindBar` | Find and replace (⌘F, ⌘H). |
+| `createFocusMode` | The pages alone, full screen. |
+| `createResponsive` | Narrow windows and on-screen keyboards. |
+| `createSpellChecker` | Spell checking with Hunspell dictionaries you give, read in a worker: `editor.spellChecker = createSpellChecker({ dictionaries: { es: { aff, dic } } })`. |
+| `createVersionView` | Two versions compared, over the document. |
 
-```bash
-npm run locale -- fr texts/fr.json     # every text, in English, to translate
-```
+## Theming
+
+Colours are CSS variables: the canvas, the selection and the caret
+(`--dx-canvas`, `--dx-selection`, …), the ruler (`--dx-ruler-*`) and the
+interface (`--dx-ui-*`). A dark theme comes with it:
 
 ```ts
-import fr from './texts/fr.json';
+editor.theme = 'dark';                               // or 'auto', to follow the system
+applyTheme(document.querySelector('#app')!, 'dark'); // the element around the pieces
+```
+
+The base rules sit in a CSS layer, so utility classes such as Tailwind's win
+over them. See [styling](https://rebodocs.com/docs/styling/).
+
+## Languages and fonts
+
+```ts
+import fr from './texts/fr.json'; // npm run locale -- fr texts/fr.json, in the repository
 addLocale('fr', fr);
 setLocale('fr');
-```
 
-The language shows up in the menu by itself. Running the command again on
-the same file keeps what is translated and adds what the interface has
-gained since.
-
-### Fonts
-
-```ts
 await addFonts([
   { family: 'Raleway', src: '/fonts/Raleway-Regular.ttf' },
   { family: 'Raleway', src: '/fonts/Raleway-Bold.ttf', bold: true },
 ]);
 ```
 
-The font is listed in the toolbar, open documents are measured again with
-it, PDFs embed it when the file is TrueType or OpenType, and the DOCX files the
-editor makes carry it when it is TrueType and its licence lets it be embedded
-(`editor.embedFonts = false` leaves it out). For a font the page already loads
-with CSS, `addFont({ family: 'Raleway' })` is enough.
+The interface ships in English and Spanish. Fonts you add are listed in the
+toolbar, embedded in PDFs, and carried in the DOCX when their licence allows
+(`editor.embedFonts = 'subset'` keeps only the characters used).
 
 ## How it works
 
-- **Painting is placing.** Every piece of text is an absolutely positioned
-  `span` at coordinates the layout gave. The browser never wraps a line.
-- **No `contenteditable`.** A hidden `textarea` follows the caret and has the
-  focus. What is typed arrives there and is inserted into the model. A word
-  an on-screen keyboard is still composing is shown as it changes.
-- **Zoom is a transform.** Pages are laid out at their real size and scaled,
-  so zooming does not re-break lines. Pinching and Ctrl+wheel zoom around the
-  point under the fingers or the pointer.
-- **Touch.** A tap places the caret, two select a word, a hold selects and
-  extends; the selection has handles. Two fingers zoom and drag the page.
-- **The views** are of the editor, not of the document: one page, two, a
-  grid, or (optionally) the text set to the width of the window.
+- **No `contenteditable`.** A hidden `textarea` follows the caret; what is
+  typed there goes into the model, and on-screen keyboards compose as usual.
+- **Painting is placing.** Each piece of text is an absolutely positioned
+  `span` where the layout put it; the browser never wraps a line. Only the
+  pages near the view are drawn.
+- **Zoom is a transform**, so zooming never re-breaks lines.
+- **Accessible.** A screen reader hears what the caret moves over and where
+  it is; every piece works from the keyboard (F6, Alt+F10), and high
+  contrast is kept.
 
-## Where it can improve
+## Compatibility
 
-- **Tests.** The interface is checked with scripted runs of headless Chrome
-  that are not in the repository. Bringing them in as a browser test suite
-  (Playwright) is the single most useful thing to do here.
-- **`editor.ts` is one file of about 4,200 lines.** Input (keyboard, mouse,
-  touch), painting and commands should be split into modules.
-- **Accessibility.** What is announced, the keyboard in every part and the
-  screen reader mode (⌘⌥Z, Ctrl+Alt+Z) were checked in headless Chrome, not
-  with VoiceOver, NVDA or JAWS. The exported PDF is not tagged. See
-  [accessibility](https://rebodocs.com/docs/accessibility/).
-- **Real phones.** Touch was tried on one phone. On-screen keyboards differ
-  (Gboard, iOS, Samsung), and autocorrection that rewrites an earlier word is
-  deliberately avoided, not supported. No capital letter is put at the start
-  of a sentence.
-- **Large documents.** Every page is in the DOM. Painting only the pages near
-  the window would keep long documents fast.
-- **Editing gaps.** No drag and drop of text, no format painter, no spell
-  check (the hidden field cannot use the browser's). Pasting from elsewhere
-  keeps text formatting, links, lists and headings, but not pictures or
-  tables inside the HTML: a table comes as lines with tabs.
-- **Theming.** A handful of CSS variables; the interface pieces have fixed
-  light colours and no dark mode.
-- **English texts** were translated from Spanish and need a native review.
+Modern browsers. Spell checking runs in a Web Worker made from a Blob, so a
+Content Security Policy must allow `worker-src blob:`.
+
+## Status
+
+0.9: ready to try in production; the API may change before 1.0. See the
+[changelog](https://github.com/JFranciscoRobles/rebodocs/blob/main/CHANGELOG.md)
+and the [known limits](https://rebodocs.com/docs/status/).
+
+## License
+
+[MIT](https://github.com/JFranciscoRobles/rebodocs/blob/main/LICENSE). Bundled third-party code is listed in `THIRD_PARTY_NOTICES.md`.

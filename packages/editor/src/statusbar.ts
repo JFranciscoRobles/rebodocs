@@ -4,8 +4,13 @@
 
 import { type Doc, docText } from '@rebodocs/core';
 import { type Editor, type ViewMode, type ZoomFit, MAX_ZOOM, MIN_ZOOM } from './editor';
-import { getLocale, t } from './i18n';
+import { getLocale, plural, t, withRegion } from './i18n';
+
+/** The languages offered for the text, by their tags: the ones the editor speaks first, then others of Europe and the Americas. */
+const TEXT_LANGUAGES = ['es-MX', 'es-ES', 'es-AR', 'es-CO', 'en-US', 'en-GB', 'pt-BR', 'pt-PT', 'fr-FR', 'de-DE', 'it-IT', 'nl-NL', 'ca-ES'];
 import { installRegionKeys, markRegion } from './a11y';
+import { IS_MAC } from './platform';
+import { applyTheme } from './theme';
 
 export interface StatusBar {
   /** Brings the bar in step with what is not the editor's to tell: whether an assistant is connected. */
@@ -16,6 +21,12 @@ export interface StatusBar {
 }
 
 export interface StatusBarOptions {
+  /**
+   * How its parts are set out: in one bar ('bar', as it comes), each group a
+   * chip of its own ('chips'), or as pills that float over the pages
+   * ('floating'), for an application that lays them over its canvas.
+   */
+  layout?: 'bar' | 'chips' | 'floating';
   /**
    * Shown as an "AI" button when given: whether an assistant can reach the
    * document, and what switches that on and off. Connecting is the
@@ -43,6 +54,8 @@ export interface StatusBarOptions {
     /** What stops sharing it here; without it, there is no leaving: the document is a shared one. */
     leave?: () => void;
   };
+  /** Shown as a button at the end when given: whether the pages are on their own, and what puts them so (`createFocusMode`). */
+  focus?: { on: () => boolean; toggle: () => void };
 }
 
 /** The ends of the slider, in percent; the buttons and the wheel reach the editor's own limits. */
@@ -58,40 +71,48 @@ const areaPrefix = (area: 'body' | 'header' | 'footer' | 'footnote' | 'textbox')
   area === 'body' ? '' : `${t(area === 'header' ? 'area.header' : area === 'footer' ? 'area.footer' : area === 'textbox' ? 'area.textbox' : 'area.footnote')} · `;
 
 const CSS = `
-.dx-sb{display:flex;align-items:center;gap:4px;min-height:28px;padding:0 10px;background:#f3f5f9;border-top:1px solid #d9dce3;font:12px system-ui,-apple-system,"Segoe UI",sans-serif;color:#4a4f5a;user-select:none;white-space:nowrap;overflow:hidden}
+.dx-sb-chips,.dx-sb-floating{gap:6px;padding:0;background:none;border:0}
+.dx-sb-part{display:flex;align-items:center;gap:2px;min-height:34px;padding:2px 6px;box-sizing:border-box;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:12px;background:var(--dx-ui-bar,#fbfaf8);box-shadow:0 1px 2px rgba(47,46,43,.05),0 10px 30px -18px rgba(47,46,43,.28)}
+.dx-sb-part:not(:has(> :not([data-fit=off]):not([hidden]))){display:none}
+.dx-sb-floating{pointer-events:none}
+.dx-sb-floating .dx-sb-part{pointer-events:auto;min-height:38px;padding:3px 8px;border-radius:999px;background:var(--dx-ui-bg,#fff);box-shadow:0 10px 28px -10px rgba(47,46,43,.35),0 1px 3px rgba(47,46,43,.08)}
+.dx-sb{display:flex;align-items:center;gap:4px;min-height:34px;padding:0 10px;background:var(--dx-ui-bar,#fbfaf8);border-top:1px solid var(--dx-ui-line,#e6e3dc);font:12px system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--dx-ui-muted,#5f5d58);user-select:none;white-space:nowrap;overflow:hidden}
 .dx-sb-info{padding:0 8px;font-variant-numeric:tabular-nums}
-.dx-sb-info+.dx-sb-info{border-left:1px solid #d2d6de}
+.dx-sb-info+.dx-sb-info{border-left:1px solid var(--dx-ui-line,#e6e3dc)}
 .dx-sb-space{flex:1}
-.dx-sb-sep{flex:none;width:1px;height:16px;margin:0 6px;background:#d2d6de}
-.dx-sb-btn{display:inline-flex;align-items:center;justify-content:center;height:24px;min-width:26px;padding:0 4px;border:0;border-radius:5px;background:transparent;color:inherit;font:inherit;font-variant-numeric:tabular-nums;cursor:pointer}
-.dx-sb-btn:hover:not(:disabled){background:#e2e6ee}
-.dx-sb-btn.dx-on{background:#d3e3fd;color:#0b57d0}
+.dx-sb-sep{flex:none;width:1px;height:16px;margin:0 6px;background:var(--dx-ui-line,#e6e3dc)}
+.dx-sb-btn{display:inline-flex;align-items:center;justify-content:center;height:28px;min-width:28px;padding:0 5px;border:0;border-radius:8px;background:transparent;color:inherit;font:inherit;font-variant-numeric:tabular-nums;cursor:pointer}
+.dx-sb-btn:hover:not(:disabled){background:var(--dx-ui-hover,#f3f1ec)}
+.dx-sb-btn.dx-on{background:var(--dx-ui-active,#e8f0fd);color:var(--dx-ui-accent,#0b57d0)}
 .dx-sb-btn:disabled{opacity:.35;cursor:default}
-.dx-sb-btn:focus-visible,.dx-sb-range:focus-visible{outline:2px solid #0b57d0;outline-offset:-2px}
-.dx-sb-range{width:120px;margin:0 2px;accent-color:#0b57d0;cursor:pointer}
+.dx-sb-btn:focus-visible,.dx-sb-range:focus-visible{outline:2px solid var(--dx-ui-accent,#0b57d0);outline-offset:-2px}
+.dx-sb-range{width:120px;margin:0 2px;accent-color:var(--dx-ui-accent,#0b57d0);cursor:pointer}
 .dx-sb-percent{min-width:46px}
+.dx-sb-lang{height:28px;max-width:150px;padding:0 6px;border:0;border-radius:8px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.dx-sb-lang:hover{background:var(--dx-ui-hover,#f3f1ec)}
+.dx-sb-lang:focus-visible{outline:2px solid var(--dx-ui-accent,#0b57d0);outline-offset:-2px}
 .dx-sb-ai{gap:5px;padding:0 7px;font-weight:600}
 .dx-sb-ai::before{content:"";width:7px;height:7px;border-radius:50%;background:#9aa0a6}
 .dx-sb-ai[data-state=connecting]::before{background:#f4b400;animation:dx-sb-pulse 1s ease-in-out infinite}
 .dx-sb-ai[data-state=on]::before{background:#34a853}
 .dx-sb-ai[data-state=offline]::before{background:#ea4335}
 .dx-sb-who{display:inline-flex;align-items:center;padding-left:2px}
-.dx-sb-dot{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:-4px;border:1.5px solid #f3f5f9;border-radius:50%;color:#fff;font-size:10px;font-weight:700;text-transform:uppercase}
-.dx-sb-pop{position:fixed;z-index:40;width:300px;padding:12px;border:1px solid #d2d6de;border-radius:10px;background:#fff;box-shadow:0 8px 28px rgba(0,0,0,.18);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:#2b2f38;user-select:none;white-space:normal}
-.dx-sb-pop label{display:block;margin:0 0 3px;color:#5f6470;font-size:11px;font-weight:600}
-.dx-sb-pop input{width:100%;box-sizing:border-box;height:28px;margin-bottom:10px;padding:0 8px;border:1px solid #c9ced8;border-radius:6px;font:inherit;color:inherit;background:#fff}
-.dx-sb-pop input[readonly]{background:#f3f5f9;color:#4a4f5a}
-.dx-sb-pop input:focus{outline:2px solid #0b57d0;outline-offset:-1px}
+.dx-sb-dot{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:-4px;border:1.5px solid var(--dx-ui-bar,#fbfaf8);border-radius:50%;color:var(--dx-ui-on-accent,#fff);font-size:10px;font-weight:700;text-transform:uppercase}
+.dx-sb-pop{position:fixed;z-index:40;width:300px;padding:14px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:16px;background:var(--dx-ui-bg,#fff);box-shadow:0 8px 28px rgba(47,46,43,.18);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--dx-ui-ink,#2f2e2b);user-select:none;white-space:normal}
+.dx-sb-pop label{display:block;margin:0 0 3px;color:var(--dx-ui-muted,#5f5d58);font-size:11px;font-weight:600}
+.dx-sb-pop input{width:100%;box-sizing:border-box;height:32px;margin-bottom:10px;padding:0 8px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:9px;font:inherit;color:inherit;background:var(--dx-ui-bg,#fff)}
+.dx-sb-pop input[readonly]{background:var(--dx-ui-bar,#fbfaf8);color:var(--dx-ui-muted,#5f5d58)}
+.dx-sb-pop input:focus{outline:2px solid var(--dx-ui-accent,#0b57d0);outline-offset:-1px}
 .dx-sb-row{display:flex;gap:6px}
 .dx-sb-row input{flex:1;min-width:0}
-.dx-sb-pop button{height:28px;padding:0 10px;border:1px solid #c9ced8;border-radius:6px;background:#fff;color:inherit;font:inherit;white-space:nowrap;cursor:pointer}
-.dx-sb-pop button:hover{background:#eef1f6}
-.dx-sb-pop button.dx-sb-main{border-color:#0b57d0;background:#0b57d0;color:#fff}
-.dx-sb-pop button.dx-sb-main:hover{background:#0a4cb8}
+.dx-sb-pop button{height:32px;padding:0 12px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:9px;background:var(--dx-ui-bg,#fff);color:inherit;font:inherit;white-space:nowrap;cursor:pointer}
+.dx-sb-pop button:hover{background:var(--dx-ui-hover,#f3f1ec)}
+.dx-sb-pop button.dx-sb-main{border-color:var(--dx-ui-accent,#0b57d0);background:var(--dx-ui-accent,#0b57d0);color:var(--dx-ui-on-accent,#fff)}
+.dx-sb-pop button.dx-sb-main:hover{background:var(--dx-ui-accent-hover,#08398a)}
 .dx-sb-people{margin:0 0 10px;padding:0;list-style:none}
 .dx-sb-people li{display:flex;align-items:center;gap:8px;padding:3px 0}
-.dx-sb-people .dx-sb-dot{margin:0;border-color:#fff}
-.dx-sb-none{color:#5f6470}
+.dx-sb-people .dx-sb-dot{margin:0;border-color:var(--dx-ui-bg,#fff)}
+.dx-sb-none{color:var(--dx-ui-muted,#5f5d58)}
 @keyframes dx-sb-pulse{50%{opacity:.3}}
 @media (pointer:coarse){
 .dx-sb{min-height:40px}
@@ -116,11 +137,12 @@ const ICONS = {
   notes: svg('<rect x="2.5" y="2.5" width="8" height="13" rx="1"/><path d="M12.5 4.5h3M12.5 8h3M12.5 11.5h3"/>'),
   minus: svg('<path d="M5 9h8"/>'),
   plus: svg('<path d="M5 9h8M9 5v8"/>'),
+  focus: svg('<path d="M3 6.5V3h3.5M11.5 3H15v3.5M15 11.5V15h-3.5M6.5 15H3v-3.5"/>'),
 };
 
 /** Its numbers are written as the language of the bar writes them, whatever the browser is set to. */
 const number = (n: number) => n.toLocaleString(getLocale(), { useGrouping: 'always' } as unknown as Intl.NumberFormatOptions);
-const count = (n: number, one: string, many: string) => `${number(n)} ${n === 1 ? one : many}`;
+const count = (n: number, key: 'status.words' | 'status.chars') => `${number(n)} ${plural(key, n)}`;
 const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
 /** Characters as a person counts them: spaces are, the ends of paragraphs and the marks of objects are not. */
 const characters = (text: string) => text.replace(/[\n\r\f￼]/g, '').length;
@@ -206,15 +228,40 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
     // With text selected, how much of the document it is.
     info('words', () => {
       const text = selected();
-      const total = count(totals().words, t('status.word'), t('status.words'));
+      const total = count(totals().words, 'status.words');
       return text === undefined ? total : t('status.of', { n: number(words(text)), total });
     }),
     info('chars', () => {
       const text = selected();
-      const total = count(totals().characters, t('status.char'), t('status.chars'));
+      const total = count(totals().characters, 'status.chars');
       return text === undefined ? total : t('status.of', { n: number(characters(text)), total });
     }),
   );
+
+  // The language the text is in: for spelling in Word, for the voice of a screen reader, for dates and numbers.
+  const language = document.createElement('select');
+  language.className = 'dx-sb-lang';
+  language.dataset.name = 'language';
+  let offered = '';
+  updates.push(() => {
+    const now = withRegion(editor.textLanguage);
+    const key = `${getLocale()}|${now}`;
+    if (key !== offered) {
+      offered = key;
+      // Each named in the language of the interface; the one the document has, though it is not among them.
+      const names = new Intl.DisplayNames([getLocale()], { type: 'language' });
+      const tags = TEXT_LANGUAGES.includes(now) ? TEXT_LANGUAGES : [now, ...TEXT_LANGUAGES];
+      language.replaceChildren(...tags.map((tag) => new Option(names.of(tag) ?? tag, tag)));
+      language.title = t('status.language');
+      language.setAttribute('aria-label', t('status.language'));
+    }
+    if (document.activeElement !== language) language.value = now;
+  });
+  language.addEventListener('change', () => {
+    editor.setTextLanguage(language.value);
+    editor.focus();
+  });
+  bar.append(sep(), language);
 
   const space = document.createElement('span');
   space.className = 'dx-sb-space';
@@ -366,6 +413,7 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
       if (collab.leave) pop.append(leave);
       else people.style.marginBottom = '0';
       link.style.marginBottom = '0';
+      applyTheme(pop, editor.theme);
       document.body.appendChild(pop);
       const at = share.getBoundingClientRect();
       pop.style.left = `${Math.max(8, Math.min(at.left, window.innerWidth - 316))}px`;
@@ -451,15 +499,20 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
     button('zoom-in', t('zoom.in'), ICONS.plus, stepZoom(1), () => ({ disabled: editor.zoom >= MAX_ZOOM })),
     reset,
   );
+  if (options.focus) {
+    const { on, toggle } = options.focus;
+    bar.append(sep(), button('focus', t('focus.enter', { keys: IS_MAC ? '⌘⇧.' : 'Ctrl+Shift+.' }), ICONS.focus, toggle, () => ({ on: on() })));
+  }
 
   // Clicks on the bar must not take the keyboard away from the document; the slider needs it to be dragged.
   bar.addEventListener('mousedown', (e) => {
-    if (e.target !== range) e.preventDefault();
+    // Except on what needs the mouse to work: the zoom slider, and the list of languages, which would not open.
+    if (e.target !== range && e.target !== language) e.preventDefault();
   });
 
   // In less room than it needs, what matters least goes first: the slider, the counts, the ways to fit the page,
   // the views. Where the caret is, who is on the document and the zoom stay.
-  const DROP = [['zoom'], ['chars'], ['fit-width', 'fit-page'], ['words'], ['notes'], ['column', 'spread', 'grid'], ['zoom-out', 'zoom-in']];
+  const DROP = [['zoom'], ['chars'], ['fit-width', 'fit-page'], ['words'], ['language'], ['notes'], ['column', 'spread', 'grid'], ['zoom-out', 'zoom-in']];
   const named = (name: string) => bar.querySelector<HTMLElement>(`[data-name="${name}"]`);
   /** A line between two groups has no business where one of them is gone. */
   const tidy = () => {
@@ -491,6 +544,25 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
     // A longer count, or one more person on the document, may be what no longer fits.
     if (bar.scrollWidth > bar.clientWidth) fit();
   };
+  // In chips, or floating: each group between two lines a part of its own.
+  if (options.layout && options.layout !== 'bar') {
+    bar.classList.add(`dx-sb-${options.layout}`);
+    let part: HTMLElement | undefined;
+    for (const node of [...bar.children]) {
+      if (node.classList.contains('dx-sb-sep')) {
+        node.remove();
+        part = undefined;
+      } else if (node.classList.contains('dx-sb-space')) part = undefined;
+      else {
+        if (!part) {
+          part = document.createElement('div');
+          part.className = 'dx-sb-part';
+          bar.insertBefore(part, node);
+        }
+        part.appendChild(node);
+      }
+    }
+  }
   const unsubscribe = editor.onChange(refresh);
   container.appendChild(bar);
   refresh();

@@ -152,7 +152,7 @@ export function textBoxDrawingXml(id: string, width: number, height: number, nam
 }
 
 /** Every id the drawings of the document give themselves: a new one must not be one of them. */
-function drawingIds(doc: Doc): number[] {
+export function drawingIds(doc: Doc): number[] {
   const ids: number[] = [];
   const scan = (paragraphs: Paragraph[]) => {
     for (const p of paragraphs) for (const run of p.runs) for (const found of run.props.object?.matchAll(/<wp:docPr\b[^>]*?\bid="(\d+)"/g) ?? []) ids.push(Number(found[1]));

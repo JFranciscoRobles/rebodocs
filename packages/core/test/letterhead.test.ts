@@ -1,6 +1,6 @@
 import { strFromU8, unzipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type Doc, createDoc, createParagraph, exportDocx, importDocx, insertImage, layoutDocument, letterheadImage, letterheadMargins, letterheadOf, paragraphText, removeLetterhead, setLetterhead, setPictureWrap, withStory } from '../src';
+import { type Doc, imageTypeOf, insertSectionBreak, setOwnStories, setPageNumbering, setSectionPage, createDoc, createParagraph, exportDocx, importDocx, insertImage, layoutDocument, letterheadImage, letterheadMargins, letterheadOf, paragraphText, removeLetterhead, setLetterhead, setPictureWrap, withStory } from '../src';
 
 const PNG = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);
 const OTHER = new Uint8Array([137, 80, 78, 71, 9, 9]);
@@ -126,5 +126,49 @@ describe('letterhead', () => {
     // Transparent is paper.
     const clear = new Uint8ClampedArray(width * height * 4);
     expect(letterheadMargins({ width, height, data: paint(clear, [0, 9], [0, 99], 20) }, page).top).toBeCloseTo(10 * scale + 18, 5);
+  });
+
+  it('is shown on a document read from a file that had no header, as a page number given to it is', () => {
+    const read = importDocx(exportDocx(base()));
+    expect(read.noHeader).toBe(true);
+    const given = setLetterhead(read, { bytes: PNG, type: 'image/png' });
+    expect(layoutDocument(given, measurer).pages[0].header?.floats).toHaveLength(1);
+    const numbered = setPageNumbering(read, { place: 'footer', align: 'center', format: 'number' });
+    expect(layoutDocument(numbered, measurer).pages[0].footer).toBeDefined();
+  });
+
+  it('stays the size of the page when the paper turns', () => {
+    const doc = setLetterhead(base(), { bytes: PNG, type: 'image/png' });
+    const turned = setSectionPage(doc, 0, { width: 792, height: 612 });
+    expect(letterheadOf(turned)).toBeDefined();
+    const [box] = layoutDocument(turned, measurer).pages[0].header!.floats;
+    expect(box).toMatchObject({ width: 792, height: 612 });
+    expect(letterheadOf(importDocx(exportDocx(turned)))).toBeDefined();
+  });
+
+  it('goes in the header of a section that has its own too, the size of its page', () => {
+    let doc = insertSectionBreak(base(), { para: 0, offset: 6 }).doc;
+    doc = setOwnStories(doc, 0, true);
+    doc = setSectionPage(doc, 0, { width: 792, height: 612 });
+    const given = setLetterhead(doc, { bytes: PNG, type: 'image/png' });
+    const pages = layoutDocument(given, measurer).pages;
+    expect(pages.map((page) => page.header?.floats.map((f) => [f.width, f.height]))).toEqual([[[792, 612]], [[612, 792]]]);
+    // Each drawing with an id of its own, as Word wants them.
+    const files = unzipSync(exportDocx(given));
+    const ids = Object.keys(files).filter((name) => /word\/header\d*\.xml$/.test(name)).flatMap((name) => [...strFromU8(files[name]).matchAll(/<wp:docPr id="(\d+)"/g)].map((m) => m[1]));
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    expect(letterheadOf(removeLetterhead(given))).toBeUndefined();
+    expect(layoutDocument(removeLetterhead(given), measurer).pages.every((page) => !page.header?.floats.length)).toBe(true);
+    // Turning the paper of the section turns its own.
+    const turned = setSectionPage(given, 0, { width: 612, height: 792 });
+    expect(layoutDocument(turned, measurer).pages[0].header!.floats[0]).toMatchObject({ width: 612, height: 792 });
+  });
+
+  it('tells a picture by how it starts, for one that came without saying what it is', () => {
+    expect(imageTypeOf(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10]))).toBe('image/png');
+    expect(imageTypeOf(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))).toBe('image/jpeg');
+    expect(imageTypeOf(new TextEncoder().encode('GIF89a'))).toBe('image/gif');
+    expect(imageTypeOf(new TextEncoder().encode('<svg'))).toBeUndefined();
   });
 });

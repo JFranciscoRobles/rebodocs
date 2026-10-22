@@ -29,7 +29,7 @@ export function Documents({ property, person, open }: { property: Property; pers
   const generate = async () => {
     setBusy(true)
     try {
-      const docx = exportDocx(fillVariables(templateDoc(), templateValues(property)))
+      const docx = exportDocx(fillVariables(templateDoc(), templateValues(property), { locale: 'es-MX' }), { language: 'es-MX' })
       const info = await createDoc(property.id, `Contrato de mediación · ${property.title}`, docx, `${person.name} · ${person.role}`, 'Generado desde la ficha')
       open(info.id)
     } finally {

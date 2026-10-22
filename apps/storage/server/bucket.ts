@@ -2,7 +2,7 @@
 // Anything that speaks S3 takes the same calls, so Cloudflare R2, AWS S3 and
 // MinIO differ only in what the environment says.
 
-import { GetObjectCommand, ListObjectsV2Command, PutBucketCorsCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, PutBucketCorsCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -21,6 +21,7 @@ export interface Bucket {
   list(prefix?: string): Promise<BucketFile[]>;
   get(key: string): Promise<Uint8Array | undefined>;
   put(key: string, body: Uint8Array, type: string): Promise<void>;
+  remove(key: string): Promise<void>;
   /** An address the browser can read the file from, with no keys, for a few minutes. */
   readUrl(key: string): Promise<string>;
   /** An address the browser can write the file to, sending this `Content-Type`. */
@@ -81,6 +82,9 @@ export function openBucket(env: BucketEnv = process.env): Bucket {
     },
     async put(key, body, type) {
       await client.send(new PutObjectCommand({ Bucket, Key: key, Body: body, ContentType: type }));
+    },
+    async remove(key) {
+      await client.send(new DeleteObjectCommand({ Bucket, Key: key }));
     },
     readUrl: (key) => getSignedUrl(client, new GetObjectCommand({ Bucket, Key: key }), { expiresIn: URL_LIFE }),
     // The type is signed too: the address takes a file of that type and no other.

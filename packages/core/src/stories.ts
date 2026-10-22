@@ -6,7 +6,7 @@
 import type { Doc, Section, Story } from './model';
 import type { BasePart, DocxSource, FootnotePart, StorySource, StoryPart, TextBoxPart } from './docx/source';
 import { footnoteOf, withFootnote } from './footnotes';
-import { textBoxIdOf, textBoxOf, withTextBox } from './textboxes';
+import { textBoxIdOf, textBoxOf, textBoxPart, withTextBox } from './textboxes';
 
 export type { BasePart, FootnotePart, StoryPart, TextBoxPart };
 
@@ -106,6 +106,11 @@ export function storyParts(doc: WithStories): StoryPart[] {
     for (const base of STORY_PARTS) if (storyOf(doc, sectionPart(base, k))) parts.push(sectionPart(base, k));
   });
   return parts;
+}
+
+/** Every part with text of its own: the headers and footers, then the notes at the foot of the page and the text boxes. */
+export function textParts(doc: WithStories): StoryPart[] {
+  return [...storyParts(doc), ...(doc.footnotes ?? []).map((note) => footnotePart(note.id)), ...(doc.textBoxes ?? []).map((box) => textBoxPart(box.id))];
 }
 
 /** The part the header or the footer of a page lives in: its section's own, or the first page's, when it has them. */

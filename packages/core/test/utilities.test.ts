@@ -9,9 +9,14 @@ import {
   docText,
   exportDocx,
   fillVariables,
+  findAllVariables,
   findVariables,
+  formatText,
   formatValue,
   setVariableFormat,
+  trackDocEdit,
+  decideAllRevisions,
+  paragraphText,
   variableFormats,
   variableProblems,
   variableUses,
@@ -78,11 +83,83 @@ describe('templates', () => {
     expect(xml).toContain(kept);
     expect(xml).toContain('<w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Para Ana</w:t></w:r></w:p>');
   });
+
+  it('finds and fills them in every part: the first page, a section of its own, the notes and the text boxes', () => {
+    const section = { page: createDoc([p('')]).page, header: { paragraphs: [p('Section {{e}}')] } };
+    const doc: Doc = {
+      ...createDoc([{ ...p('Body {{a}}'), section }, p('Last')]),
+      firstPage: { header: { paragraphs: [p('First {{b}}')] } },
+      footnotes: [{ id: '1', paragraphs: [p('Note {{c}}')] }],
+      textBoxes: [{ id: '7', paragraphs: [p('Box {{d}} {{a}}')] }],
+    };
+    expect(variableNames(doc)).toEqual(['a', 'b', 'e', 'c', 'd']);
+    expect(variableUses(doc, 'a')).toBe(2);
+    const filled = fillVariables(doc, { a: 'A', b: 'B', c: 'C', d: 'D', e: 'E' });
+    const text = (story?: { paragraphs: Paragraph[] }) => story?.paragraphs.map(paragraphText).join('/');
+    expect([text(filled), text(filled.paragraphs[0].section!.header), text(filled.firstPage!.header), text(filled.footnotes![0]), text(filled.textBoxes![0])]).toEqual(['Body A/Last', 'Section E', 'First B', 'Note C', 'Box D A']);
+    expect(variableNames(filled)).toEqual([]);
+    expect(findAllVariables(doc).map((use) => [use.name, use.part ?? 'text'])).toEqual([
+      ['a', 'text'],
+      ['b', 'firstHeader'],
+      ['e', 'header@0'],
+      ['c', 'footnote:1'],
+      ['d', 'textbox:7'],
+      ['a', 'textbox:7'],
+    ]);
+    const marked = setVariableFormat(doc, 'b', 'upper', true, '', 'en');
+    expect(text(marked.firstPage!.header)).toBe('First {{b | upper}}');
+  });
+
+  it('leaves out what was taken out while changes were tracked, and keeps the mark of what was put in', () => {
+    const doc = createDoc([
+      {
+        props: {},
+        runs: [
+          { text: 'Dear {{old}} ', props: { revision: 'delete', revisionAuthor: 'Eva' } },
+          { text: '{{new}}, {{na', props: { revision: 'insert', revisionAuthor: 'Eva' } },
+          { text: 'XX', props: { revision: 'delete', revisionAuthor: 'Eva' } },
+          { text: 'me}}', props: { revision: 'insert', revisionAuthor: 'Eva' } },
+        ],
+      },
+    ]);
+    expect(variableNames(doc)).toEqual(['new', 'name']);
+    const filled = fillVariables(doc, { old: 'X', new: 'Ana', name: 'Pérez' });
+    expect(filled.paragraphs[0].runs.map((r) => [r.text, r.props.revision, r.props.revisionAuthor])).toEqual([
+      ['Dear {{old}} ', 'delete', 'Eva'],
+      ['Ana, Pérez', 'insert', 'Eva'],
+    ]);
+  });
+
+  it('changes a format while changes are tracked as a change to just what differs', () => {
+    const by = { author: 'Ana', date: '2026-10-21T00:00:00Z' };
+    let doc: Doc = { ...createDoc([p('Pay {{price}} now')]), trackRevisions: true };
+    for (const id of ['currency', 'upper'] as const) doc = trackDocEdit(doc, setVariableFormat(doc, 'price', id, true, '', 'en'), by);
+    expect(doc.paragraphs[0].runs.map((r) => [r.text, r.props.revision ?? ''])).toEqual([
+      ['Pay {{price', ''],
+      [' | currency | upper', 'insert'],
+      ['}} now', ''],
+    ]);
+    expect(paragraphText(decideAllRevisions(doc, false).paragraphs[0])).toBe('Pay {{price}} now');
+    // Nothing to change gives the same document back.
+    expect(setVariableFormat(doc, 'price', 'bold', false)).toBe(doc);
+  });
+
+  it('tracks a filled variable as the variable taken out and its value put in, not word by word around the spaces', () => {
+    const by = { author: 'Ana', date: '2026-10-21T00:00:00Z' };
+    const doc: Doc = { ...createDoc([p('From {{client | capital}} today')]), trackRevisions: true };
+    const tracked = trackDocEdit(doc, fillVariables(doc, { client: 'ana pérez' }), by);
+    expect(tracked.paragraphs[0].runs.map((r) => [r.text, r.props.revision ?? ''])).toEqual([
+      ['From ', ''],
+      ['{{client | capital}}', 'delete'],
+      ['Ana Pérez', 'insert'],
+      [' today', ''],
+    ]);
+  });
 });
 
 describe('formats of variables', () => {
   const today = new Date(2026, 9, 12);
-  const out = (value: string, ...formats: string[]) => formatValue(value, formats, { today }).text;
+  const out = (value: string, ...formats: string[]) => formatValue(value, formats, { today, locale: 'es-MX' }).text;
 
   it('writes dates, numbers and capitals as asked', () => {
     expect(out('2026-10-12', 'fecha')).toBe('12/10/2026');
@@ -111,6 +188,16 @@ describe('formats of variables', () => {
     header: { paragraphs: [p('{{cliente | mayúsculas | negrita}}')] },
   });
 
+  it('writes values in the language of the document, or in English', () => {
+    const template = createDoc([{ props: {}, runs: [{ text: '{{day | long date}} · {{amount | currency}}', props: {} }] }]);
+    const said = (language?: string) => docText(fillVariables(language ? importDocx(exportDocx(template, { language })) : template, { day: '2026-10-21', amount: '1234.5' }));
+    expect(said('en-US')).toBe('October 21, 2026 · $1,234.50');
+    expect(said('es-MX')).toBe('21 de octubre de 2026 · $1,234.50');
+    expect(said()).toBe('October 21, 2026 · $1,234.50');
+    // One given is the one used.
+    expect(docText(fillVariables(importDocx(exportDocx(template, { language: 'en-US' })), { day: '2026-10-21' }, { locale: 'es-MX' }))).toContain('21 de octubre de 2026');
+  });
+
   it('fills each use in its own format', () => {
     const found = findVariables(doc());
     expect(found.map((v) => [v.name, v.formats])).toEqual([
@@ -122,11 +209,11 @@ describe('formats of variables', () => {
       ['importe', ['moneda']],
     ]);
     expect(variableNames(doc())).toEqual(['fecha', 'cliente', 'importe']);
-    const filled = fillVariables(doc(), { fecha: '2026-10-12', cliente: 'Ana Pérez', importe: '1500' });
+    const filled = fillVariables(doc(), { fecha: '2026-10-12', cliente: 'Ana Pérez', importe: '1500' }, { locale: 'es-MX' });
     expect(docText(filled).split('\n')).toEqual(['A 12 de octubre de 2026, ANA PÉREZ paga $1,500.00 (Ana Pérez).', '2026-10-12 $1,500.00']);
     expect(filled.paragraphs[0].runs.filter((r) => resolveRun(r.props).bold).map((r) => r.text)).toEqual(['ANA PÉREZ']);
     expect(resolveRun(filled.header!.paragraphs[0].runs[0].props).bold).toBe(true);
-    expect(variableProblems(doc(), { fecha: 'pronto', cliente: 'Ana' })).toEqual([
+    expect(variableProblems(doc(), { fecha: 'pronto', cliente: 'Ana' }, { locale: 'es-MX' })).toEqual([
       { name: 'fecha', format: 'fecha larga', kind: 'value' },
       { name: 'fecha', format: 'nada', kind: 'format' },
     ]);
@@ -136,18 +223,54 @@ describe('formats of variables', () => {
     expect(variableFormats(doc(), 'cliente')).toEqual([]);
     expect(variableFormats(doc(), 'importe')).toEqual([{ id: 'currency', arg: '' }]);
     expect(variableUses(doc(), 'cliente')).toBe(3);
-    let next = setVariableFormat(doc(), 'cliente', 'bold', true);
+    let next = setVariableFormat(doc(), 'cliente', 'bold', true, '', 'es');
     expect(docText(next).split('\n')[0]).toBe('A {{ fecha | fecha larga }}, {{cliente | mayúsculas | negrita}} paga {{importe | moneda}} ({{cliente | negrita}}).');
     expect(variableFormats(next, 'cliente')).toEqual([{ id: 'bold', arg: '' }]);
     // One way of writing capitals, or a kind of value, takes the place of another; what is not understood is kept.
-    next = setVariableFormat(next, 'cliente', 'capital', true);
+    next = setVariableFormat(next, 'cliente', 'capital', true, '', 'es');
     expect(next.header!.paragraphs[0].runs[0].text).toBe('{{cliente | negrita | nombre propio}}');
-    next = setVariableFormat(next, 'fecha', 'date', true, 'dd.MM.yyyy');
+    next = setVariableFormat(next, 'fecha', 'date', true, 'dd.MM.yyyy', 'es');
     expect(docText(next).split('\n')[1]).toBe('{{fecha | nada | fecha: dd.MM.yyyy}} {{importe|moneda}}');
     expect(variableFormats(next, 'fecha')).toEqual([{ id: 'date', arg: 'dd.MM.yyyy' }]);
     next = setVariableFormat(next, 'importe', 'currency', false);
     expect(docText(next).split('\n')[1]).toBe('{{fecha | nada | fecha: dd.MM.yyyy}} {{importe}}');
     expect(setVariableFormat(next, 'otra', 'bold', true)).toBe(next);
+    // In English, the formats are written by their English names, and read as well.
+    const english = setVariableFormat(setVariableFormat(doc(), 'importe', 'currency', true, '', 'en'), 'fecha', 'dateLong', true, '', 'en-US');
+    expect(docText(english).split('\n')[0]).toBe('A {{fecha | long date}}, {{cliente|mayúsculas|negrita}} paga {{importe | currency}} ({{cliente}}).');
+    expect(variableFormats(english, 'fecha')).toEqual([{ id: 'dateLong', arg: '' }]);
+    expect(formatText('date', 'dd/MM/yyyy', 'en')).toBe('date: dd/MM/yyyy');
+    expect(formatText('date', 'dd/MM/yyyy', 'es-MX')).toBe('fecha: dd/MM/yyyy');
+    expect(formatText('date', 'dd/MM/yyyy')).toBe('date: dd/MM/yyyy');
+    // Without a language, the document's.
+    const spanish = importDocx(exportDocx(createDoc([p('{{fecha}}')]), { language: 'es-MX' }));
+    expect(docText(setVariableFormat(spanish, 'fecha', 'dateLong', true))).toBe('{{fecha | fecha larga}}');
+    expect(docText(setVariableFormat(createDoc([p('{{fecha}}')]), 'fecha', 'dateLong', true))).toBe('{{fecha | long date}}');
+  });
+});
+
+describe('formats of variables in another language', () => {
+  const today = new Date(2026, 9, 12);
+  const out = (value: string, locale: string, ...formats: string[]) => formatValue(value, formats, { today, locale }).text;
+
+  it('writes days, numbers and currencies as the language does', () => {
+    expect(out('2026-10-12', 'en-US', 'long date')).toBe('October 12, 2026');
+    expect(out('2026-10-12', 'en-US', 'full date')).toBe('Monday, October 12, 2026');
+    expect(out('2026-10-12', 'en-US', 'date')).toBe('10/12/2026');
+    expect(out('2026-10-12', 'en-GB', 'date')).toBe('12/10/2026');
+    // A day written with its digits is read in the order of the language.
+    expect(out('10/12/2026', 'en-US', 'long date')).toBe('October 12, 2026');
+    expect(out('today', 'de-DE', 'fecha: d. MMMM yyyy')).toBe('12. Oktober 2026');
+    expect(out('1234567.5', 'de-DE', 'number')).toBe('1.234.567,5');
+    expect(out('1234.5', 'en-US', 'currency')).toBe('$1,234.50');
+    expect(out('1234.5', 'de-DE', 'currency: EUR').replace(/\s/g, ' ')).toBe('1.234,50 €');
+    expect(formatValue('1234.5', ['moneda'], { locale: 'es-MX', currency: 'MXN' }).text).toBe('$1,234.50');
+    expect(out('istanbul', 'tr-TR', 'uppercase')).toBe('İSTANBUL');
+    // Without a language, in English.
+    expect(formatValue('2026-10-12', ['fecha larga']).text).toBe('October 12, 2026');
+    expect(formatValue('2026-10-12', ['date']).text).toBe('10/12/2026');
+    expect(formatValue('1234.5', ['moneda']).text).toBe('$1,234.50');
+    expect(formatValue('1234.5', ['moneda: EUR']).problems).toEqual([]);
   });
 });
 

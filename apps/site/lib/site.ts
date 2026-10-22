@@ -6,16 +6,19 @@ export const NPM = 'https://www.npmjs.com/package/@rebodocs/react';
 /** Every package, on npm. */
 export const NPM_ORG = 'https://www.npmjs.com/org/rebodocs';
 
+import type { Pastel } from './home';
+
 export interface NavItem {
   title: string;
   /** The file in `content/docs`, without `.md`; `index` is `/docs/`. */
   slug: string;
 }
 
-/** The pages of the documentation, in the order they are read. */
-export const NAV: { title: string; items: NavItem[] }[] = [
+/** The pages of the documentation, in the order they are read; each group has its colour in the sidebar. */
+export const NAV: { title: string; color: Pastel; items: NavItem[] }[] = [
   {
     title: 'Start',
+    color: 'blue',
     items: [
       { title: 'What is Rebodocs', slug: 'index' },
       { title: 'Getting started', slug: 'getting-started' },
@@ -24,6 +27,7 @@ export const NAV: { title: string; items: NavItem[] }[] = [
   },
   {
     title: 'Put it in your app',
+    color: 'purple',
     items: [
       { title: 'React component', slug: 'react' },
       { title: 'Headless: your own UI', slug: 'headless' },
@@ -36,6 +40,7 @@ export const NAV: { title: string; items: NavItem[] }[] = [
   },
   {
     title: 'Documents',
+    color: 'yellow',
     items: [
       { title: 'Templates and variables', slug: 'templates' },
       { title: 'On a server: DOCX and PDF', slug: 'server' },
@@ -49,6 +54,7 @@ export const NAV: { title: string; items: NavItem[] }[] = [
   },
   {
     title: 'Together',
+    color: 'pink',
     items: [
       { title: 'Real-time collaboration', slug: 'collaboration' },
       { title: 'AI assistants (MCP)', slug: 'assistants' },
@@ -56,6 +62,7 @@ export const NAV: { title: string; items: NavItem[] }[] = [
   },
   {
     title: 'Reference',
+    color: 'green',
     items: [
       { title: 'Packages', slug: 'packages' },
       { title: 'Components and hooks', slug: 'components' },
@@ -67,4 +74,8 @@ export const NAV: { title: string; items: NavItem[] }[] = [
 ];
 
 export const PAGES = NAV.flatMap((group) => group.items);
+/** The group a page is in, for the line above its title. */
+export const groupOf = (slug: string) => NAV.find((group) => group.items.some((item) => item.slug === slug));
 export const hrefOf = (slug: string) => (slug === 'index' ? '/docs/' : `/docs/${slug}/`);
+/** The same page as Markdown, for language models: made by scripts/llms.ts once the site is built. */
+export const markdownOf = (slug: string) => `/docs/${slug}.md`;

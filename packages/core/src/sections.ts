@@ -2,6 +2,8 @@
 // As in Word, the paragraph that ends a section says how it is set out; the
 // last section's own are the document's.
 
+import { resizeLetterhead } from './letterhead';
+import { sectionEnds } from './stories';
 import {
   type Columns,
   type Doc,
@@ -63,7 +65,10 @@ export function setSectionPage(doc: Doc, para: number, patch: Partial<PageSetup>
   const was = end < 0 ? doc.page : doc.paragraphs[end].section!.page;
   const page = { ...was, ...patch };
   if ((Object.keys(page) as (keyof PageSetup)[]).every((key) => page[key] === was[key])) return doc;
-  return end < 0 ? { ...doc, page } : patchSection(doc, end, { page });
+  // The letterhead is the size of the page, whatever the paper: found by the page it covers, before it changes.
+  const index = end < 0 ? undefined : sectionEnds(doc).indexOf(end);
+  const sized = page.width !== was.width || page.height !== was.height ? resizeLetterhead(doc, page.width, page.height, index) : doc;
+  return end < 0 ? { ...sized, page } : patchSection(sized, end, { page });
 }
 
 /** Whether section `index` has a header and a footer of its own, and does not show the document's. The last one's are the document's. */

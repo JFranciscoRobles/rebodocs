@@ -1,150 +1,170 @@
-# @rebodocs/react
+<p align="center">
+  <img src="https://rebodocs.com/logo.svg" alt="" width="56" height="56">
+</p>
 
-The editor for a React application: a component with everything in it, or a
-set of hooks to build an interface of your own.
+<h1 align="center">@rebodocs/react</h1>
 
-## Purpose
+<p align="center">
+  A DOCX editor for React and Next.js: one component with everything in it, or headless hooks for an interface of your own.
+</p>
 
-To put the editor in a screen of another application (it was made for a CRM
-written in Next.js) without an iframe, with the application deciding where
-documents are kept, who may open them and what the interface looks like.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@rebodocs/react"><img src="https://img.shields.io/npm/v/@rebodocs/react?label=npm&color=0b57d0" alt="npm version"></a>
+  <a href="https://github.com/JFranciscoRobles/rebodocs/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-2e6b3c" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/react-%E2%89%A518-149eca" alt="React 18 or later">
+</p>
+
+<p align="center">
+  <a href="https://rebodocs.com/demo/"><b>Live demo</b></a> ·
+  <a href="https://rebodocs.com/docs/react/">Component</a> ·
+  <a href="https://rebodocs.com/docs/headless/">Headless</a> ·
+  <a href="https://rebodocs.com/docs/components/">API reference</a>
+</p>
+
+---
+
+The editor mounts in your page, not in an iframe, and your application
+decides where documents are kept, who may open them and how the interface
+looks. It is one bundle: the engine, the editor and the collaboration client
+are inside, and React is the only peer.
+
+## Install
 
 ```bash
 npm install @rebodocs/react
 ```
 
-It is built as a bundle: `@rebodocs/core`, `@rebodocs/editor` and the
-collaboration client are inside it, so it installs as one dependency. React
-18 or later is the only peer.
-
-[npm](https://www.npmjs.com/package/@rebodocs/react) · [documentation](https://rebodocs.com/docs/) · [every component and hook](https://rebodocs.com/docs/components/) · [a complete example](https://github.com/JFranciscoRobles/rebodocs/tree/main/apps/demo) · [source](https://github.com/JFranciscoRobles/rebodocs/tree/main/packages/react)
-
-## Two ways to use it
-
-### The whole editor
+## The whole editor
 
 ```tsx
 'use client';
 import { DocsEditor } from '@rebodocs/react';
 
-<DocsEditor
-  docx={file}                       // Uint8Array or ArrayBuffer; empty document without it
-  name="contract.docx"
-  author="Ana"
-  locale="en"
-  onSave={(docx, name) => upload(docx, name)}
-  features={{ files: false, assistant: false }}
-/>
+export function Contract({ file }: { file: Uint8Array }) {
+  return (
+    <div style={{ height: '100vh' }}>
+      <DocsEditor
+        docx={file}
+        name="contract.docx"
+        author="Ana"
+        onSave={(docx, name) => upload(docx, name)}
+      />
+    </div>
+  );
+}
 ```
 
-It draws the toolbar, ruler, side panel, pages and status bar in the element
-it is given, which must have a height. On the server it renders an empty
-element and mounts in the browser.
+Toolbar, ruler, side panel, pages and status bar, in the element it is given,
+which needs a height. It is safe to render on a server: there it draws an
+empty element, and mounts in the browser.
 
-| Prop | What it does |
-| --- | --- |
-| `docx` | The document to open. |
-| `collab` | `{ url, room, ticket }`: the document is a shared room; see `@rebodocs/collab`. |
-| `onSave` | Receives the DOCX when the person saves (menu or ⌘S). |
-| `name`, `author`, `locale` | Follow their props without remounting. |
-| `letterhead` | A picture to use as letterhead whatever the document came with; `null` for none. |
-| `fonts`, `locales` | Fonts and languages of the application's own. |
-| `embedFonts` | Whether the DOCX carries the `fonts` its text is in (TrueType, when their licence lets them); on unless `false`. |
-| `versions` | `{ list, load, save? }`: the versions the application keeps. The side panel gets a tab to compare the document with one and go back to it, and with `save` each save keeps one. |
-| `features` | What is switched on: `menu`, `panel`, `ruler`, `statusBar`, `find`, `title`, `responsive` (on by default); `files`, `language`, `assistant`, `share` (off by default). |
-| `onChange`, `onCollab`, `onError` | Notifications. |
-| `onReady` / `ref` | The handle: `exportDocx()`, `dirty`, `editor`, `collab`. |
+### Props
 
-### Headless
+| Prop | Type | Description |
+| --- | --- | --- |
+| `docx` | `Uint8Array \| ArrayBuffer` | The document to open; an empty one without it. |
+| `name`, `author` | `string` | What the document is called, and who signs notes and changes. |
+| `onSave` | `(docx, name) => void \| Promise` | Called on ⌘S, from the menu, or with `handle.save()`. Keeping the file is yours. |
+| `locale`, `locales` | `string`, `Record<string, Texts>` | The language of the interface, and languages of your own. Default: the browser's, else English. |
+| `language` | `string` | The language the text is in (`'es-MX'`): written in the DOCX, used for dates and amounts of variables, and for spelling. |
+| `spellcheck` | `SpellChecker` | Spell checking: `createSpellChecker({ dictionaries })` with Hunspell dictionaries you serve. |
+| `theme` | `'light' \| 'dark' \| 'auto'` | The colours of the interface. The pages stay white. |
+| `versions` | `{ list, load, save? }` | Versions your application keeps, listed, compared and restored in the side panel. |
+| `collab` | `{ url, room, ticket? }` | The document is a shared room on your collaboration server. |
+| `letterhead` | `Blob \| { bytes, type } \| string \| null` | A picture behind every page, whatever the document came with. |
+| `fonts`, `embedFonts` | `FontSource[]`, `boolean \| 'subset'` | Typefaces of your own, and whether the DOCX carries them. |
+| `unsaved` | `boolean` | `docx` is a draft with changes not saved yet. |
+| `features` | `DocsFeatures` | What is switched on, and the layout. See below. |
+| `onChange`, `onCollab`, `onError` | functions | Notifications. |
+| `ref`, `onReady` | `DocsHandle` | The handle: `exportDocx()`, `save()`, `dirty`, `showPanel()`, `setTheme()`, `editor`, … |
+
+Every prop and what happens when it changes is in the
+[documentation](https://rebodocs.com/docs/react/#props).
+
+### Features
+
+```tsx
+<DocsEditor features={{ files: true, theme: true, panel: 'rail', statusBar: 'chips' }} />
+```
+
+On unless switched off: `menu` (`'screen'` or `'card'`), `panel` (`'right'`,
+`'left'` or `'rail'`), `toolbar` (`'two-rows'`, `'tabs'` or `'row'`),
+`statusBar` (`'floating'`, `'chips'` or `'bar'`), `ruler`, `find`, `focus`,
+`title`, `responsive`. Off unless asked for: `files`, `language`, `theme`,
+`assistant`, `share`.
+
+## Headless
+
+The same editor, without its interface: a provider, a surface for the pages,
+and hooks to build the rest with your own components.
 
 ```tsx
 import { DocsProvider, DocsSurface, useDocs } from '@rebodocs/react';
 
-function Toolbar() {
+function Bold() {
   const { state, commands } = useDocs();
   return (
-    <button className={state.bold ? 'bg-blue-100' : ''} onClick={() => commands.toggleMark('bold')}>
+    <button aria-pressed={state.bold} onClick={() => commands.toggleMark('bold')}>
       B
     </button>
   );
 }
 
-<DocsProvider docx={file} onSave={upload}>
-  <Toolbar />
-  <DocsSurface className="h-full bg-neutral-100" />
-</DocsProvider>
+export function Editor({ file }: { file: Uint8Array }) {
+  return (
+    <DocsProvider docx={file} onSave={upload}>
+      <Bold />
+      <DocsSurface className="h-full" />
+    </DocsProvider>
+  );
+}
 ```
-
-`state` is a plain snapshot (formatting at the selection, page, zoom, what can
-be undone…) that is the same object until something in it changes.
-`commands` are the editor's methods, and give the keyboard back to the
-document after each one: among them `insertFootnote`, `insertTextBox`,
-`restoreVersion`, and `setTrackChanges`, `acceptRevision`,
-`rejectRevision` and the rest for tracked changes, whose state is in
-`state.trackChanges` and `state.revisionCount`.
 
 | Hook | Gives |
 | --- | --- |
-| `useDocs()` | `state`, `commands`, `editor`, `ready`. |
-| `useDocsValue(select, fallback)` | Anything else derived from the editor, re-rendering only when it changes. |
+| `useDocs()` | `state` (a snapshot of formatting, page, zoom, history…), `commands`, `editor`. |
+| `useDocsValue(select)` | Anything derived from the editor, re-rendering only when it changes. |
 | `useDocsFind()` | Find and replace. |
 | `useDocsLink()`, `useDocsNotes()`, `useDocsOutline()` | Links, comments, the outline of headings. |
-| `useDocsVariables()` | Template variables: list, insert, fill; and how each writes its value (a date, an amount, capitals). |
-| `useDocsStyles()`, `useDocsPage()` | Paragraph styles, the standard ones named in the language of the interface; page setup, numbering and letterhead. |
-| `useDocsSelectionBox()` | Where the selection is on screen, to place a panel beside it. |
-| `useDocsResponsive()` | Fits pages to a narrow window; reports the on-screen keyboard. |
-| `useDocsCount()` | Words and characters, of the document and of the selection. |
-| `useDocsBubble()` | The bar beside the selection, when the provider was given `bubble`. |
+| `useDocsVariables()` | Template variables: list, insert, fill, format. |
+| `useDocsStyles()`, `useDocsPage()` | Paragraph styles; page setup, numbering and letterhead. |
+| `useDocsSelectionBox()`, `useDocsBubble()` | Where the selection is on screen; the bar beside it. |
+| `useDocsResponsive()`, `useDocsCount()` | Narrow windows and on-screen keyboards; words and characters. |
 
-The editor answers its own keys (⌘B, ⌘Z, ⌘S, ⌘-click on a link…). Three open
-something only an interface has, and are yours to answer, as props of
-`DocsProvider`: `onLinkKey()` for ⌘K, and `onFindKey(replace)` for ⌘F and ⌘H.
-Each is taken from the browser only while it is given.
+`<DocsRuler />` is the ruler, and `<DocsProvider bubble>` adds the bar beside
+the selection. A [complete interface](https://github.com/JFranciscoRobles/rebodocs/tree/main/apps/demo/src/HeadlessEditor.tsx)
+built on the hooks is in the repository.
 
-`<DocsRuler />`, above the `DocsSurface`, is the ruler: margins and indents
-to drag. Its colours are CSS variables (`--dx-ruler`, `--dx-ruler-ink`…).
+## Without React
 
-`<DocsProvider bubble>` adds the bar that comes up beside the selection: copy,
-cut and paste on a touch screen, a variable made of the words selected, a
-link, a note. It is the one headless piece with a look of its own (classes
-`dx-bb…`); with it, ⌘K asks for a link there unless there is an `onLinkKey`.
+```ts
+import { mountDocs } from '@rebodocs/react/mount';
 
-`createAssistantChat(editor, { endpoint })` is a conversation with Claude
-about the document open: the page holds it and runs on the editor the tools
-Claude asks for, and your backend takes it to the Claude API with your key
-(`assistantRoute` of `@rebodocs/mcp/claude`, in `apps/assistant`).
-
-`mountDocs(element, options)` (also at `@rebodocs/react/mount`) is the whole
-editor without React, for any other framework.
-
-## Building and publishing
-
-```bash
-npm run build:react                  # builds it and packs packages/react/rebodocs-react-<version>.tgz
-npm publish -w @rebodocs/react       # builds it again, and publishes it
+const handle = mountDocs(document.querySelector('#editor')!, { docx: bytes, features: { files: true } });
 ```
 
-The bundle starts with `'use client'`, so it can be imported from a Next.js
-app directory. It was tried in Next.js 16 with React 19 and Tailwind 4.
+The same editor and options, for any framework or none. npm does not install
+React for it.
 
-## Where it can improve
+## Also in the package
 
-- **Publishing.** It is one bundle with the engine, the editor and the
-  collaboration client inside. They are on npm by themselves too; depending
-  on them instead would keep one copy of the engine in an application that
-  also uses `@rebodocs/core`.
-- **Headless coverage.** The ruler (`<DocsRuler />`) and the bar beside the
-  selection come as they are drawn, with colours to change, or not at all:
-  there is no hook that gives what they show to draw one's own. Hooks for
-  tables and pictures would save reaching for `editor`.
-- **Bundle size.** Everything is in one file of about 550 kB (160 kB
-  gzipped). The collaboration client and the MCP bridge could be separate
-  entry points loaded only when used.
-- **Controlled document.** The document is given once (`docx`) and read back
-  on save. There is no `value`/`onChange` pair with the document as data,
-  which some applications will expect.
-- **Types.** Declarations are emitted by `scripts/types.mjs` as a tree
-  mirroring the source of the packages. A single rolled-up `.d.ts` would be
-  cleaner to consume.
-- **Tests.** None of its own: it was verified by hand in a scratch Next.js
-  application. Component tests belong here.
+- `createSpellChecker`, `addLocale`, `setLocale`, `addFonts`: spelling, languages and fonts.
+- `createAssistantChat(editor, { endpoint })`: Claude in a chat beside the document, through a route of your backend (`@rebodocs/mcp/claude`).
+- `createVersionView`, `compareDocs`: versions, compared word by word.
+
+## Compatibility
+
+React 18 or 19. Tried in Next.js 16 (App Router) with Tailwind 4; the bundle
+starts with `'use client'`. Modern browsers; spell checking runs in a Web
+Worker made from a Blob, so a Content Security Policy must allow
+`worker-src blob:`.
+
+## Status
+
+0.9: ready to try in production; the API may change before 1.0. See the
+[changelog](https://github.com/JFranciscoRobles/rebodocs/blob/main/CHANGELOG.md)
+and the [known limits](https://rebodocs.com/docs/status/).
+
+## License
+
+[MIT](https://github.com/JFranciscoRobles/rebodocs/blob/main/LICENSE). Bundled third-party code is listed in `THIRD_PARTY_NOTICES.md`.

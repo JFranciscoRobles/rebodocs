@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/playground",
-  "version": "0.8.7",
+  "version": "0.9.0",
   "description": "The test application every package is tried in.",
   "license": "MIT",
   "private": true,
@@ -10,9 +10,9 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@rebodocs/collab": "*",
-    "@rebodocs/core": "*",
-    "@rebodocs/editor": "*",
-    "@rebodocs/mcp": "*"
+    "@rebodocs/collab": "^0.9.0",
+    "@rebodocs/core": "^0.9.0",
+    "@rebodocs/editor": "^0.9.0",
+    "@rebodocs/mcp": "^0.9.0"
   }
 }

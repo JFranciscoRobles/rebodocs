@@ -4,10 +4,11 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, extname, join } from 'node:path';
-import { type Doc, type FontFile, readFont, resolveRun } from '@rebodocs/core';
+import { type Doc, type FontFile, readFonts, resolveRun } from '@rebodocs/core';
 
 export const SYSTEM_FONTS = [
-  '/System/Library/Fonts/Supplemental',
+  // Its Supplemental folder is inside: Arial and the others; the collections (.ttc) of Helvetica and its kin are here.
+  '/System/Library/Fonts',
   '/Library/Fonts',
   join(homedir(), 'Library/Fonts'),
   '/usr/share/fonts',
@@ -18,13 +19,13 @@ export const SYSTEM_FONTS = [
 /** Families read even when the document does not name them, to stand in for the ones that are missing. */
 export const STAND_INS = ['Arial', 'Times New Roman', 'Courier New', 'Liberation Sans', 'Liberation Serif', 'Liberation Mono', 'DejaVu Sans', 'DejaVu Serif'];
 
-/** Every .ttf and .otf under a folder. */
+/** Every .ttf, .otf and .ttc under a folder. */
 function fontFiles(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) fontFiles(path, out);
-    else if (/\.(ttf|otf)$/i.test(name)) out.push(path);
+    else if (/\.(ttf|otf|ttc)$/i.test(name)) out.push(path);
   }
   return out;
 }
@@ -47,8 +48,7 @@ export function loadFonts(dirs: string[], families: Iterable<string>): FontFile[
     for (const path of fontFiles(dir)) {
       const name = squash(basename(path, extname(path)));
       if (!wanted.some((family) => name.startsWith(family))) continue;
-      const font = readFont(new Uint8Array(readFileSync(path)));
-      if (font) fonts.push(font);
+      fonts.push(...readFonts(new Uint8Array(readFileSync(path))));
     }
   }
   return fonts;

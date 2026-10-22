@@ -1,6 +1,7 @@
 // Page numbers: a paragraph in the header or the footer whose text holds the
 // PAGE field (and NUMPAGES, for "of n"). Layout fills the fields in per page.
 
+import { documentLanguage } from './docx/source';
 import { type Align, type Doc, type Paragraph, type Run, type RunProps, type Story, defined } from './model';
 
 export type PageNumberFormat =
@@ -8,22 +9,21 @@ export type PageNumberFormat =
   | 'number'
   /** "3 / 9" */
   | 'numberOfTotal'
-  /** "Página 3" */
+  /** "Page 3", "Página 3" */
   | 'page'
-  /** "Página 3 de 9" */
+  /** "Page 3 of 9", "Página 3 de 9" */
   | 'pageOfTotal';
 
 export interface PageNumbering {
   place: 'header' | 'footer';
   align: Exclude<Align, 'justify'>;
   format: PageNumberFormat;
-  /** The word that goes before the number and the one between it and the total, when they are not the Spanish ones. */
+  /** The word that goes before the number and the one between it and the total; without them, those of the document's language. */
   words?: { page: string; of: string };
 }
 
-/** The word that goes before the number, and the one between it and the total. */
-const WORD = 'Página';
-const OF = 'de';
+/** The word that goes before the number, and the one between it and the total: in Spanish for a document in Spanish, in English otherwise. */
+const wordsOf = (doc: Doc) => (documentLanguage(doc)?.toLowerCase().startsWith('es') ? { page: 'Página', of: 'de' } : { page: 'Page', of: 'of' });
 
 /** What a paragraph that is only a page number may hold besides the fields: the words and marks around them. */
 const AROUND = /^[\s\-–—|/.·]*(?:p[áa]g(?:ina|\.)?|page)?[\s\-–—|/.·]*(?:de|of)?[\s\-–—|/.·]*$/i;
@@ -65,7 +65,7 @@ function numberProps(doc: Doc): RunProps {
   return defined<RunProps>({ fontFamily: like.fontFamily, fontSize: 10, color: '000000' });
 }
 
-function numberParagraph(doc: Doc, { align, format, words }: PageNumbering): Paragraph {
+function numberParagraph(doc: Doc, { align, format, words = wordsOf(doc) }: PageNumbering): Paragraph {
   const props = numberProps(doc);
   const text = (value: string): Run => ({ text: value, props });
   // The result text is a placeholder: layout and Word both replace it with the real number.
@@ -73,9 +73,9 @@ function numberParagraph(doc: Doc, { align, format, words }: PageNumbering): Par
   const worded = format === 'page' || format === 'pageOfTotal';
   const total = format === 'numberOfTotal' || format === 'pageOfTotal';
   const runs = [
-    ...(worded ? [text(`${words?.page ?? WORD} `)] : []),
+    ...(worded ? [text(`${words.page} `)] : []),
     field('PAGE'),
-    ...(total ? [text(worded ? ` ${words?.of ?? OF} ` : ' / '), field('NUMPAGES')] : []),
+    ...(total ? [text(worded ? ` ${words.of} ` : ' / '), field('NUMPAGES')] : []),
   ];
   return { props: { align, spacingBefore: 0, spacingAfter: 0, lineHeight: 1 }, runs };
 }

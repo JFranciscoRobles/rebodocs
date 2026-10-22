@@ -740,46 +740,20 @@
   background: rgb(0 0 0 / 0.5);
 }
 
-/* The bar beside the selection is the library's own, put in the body: it is given the look of the rest. */
-body .dx-bb {
-  border-color: #505050;
-  border-radius: 6px;
-  background: #323232;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.6);
-  color: #ebebeb;
-  font-family: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
-  color-scheme: dark;
-}
-
-body .dx-bb-what {
-  color: #b8b8b8;
-}
-
-body .dx-bb button:hover:not(:disabled) {
-  background: #3f3f3f;
-}
-
-body .dx-bb button.dx-on {
-  background: #4a4a4a;
-  color: #fff;
-  box-shadow: inset 0 -2px 0 #1473e6;
-}
-
-body .dx-bb button.dx-bb-danger:hover {
-  background: #5a2a26;
-  color: #ffb4ab;
-}
-
-body .dx-bb input {
-  border-color: #505050;
-  background: #262626;
-}
-
-body .dx-bb button:focus-visible,
-body .dx-bb input:focus-visible {
-  outline-color: #1473e6;
-}
-
-body .dx-bb-sep {
-  background: #4d4d4d;
+/*
+ * What the library puts on the page outside .hd (the bar beside the selection, the grid of pictures, what a note
+ * or a link says when the pointer is on it) is put in the body: its colours are set there, while .hd is on the page.
+ */
+body:has(.hd) {
+  --dx-ui-bar: #2b2b2b;
+  --dx-ui-bg: #323232;
+  --dx-ui-ink: #ebebeb;
+  --dx-ui-muted: #b8b8b8;
+  --dx-ui-line: #505050;
+  --dx-ui-hover: #3f3f3f;
+  --dx-ui-active: #4a4a4a;
+  --dx-ui-active-line: #6cb0ff;
+  --dx-ui-accent: #8ab8ff;
+  --dx-ui-accent-hover: #a6c8ff;
+  --dx-ui-on-accent: #0f1f3a;
 }

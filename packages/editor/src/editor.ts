@@ -51,6 +51,9 @@ import {
   tocTarget,
   updateToc,
   type FootnotePart,
+  type Paragraph,
+  type Run,
+  type Story,
   type StoryPart,
   storyKind,
   footnoteIdOf,
@@ -60,9 +63,12 @@ import {
   insertTextBox,
   textBoxId,
   textBoxIdOf,
+  textParts,
   textBoxPart,
+  type RevisionChange,
   type RevisionView,
   acceptRevisions,
+  byAuthor,
   decideAllRevisions,
   hasRevisions,
   rejectRevisions,
@@ -73,6 +79,9 @@ import {
   trackDocEdit,
   trackEdit,
   footnoteNumbers,
+  footnoteReferenceId,
+  altText,
+  setAltText,
   hasOwnFirstPage,
   insertFootnote,
   shownFootnotes,
@@ -87,7 +96,7 @@ import {
   storyOf,
   footnotePart,
   splitPart,
-  storyParts,
+  textByFamily,
   storySource,
   storyPart,
   withStory,
@@ -116,15 +125,23 @@ import {
   type Variable,
   fillVariables,
   findAll,
+  findAllVariables,
+  documentLanguage,
+  findBlockMarks,
+  templateBlocks,
+  type Block,
+  type TemplateData,
   findVariables,
   hitTest,
   importDocx,
   letterheadImage,
   letterheadMargins,
+  withLetterheadMargins,
   letterheadOf,
   insertColumn,
   insertFragment,
   imageExtension,
+  imageTypeOf,
   insertImage,
   insertRow,
   insertImageGrid,
@@ -214,12 +231,15 @@ import {
   parseClip,
   serializeClip,
 } from '@rebodocs/core';
-import { onLocaleChange, styleName, t } from './i18n';
-import { type Announcer, VISUALLY_HIDDEN, createAnnouncer, injectA11yStyle, installRegionKeys, markRegion, spokenChar, spokenText } from './a11y';
+import { getLocale, onLocaleChange, speaks, styleName, t, withRegion } from './i18n';
+import { dropParagraphDialog } from './paragraphdialog';
+import { type Announcer, type Spoken, VISUALLY_HIDDEN, createAnnouncer, injectA11yStyle, installRegionKeys, markRegion, spokenChar, spokenText } from './a11y';
 import { clipFromHtml } from './paste';
 import { fontFaces, fontFile, onFontsChange } from './fonts';
 import { IS_MAC, keyboardInset } from './platform';
 import { CanvasMeasurer, cssFont } from './measurer';
+import { type SpellChecker, type SpelledWord, wordsToCheck } from './spellcheck';
+import { type Theme, applyTheme } from './theme';
 
 /** Someone else's caret on the document: who they are, and where their selection is. */
 export interface PeerCaret {
@@ -257,6 +277,8 @@ export type MarkKey = 'bold' | 'italic' | 'underline' | 'strike';
  * as the window, which is how a document is read and written on a phone.
  */
 export type ViewMode = 'column' | 'spread' | 'grid' | 'flow';
+/** How tracked changes are shown: marked, or the document as it would be with all of them accepted, or with none. */
+export type ChangesView = 'all' | 'accepted' | 'original';
 /** A zoom that follows the size of the window: the page as wide as it, or the whole page in it. */
 export type ZoomFit = 'width' | 'page';
 
@@ -279,7 +301,24 @@ const PT_TO_PX = 4 / 3;
 function moveOffset(pos: Position, delta: number): Position {
   return { para: pos.para, offset: pos.offset + delta };
 }
+/** The variables of a header, a footer or a note as a page shows it, kept while it is the same: every page draws them again. */
+const shownVariables = new WeakMap<Story['paragraphs'], { range: Range }[]>();
+function variablesOf(story: Pick<Doc, 'paragraphs'>): { range: Range }[] {
+  let found = shownVariables.get(story.paragraphs);
+  if (!found) shownVariables.set(story.paragraphs, (found = [...findVariables(story), ...findBlockMarks(story)]));
+  return found;
+}
+
+/** The variables of paragraphs `first` to `last` only: each is inside one paragraph, and the others are on pages not drawn. */
+function variablesIn(story: Pick<Doc, 'paragraphs'>, [first, last]: [number, number]): { range: Range }[] {
+  const some = { paragraphs: story.paragraphs.slice(first, last + 1) };
+  const back = (pos: Position): Position => ({ ...pos, para: pos.para + first });
+  return [...findVariables(some), ...findBlockMarks(some)].map(({ range }) => ({ range: { from: back(range.from), to: back(range.to) } }));
+}
+
 const TYPING_MERGE_MS = 1000;
+/** How long after the last key the words not known yet are asked about. */
+const SPELL_WAIT_MS = 250;
 const SCROLL_MARGIN = 24;
 /** How the key that follows a link is written: the command key, or Ctrl where there is none. */
 const MOD_KEY = IS_MAC ? '⌘' : 'Ctrl';
@@ -341,7 +380,7 @@ const CSS = `
 .dx-pages.dx-grid{flex-direction:row;flex-wrap:wrap;justify-content:safe center;align-content:flex-start;min-width:0}
 .dx-pages.dx-flow{align-items:flex-start;gap:0;padding:0}
 .dx-flow .dx-page{box-shadow:none}
-.dx-page{position:relative;flex:none;overflow:hidden;background:#fff;box-shadow:var(--dx-page-shadow,0 1px 3px rgba(0,0,0,.25));cursor:text}
+.dx-page{position:relative;flex:none;overflow:hidden;background:#fff;box-shadow:var(--dx-page-shadow,0 1px 2px rgba(47,46,43,.08),0 10px 28px -10px rgba(47,46,43,.22));cursor:text}
 .dx-sheet{position:absolute;left:0;top:0;transform-origin:0 0}
 .dx-frag{position:absolute;white-space:pre;font-kerning:none;user-select:none;pointer-events:none}
 .dx-object{position:absolute;box-sizing:border-box;max-width:none;max-height:none;pointer-events:none;user-select:none}
@@ -353,42 +392,44 @@ const CSS = `
 .dx-notes-rule{position:absolute;background:#000;pointer-events:none}
 .dx-change-bar{position:absolute;width:1px;background:#5f6470;pointer-events:none}
 .dx-textbox{position:absolute;box-sizing:border-box;pointer-events:none}
-.dx-textbox.dx-on{outline:1px dashed #0b57d0;outline-offset:2px}
+.dx-textbox.dx-on{outline:1px dashed var(--dx-ui-accent,#0b57d0);outline-offset:2px}
 .dx-band{position:absolute;left:0;top:0}
 .dx-turn{position:absolute;overflow:hidden}
 .dx-turn .dx-turn{overflow:visible;width:0;height:0}
 .dx-editing .dx-band{opacity:.4}
 .dx-editing-header .dx-band-header,.dx-editing-footer .dx-band-footer{opacity:1}
-.dx-edge{position:absolute;left:0;right:0;height:0;border-top:1px dashed #0b57d0;pointer-events:none}
-.dx-edge span{position:absolute;left:12pt;padding:1pt 6pt;background:#0b57d0;color:#fff;font:8pt/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;white-space:nowrap}
+.dx-edge{position:absolute;left:0;right:0;height:0;border-top:1px dashed var(--dx-ui-accent,#0b57d0);pointer-events:none}
+.dx-edge span{position:absolute;left:12pt;padding:1pt 6pt;background:var(--dx-ui-accent,#0b57d0);color:var(--dx-ui-on-accent,#fff);font:8pt/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;white-space:nowrap}
 .dx-edge-header span{top:0;border-radius:0 0 3pt 3pt}
 .dx-edge-footer span{bottom:1px;border-radius:3pt 3pt 0 0}
 .dx-var{position:absolute;border-radius:2pt;background:rgba(11,87,208,.1);box-shadow:inset 0 0 0 .5pt rgba(11,87,208,.45);pointer-events:none}
 .dx-find{position:absolute;background:rgba(255,196,0,.45);pointer-events:none}
+/* A word spelled wrong: a red wave under it, as every word processor draws it. */
+.dx-spell{position:absolute;height:3pt;pointer-events:none;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='3'%3E%3Cpath d='M0 2.5Q1 .5 2 1.5T4 1.5' fill='none' stroke='%23d93025' stroke-width='.8'/%3E%3C/svg%3E") repeat-x left bottom/4pt 3pt}
 .dx-note{position:absolute;border-bottom:1.2pt solid;box-sizing:border-box;pointer-events:none}
 .dx-over-link .dx-page{cursor:pointer}
-.dx-toc-chip{position:absolute;display:inline-flex;align-items:center;gap:3pt;height:15pt;padding:0 6pt;border:1px solid #c9d6ee;border-radius:8pt;background:#fff;color:#0b57d0;font:8pt/1 system-ui,-apple-system,"Segoe UI",sans-serif;white-space:nowrap;cursor:pointer;user-select:none}
-.dx-toc-chip:hover{background:#eef3fd}
+.dx-toc-chip{position:absolute;display:inline-flex;align-items:center;gap:3pt;height:15pt;padding:0 6pt;border:1px solid var(--dx-ui-active-line,#a8c7fa);border-radius:8pt;background:var(--dx-ui-bg,#fff);color:var(--dx-ui-accent,#0b57d0);font:8pt/1 system-ui,-apple-system,"Segoe UI",sans-serif;white-space:nowrap;cursor:pointer;user-select:none}
+.dx-toc-chip:hover{background:var(--dx-ui-hover,#f3f1ec)}
 .dx-notes-on .dx-page{overflow:visible}
 .dx-notes-on .dx-sheet{overflow:hidden}
 .dx-margin{position:absolute;left:100%;top:0;height:0;transform-origin:0 0;cursor:default}
-.dx-mnote{position:absolute;left:8pt;right:6pt;padding:5pt 7pt;border:1px solid #d9dce3;border-left:3pt solid;border-radius:5pt;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08);font:8.5pt/1.35 system-ui,-apple-system,"Segoe UI",sans-serif;color:#2b2f38;cursor:pointer;user-select:none}
-.dx-mnote:hover{box-shadow:0 2px 8px rgba(0,0,0,.16)}
-.dx-mnote.dx-on{border-color:#0b57d0;box-shadow:0 2px 10px rgba(11,87,208,.22);z-index:1}
-.dx-mnote-by{padding-bottom:1pt;color:#5f6470;font-size:7.5pt;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dx-mnote{position:absolute;left:8pt;right:6pt;padding:5pt 7pt;border:1px solid var(--dx-ui-line,#e6e3dc);border-left:3pt solid;border-radius:5pt;background:var(--dx-ui-bg,#fff);box-shadow:0 1px 2px rgba(47,46,43,.08);font:8.5pt/1.35 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--dx-ui-ink,#2f2e2b);cursor:pointer;user-select:none}
+.dx-mnote:hover{box-shadow:0 2px 8px rgba(47,46,43,.16)}
+.dx-mnote.dx-on{border-color:var(--dx-ui-accent,#0b57d0);box-shadow:0 2px 10px rgba(11,87,208,.22);z-index:1}
+.dx-mnote-by{padding-bottom:1pt;color:var(--dx-ui-muted,#5f5d58);font-size:7.5pt;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dx-mnote-text{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere}
 .dx-mnote.dx-on .dx-mnote-text{-webkit-line-clamp:unset}
-.dx-note-tip{position:fixed;z-index:35;max-width:300px;padding:8px 10px;border:1px solid #d2d6de;border-left:4px solid;border-radius:8px;background:#fff;box-shadow:0 6px 20px rgba(0,0,0,.16);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:#2b2f38;white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:none}
+.dx-note-tip{position:fixed;z-index:35;max-width:300px;padding:8px 10px;border:1px solid var(--dx-ui-line,#e6e3dc);border-left:4px solid;border-radius:8px;background:var(--dx-ui-bg,#fff);box-shadow:0 6px 20px rgba(47,46,43,.16);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--dx-ui-ink,#2f2e2b);white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:none}
 .dx-link-tip{border-left-color:#0563c1;white-space:normal}
-.dx-note-by{padding-bottom:2px;color:#5f6470;font-size:11px;font-weight:600}
-.dx-objsel{position:absolute;box-sizing:border-box;border:1px solid #0b57d0;pointer-events:none}
-.dx-objh{position:absolute;width:9px;height:9px;margin:-5px;box-sizing:border-box;border:1px solid #fff;border-radius:50%;background:#0b57d0;pointer-events:auto}
+.dx-note-by{padding-bottom:2px;color:var(--dx-ui-muted,#5f5d58);font-size:11px;font-weight:600}
+.dx-objsel{position:absolute;box-sizing:border-box;border:1px solid var(--dx-ui-accent,#0b57d0);pointer-events:none}
+.dx-objh{position:absolute;width:9px;height:9px;margin:-5px;box-sizing:border-box;border:1px solid var(--dx-ui-bg,#fff);border-radius:50%;background:var(--dx-ui-accent,#0b57d0);pointer-events:auto}
 .dx-objh-nw{left:0;top:0;cursor:nwse-resize}.dx-objh-se{left:100%;top:100%;cursor:nwse-resize}
 .dx-objh-ne{left:100%;top:0;cursor:nesw-resize}.dx-objh-sw{left:0;top:100%;cursor:nesw-resize}
 .dx-col-resize .dx-page{cursor:col-resize}
-.dx-guide{position:absolute;width:0;border-left:1px dashed #0b57d0;pointer-events:none;z-index:3}
-.dx-guide-row{position:absolute;height:0;border-top:1px dashed #0b57d0;pointer-events:none;z-index:3}
-.dx-guide-box{position:absolute;border:1px dashed #0b57d0;pointer-events:none;z-index:3}
+.dx-guide{position:absolute;width:0;border-left:1px dashed var(--dx-ui-accent,#0b57d0);pointer-events:none;z-index:3}
+.dx-guide-row{position:absolute;height:0;border-top:1px dashed var(--dx-ui-accent,#0b57d0);pointer-events:none;z-index:3}
+.dx-guide-box{position:absolute;border:1px dashed var(--dx-ui-accent,#0b57d0);pointer-events:none;z-index:3}
 .dx-row-resize .dx-page{cursor:row-resize}
 .dx-table-resize .dx-page{cursor:nwse-resize}
 .dx-print{display:none}
@@ -398,7 +439,7 @@ body>:not(.dx-print){display:none!important}
 .dx-print-page{position:relative;overflow:hidden;break-after:page;break-inside:avoid}
 .dx-print-page:last-child{break-after:auto}
 }
-.dx-sel{position:absolute;background:var(--dx-selection,rgba(66,133,244,.3));pointer-events:none}
+.dx-sel{position:absolute;background:var(--dx-selection,rgba(11,87,208,.2));pointer-events:none}
 .dx-peer-sel{position:absolute;opacity:.25;pointer-events:none}
 .dx-sel,.dx-var,.dx-find,.dx-note,.dx-peer-sel{mix-blend-mode:multiply}
 .dx-peer{position:absolute;width:2px;margin-left:-1px;pointer-events:none;z-index:2}
@@ -420,7 +461,7 @@ body>:not(.dx-print){display:none!important}
  * given to the element wins over it, those of a framework that keeps its own
  * in layers included.
  */
-const ROOT_CSS = `@layer dx{.dx-editor{position:relative;overflow:auto;height:100%;background:var(--dx-canvas,#e9eaee)}}`;
+const ROOT_CSS = `@layer dx{.dx-editor{position:relative;overflow:auto;height:100%;background:var(--dx-canvas,#efede8)}}`;
 
 function injectStyle(): void {
   if (document.getElementById(STYLE_ID)) return;
@@ -454,9 +495,67 @@ export class Editor {
   /**
    * Whether a DOCX the editor makes carries the fonts the application gave it
    * that its text is in, for whoever opens it without them: the TrueType ones
-   * whose licence lets them be embedded.
+   * whose licence lets them be embedded. Whole with true, as Word embeds them;
+   * with 'subset', cut down to the characters of the document and of the
+   * keyboard, as Word's "Embed only the characters used".
    */
-  embedFonts = true;
+  embedFonts: boolean | 'subset' = true;
+  /**
+   * The language the text of the document is in, as a tag ('es-MX', 'en-US'):
+   * written in the DOCX the editor makes, when the file does not say one
+   * already, for spelling and so that Word does not guess it. The language of
+   * the interface when not set. A screen reader reads the text in it.
+   */
+  get language(): string | undefined {
+    return this.languageTag;
+  }
+
+  set language(tag: string | undefined) {
+    this.languageTag = tag;
+    this.syncLanguage();
+    // Spelled in another language, the words are another matter.
+    if (this.speller) this.renderSelection();
+  }
+
+  private languageTag: string | undefined;
+  /** The language a person chose for the text of this document, which goes into the DOCX over the one the file said. */
+  private chosenLanguage: string | undefined;
+  /**
+   * For a document that says no language: the one of the interface when it
+   * was opened. It stays that when the interface changes language later: the
+   * text has not changed language.
+   */
+  private startLanguage = withRegion(getLocale());
+
+  /**
+   * Sets the language the text is in, as a person chooses it from the status
+   * bar: for spelling in Word, for a screen reader, for how dates and numbers
+   * of variables are written. Written into the DOCX the editor makes, over
+   * the one the file said.
+   */
+  setTextLanguage(tag: string): void {
+    if (!tag || tag === this.textLanguage) return;
+    this.chosenLanguage = tag;
+    this.syncLanguage();
+    if (this.speller) this.renderSelection();
+    this.emit();
+  }
+
+  /**
+   * The language the text is in, for a screen reader to read it with the
+   * right voice: the one chosen, the one set, or the one the file says; for a
+   * document that says none, the language of the interface when it was
+   * opened. Changing the interface's later does not change it.
+   */
+  get textLanguage(): string {
+    return this.chosenLanguage || this.languageTag || documentLanguage(this.doc) || this.startLanguage;
+  }
+
+  /** The field of the document marked with the language of its text, apart from the bars around it. */
+  private syncLanguage(): void {
+    const lang = this.textLanguage;
+    if (this.input && this.input.lang !== lang) this.input.lang = lang;
+  }
   /** Where the selection is. In the header or the footer, the commands act on its text. */
   area: EditArea = 'body';
   /** The page whose header or footer shows the caret; every page has the same one. */
@@ -499,7 +598,30 @@ export class Editor {
   private resizeObserver: ResizeObserver;
   private selLayers: HTMLElement[] = [];
   /** What each page element currently shows: the line boxes and where they sit, and the table cells. */
-  private painted: { lines: { raw: object; y: number; turn?: Turn }[]; cells: CellBox[]; floats: number; rules: string }[] = [];
+  private painted: ({ lines: { raw: object; y: number; turn?: Turn }[]; cells: CellBox[]; floats: number; rules: string } | undefined)[] = [];
+  /**
+   * The pages that have their text in the page, from the first to the last: those in view and a screen
+   * either side. The others are boxes of their size, empty until they come near, so a long document
+   * costs what the part of it in view costs.
+   */
+  private drawn: [number, number] = [0, -1];
+  // --- Spelling ---
+  private speller: SpellChecker | undefined;
+  /** What the dictionary said of each word, by the language it was asked in. */
+  private spelled = new Map<string, Map<string, boolean>>();
+  /** Words seen on the pages drawn and not yet asked about, and whether a question is on its way. */
+  private spellWaiting = new Set<string>();
+  private spellAsking = false;
+  private spellTimer = 0;
+  /** Words the person said to leave alone in this document. */
+  private spellIgnored = new Set<string>();
+  /** The suggestions for each word, once asked. */
+  private spellSuggestions = new Map<string, Promise<string[]>>();
+  /** Where the caret was left by typing: the word it ends is not marked until it is finished. */
+  private typedAt: Position | undefined;
+  /** Every page drawn, whatever is in view: to print them. */
+  private drawAll = false;
+  private scrollFrame = 0;
   /** Object URLs of the pictures of the loaded document, by the part they are in and their XML. */
   private imageUrls = new Map<string, string | null>();
   /** Fonts the loaded document carries with it, registered with the page while it is open. */
@@ -548,6 +670,8 @@ export class Editor {
   byTouch = false;
   /** Called when a selection was made by touch, for what offers something to do with it. */
   onTouchSelect: (() => void) | undefined;
+  /** Called when a word spelled wrong is pressed with the other button: the caret is in it, for its suggestions to be offered. */
+  onSpellingMenu: (() => void) | undefined;
   private touch: { x: number; y: number; moved: boolean; held: boolean; timer: number } | undefined;
   private pinch: { distance: number; zoom: number; frame: number; next: number; x: number; y: number } | undefined;
   private lastTap = { time: 0, x: 0, y: 0, count: 0 };
@@ -561,6 +685,7 @@ export class Editor {
   private stopLocale = onLocaleChange(() => {
     this.input.setAttribute('aria-label', t('a11y.document'));
     this.hint.textContent = t('a11y.hint', { reader: READER_KEYS });
+    speaks(this.hint);
     this.renderSelection();
   });
   /** A font the application gives changes how wide its text is: everything is measured again. */
@@ -597,7 +722,9 @@ export class Editor {
     this.hint.id = `dx-hint-${++editors}`;
     this.hint.style.cssText = VISUALLY_HIDDEN;
     this.hint.textContent = t('a11y.hint', { reader: READER_KEYS });
+    speaks(this.hint);
     this.root.appendChild(this.hint);
+    this.syncLanguage();
     this.input.setAttribute('aria-describedby', this.hint.id);
     markRegion(this.root, 'document', () => this.input);
     installRegionKeys();
@@ -623,6 +750,8 @@ export class Editor {
     this.input.addEventListener('focus', () => this.root.classList.add('dx-focused'));
     this.input.addEventListener('blur', () => this.root.classList.remove('dx-focused'));
     this.root.addEventListener('wheel', this.onWheel, { passive: false });
+    this.root.addEventListener('scroll', this.onScroll, { passive: true });
+    this.pagesEl.addEventListener('contextmenu', this.onContextMenu);
     this.resizeObserver = new ResizeObserver(() => {
       this.fitGap();
       if (this.fit) this.applyZoom(this.fitZoom(this.fit));
@@ -654,6 +783,7 @@ export class Editor {
   destroy(): void {
     this.stopLocale();
     this.announcer.destroy();
+    dropParagraphDialog(this);
     this.stopFonts();
     this.hideNoteTip();
     window.removeEventListener('mousemove', this.onMouseMove);
@@ -663,11 +793,30 @@ export class Editor {
     window.clearTimeout(this.caretHandleTimer);
     if (this.pinch) cancelAnimationFrame(this.pinch.frame);
     this.root.removeEventListener('wheel', this.onWheel);
+    this.root.removeEventListener('scroll', this.onScroll);
+    cancelAnimationFrame(this.scrollFrame);
+    window.clearTimeout(this.spellTimer);
     this.resizeObserver.disconnect();
     this.releaseImages();
     for (const face of this.fontFaces) document.fonts.delete(face);
     this.pagesEl.remove();
-    this.root.classList.remove('dx-editor', 'dx-focused', 'dx-touch');
+    this.root.classList.remove('dx-editor', 'dx-focused', 'dx-touch', 'dx-theme-dark', 'dx-theme-auto');
+  }
+
+  private themeName: Theme = 'light';
+  /**
+   * The colours of the interface: 'light', 'dark', or 'auto' for the one the
+   * system is set to. The bars and menus made for this editor take it too,
+   * also those shown outside it. The pages stay white, as paper.
+   */
+  get theme(): Theme {
+    return this.themeName;
+  }
+
+  set theme(theme: Theme) {
+    this.themeName = theme;
+    applyTheme(this.root, theme);
+    this.emit();
   }
 
   /** Subscribes to document and selection changes. Returns the unsubscribe function. */
@@ -758,14 +907,61 @@ export class Editor {
    * nothing. Off unless set.
    */
   get readOnly(): boolean {
-    return this.locked;
+    return this.readOnlySet;
   }
 
   set readOnly(on: boolean) {
+    this.readOnlySet = on;
+    this.lock();
+    this.emit();
+  }
+
+  /** Whether it is set to be only looked at, apart from being shown with its changes decided. */
+  private readOnlySet = false;
+
+  /** Nothing typed or done changes the document: while it is read only, or shown without its changes. */
+  private lock(): void {
+    const on = this.readOnlySet || this.changesShown !== 'all';
     this.locked = on;
     this.input.readOnly = on;
     this.root.classList.toggle('dx-readonly', on);
+  }
+
+  // --- How the changes are shown --------------------------------------------
+
+  private changesShown: ChangesView = 'all';
+  private shownCache?: { doc: Doc; view: ChangesView; shown: Doc };
+
+  /**
+   * How the tracked changes are shown: all of them, marked ('all'); the
+   * document as it would be with every one accepted ('accepted'), or with
+   * none ('original'), as Word's "No Markup" and "Original". Shown so, it is
+   * only to be looked at; the changes are still there, in the document.
+   */
+  get changesView(): ChangesView {
+    return this.changesShown;
+  }
+
+  setChangesView(view: ChangesView): void {
+    if (view === this.changesShown) return;
+    this.changesShown = view;
+    this.lock();
+    this.textView = undefined;
+    const shown = this.shown;
+    if (this.area !== 'body') this.setArea('body');
+    this.selection = { anchor: clampPosition(shown, this.selection.anchor), focus: clampPosition(shown, this.selection.focus) };
+    this.render();
+    this.renderSelection();
     this.emit();
+  }
+
+  /** The document as it is shown: itself, or with its changes decided as `changesView` says. */
+  private get shown(): Doc {
+    if (this.changesShown === 'all') return this.doc;
+    if (this.shownCache?.doc !== this.doc || this.shownCache.view !== this.changesShown) {
+      this.shownCache = { doc: this.doc, view: this.changesShown, shown: decideAllRevisions(this.doc, this.changesShown === 'accepted') };
+    }
+    return this.shownCache.shown;
   }
 
   // --- Document -----------------------------------------------------------
@@ -781,6 +977,10 @@ export class Editor {
     this.areaNote = undefined;
     this.syncArea();
     this.loadEmbeddedFonts();
+    // A language chosen for the document before is not this one's.
+    this.chosenLanguage = undefined;
+    this.startLanguage = withRegion(getLocale());
+    this.syncLanguage();
     this.selection = { anchor: docStart(), focus: docStart() };
     this.undoStack = [];
     this.redoStack = [];
@@ -901,40 +1101,50 @@ export class Editor {
     return inside && (part ? { ...inside, part } : inside);
   }
 
-  /** Accepts the changes the selection takes in, or the one the caret is in. Says whether there was any. */
-  acceptRevision(): boolean {
-    return this.decideRevision(true);
+  /**
+   * Accepts the change given; without one, the changes the selection takes in,
+   * or the one the caret is in. Says whether there was any. A move is accepted
+   * whole, both its halves.
+   */
+  acceptRevision(revision?: RevisionView): boolean {
+    return this.decideRevision(true, revision);
   }
 
-  /** Rejects the changes the selection takes in, or the one the caret is in. Says whether there was any. */
-  rejectRevision(): boolean {
-    return this.decideRevision(false);
+  /** Rejects the change given, or those of the selection, or the one at the caret, as `acceptRevision`. */
+  rejectRevision(revision?: RevisionView): boolean {
+    return this.decideRevision(false, revision);
   }
 
-  private decideRevision(accept: boolean): boolean {
+  private decideRevision(accept: boolean, given?: RevisionView): boolean {
     if (this.locked) return false;
-    const active = this.activeRevision;
+    if (given && (given.part ?? undefined) !== (this.part ?? undefined)) this.goTo(given.range.from, given.part);
+    const active = given ?? this.activeRevision;
     if (!active) return false;
-    const range = this.collapsed ? active.range : this.range;
-    const text = accept ? acceptRevisions(this.text, range) : rejectRevisions(this.text, range);
-    if (text.paragraphs === this.text.paragraphs) return false;
+    // One change: the letters of its range that are of it, not another's change over the same text.
+    const one = given || this.collapsed;
+    const range = one ? active.range : this.range;
+    const pick = one ? (change: RevisionChange) => change.type === active.type && change.author === active.author && (change.move ?? '') === (active.move ?? '') : undefined;
+    const text = accept ? acceptRevisions(this.text, range, pick) : rejectRevisions(this.text, range, pick);
+    if (text.paragraphs === this.text.paragraphs || text.paragraphs.every((p, i) => p === this.text.paragraphs[i])) return false;
     this.commit(text, { anchor: range.from, focus: range.from }, '', false);
     return true;
   }
 
-  /** Accepts, or rejects, every change of the document, as one step to undo. */
-  acceptAllRevisions(): void {
-    this.decideAll(true);
+  /** Accepts every change of the document, or every one of `author`'s, as one step to undo. */
+  acceptAllRevisions(author?: string): void {
+    this.decideAll(true, author);
   }
 
-  rejectAllRevisions(): void {
-    this.decideAll(false);
+  /** Rejects every change of the document, or every one of `author`'s, as one step to undo. */
+  rejectAllRevisions(author?: string): void {
+    this.decideAll(false, author);
   }
 
-  private decideAll(accept: boolean): void {
+  private decideAll(accept: boolean, author?: string): void {
     if (this.locked || !this.hasRevisions) return;
     if (this.area !== 'body') this.setArea('body');
-    const doc = decideAllRevisions(this.doc, accept);
+    const doc = decideAllRevisions(this.doc, accept, author === undefined ? undefined : byAuthor(author));
+    if (doc === this.doc) return;
     this.commitDoc(doc, { anchor: clampPosition(doc, this.selection.anchor), focus: clampPosition(doc, this.selection.anchor) });
   }
 
@@ -976,25 +1186,22 @@ export class Editor {
 
   exportDocx(): Uint8Array {
     this.updateToc();
-    return exportDocx(this.doc, this.embedFonts ? { fonts: this.givenFontsInUse() } : {});
+    const said = { language: withRegion(this.textLanguage), replaceLanguage: !!this.chosenLanguage };
+    return exportDocx(this.doc, this.embedFonts ? { ...said, fonts: this.givenFontsInUse(), subsetFonts: this.embedFonts === 'subset' } : said);
   }
 
-  /** The faces the application gave whose family some text of the document is in, its styles' included. */
+  /** The faces the application gave whose family some text of the document is in, its notes and styles included. */
   private givenFontsInUse(): ReturnType<typeof fontFaces> {
     const faces = fontFaces();
     if (!faces.length) return [];
-    const used = new Set<string>();
-    const doc = this.doc;
-    for (const story of [doc, ...storyParts(doc).map((part) => storyOf(doc, part))]) {
-      for (const para of story?.paragraphs ?? []) for (const run of para.runs) used.add(resolveRun(run.props).fontFamily.toLowerCase());
-    }
-    for (const style of doc.styles ?? []) if (style.run.fontFamily) used.add(style.run.fontFamily.toLowerCase());
+    const used = textByFamily(this.doc);
     return faces.filter((face) => used.has(face.family.toLowerCase()));
   }
 
   /** The text of the document as Markdown: headings, emphasis, lists and tables; no fonts, colours or pictures. */
   exportMarkdown(): string {
-    return exportMarkdown(this.doc);
+    // The tracked changes as they are shown: the original text when that is what is looked at, else all of them accepted.
+    return exportMarkdown(this.doc, { changes: this.changesView === 'original' ? 'original' : 'accepted' });
   }
 
   /**
@@ -1008,6 +1215,9 @@ export class Editor {
     // What is printed is the pages, also when they are not what is being shown.
     const flow = this.view === 'flow';
     if (flow) this.setView('column');
+    // Every page, not only those near the view.
+    this.drawAll = true;
+    this.paint();
     const holder = document.createElement('div');
     holder.className = 'dx-print';
     const style = document.createElement('style');
@@ -1038,7 +1248,9 @@ export class Editor {
       page.appendChild(copy);
       holder.appendChild(page);
     }
+    this.drawAll = false;
     if (flow) this.setView('flow');
+    else this.paint();
     document.body.appendChild(holder);
     window.addEventListener('afterprint', () => holder.remove(), { once: true });
     window.print();
@@ -1055,7 +1267,8 @@ export class Editor {
    */
   private get paged(): Layout {
     if (this.view !== 'flow') return this.layout;
-    if (this.pagedView?.doc !== this.doc) this.pagedView = { doc: this.doc, layout: layoutDocument(this.doc, this.measurer, this.layoutCache) };
+    const shown = this.shown;
+    if (this.pagedView?.doc !== shown) this.pagedView = { doc: shown, layout: layoutDocument(shown, this.measurer, this.layoutCache) };
     return this.pagedView.layout;
   }
 
@@ -1105,6 +1318,26 @@ export class Editor {
   /** True when the selection is one picture and nothing else. */
   get pictureSelected(): boolean {
     return !!this.selectedPicture();
+  }
+
+  /** What the selected picture is, for whoever cannot see it, as Word keeps it ("Alt Text"): what a screen reader says of it. Undefined without one. */
+  get pictureDescription(): string | undefined {
+    const picture = this.selectedPicture();
+    if (!picture) return undefined;
+    let offset = 0;
+    for (const run of this.text.paragraphs[picture.pos.para].runs) {
+      if (picture.pos.offset >= offset && picture.pos.offset < offset + run.text.length) return altText(run.props.object);
+      offset += run.text.length;
+    }
+    return undefined;
+  }
+
+  /** Gives the selected picture a description for whoever cannot see it, or takes it away with an empty one. Not a change to track: Word does not. */
+  setPictureDescription(text: string): void {
+    const picture = this.selectedPicture();
+    if (!picture || this.locked) return;
+    const doc = setAltText(this.text, picture.pos, text);
+    if (doc !== this.text) this.commit(doc, this.selection, '', false);
   }
 
   /** Gives the selected picture `fraction` of the width of the column it is in, keeping its shape. */
@@ -1406,11 +1639,12 @@ export class Editor {
   /** The document the selection is in: the real one, or the header or footer seen as one. */
   private get text(): Doc {
     const part = this.part;
-    if (!part) return this.doc;
-    if (this.textView?.doc !== this.doc || this.textView.part !== part) {
-      const story = storyOf(this.doc, part) ?? { paragraphs: [] };
-      const view: Doc = { ...this.doc, paragraphs: story.paragraphs, tables: story.tables, header: undefined, footer: undefined, firstPage: undefined };
-      this.textView = { doc: this.doc, part, view };
+    const doc = this.shown;
+    if (!part) return doc;
+    if (this.textView?.doc !== doc || this.textView.part !== part) {
+      const story = storyOf(doc, part) ?? { paragraphs: [] };
+      const view: Doc = { ...doc, paragraphs: story.paragraphs, tables: story.tables, header: undefined, footer: undefined, firstPage: undefined };
+      this.textView = { doc, part, view };
     }
     return this.textView.view;
   }
@@ -1556,6 +1790,7 @@ export class Editor {
   }
 
   setSelection(anchor: Position, focus: Position = anchor): void {
+    this.typedAt = undefined;
     this.selection = { anchor: clampPosition(this.text, anchor), focus: clampPosition(this.text, focus) };
     this.pendingProps = null;
     this.goalX = null;
@@ -1770,9 +2005,14 @@ export class Editor {
 
   // --- Templates ----------------------------------------------------------
 
-  /** The names of the variables of the document, written {{name}} in its text, its header or its footer. */
+  /** The names of the variables of the document, written {{name}} in its text, a header, a footer, a note or a text box. */
   get variables(): string[] {
     return variableNames(this.doc);
+  }
+
+  /** The blocks of the template: what is repeated for each item of a list, or kept only when a value is there ({{#name}} … {{/name}}). */
+  get blocks(): Block[] {
+    return templateBlocks(this.doc);
   }
 
   /** Puts a variable at the caret, or in place of the selection. */
@@ -1780,11 +2020,24 @@ export class Editor {
     if (name.trim()) this.insertText(variableText(name));
   }
 
-  /** Selects the next place the variable is used after the caret, going round at the end. */
+  /**
+   * Selects the next place the variable is used after the caret, going round
+   * at the end: in the text, then in the headers and footers, the notes and
+   * the text boxes, going into the one it is in.
+   */
   selectVariable(name: string): boolean {
-    const uses = findVariables(this.text).filter((variable) => variable.name === name);
+    const uses = findAllVariables(this.doc).filter((variable) => variable.name === name);
     if (!uses.length) return false;
-    const next = uses.find((use) => comparePositions(use.range.from, this.range.to) >= 0) ?? uses[0];
+    // The parts in the order they are gone through, the text first.
+    const order = [undefined, ...textParts(this.doc)];
+    const here = order.indexOf(this.part);
+    const after = (use: (typeof uses)[number]) => {
+      const at = order.indexOf(use.part);
+      return at > here || (at === here && comparePositions(use.range.from, this.range.to) >= 0);
+    };
+    const next = uses.find(after) ?? uses[0];
+    if (next.part !== this.part) this.goTo(next.range.from, next.part);
+    if (next.part !== this.part) return false;
     this.setSelection(next.range.from, next.range.to);
     this.centerCaret();
     return true;
@@ -1795,15 +2048,17 @@ export class Editor {
     return variableFormats(this.doc, name);
   }
 
-  /** How many times the variable is used in the document, its header and its footer. */
+  /** How many times the variable is used in the document, its headers, footers, notes and text boxes. */
   variableUses(name: string): number {
     return variableUses(this.doc, name);
   }
 
   /** Gives a format to every use of the variable, or takes it away, as one step to undo. */
   setVariableFormat(name: string, id: FormatId, on: boolean, arg = ''): void {
-    const doc = setVariableFormat(this.doc, name, id, on, arg);
+    // Written in the language of the interface, as the person reads it: {{price | moneda}}, {{price | currency}}.
+    let doc = setVariableFormat(this.doc, name, id, on, arg, getLocale());
     if (doc === this.doc) return;
+    if (this.doc.trackRevisions) doc = trackDocEdit(this.doc, doc, this.reviser());
     // The text of each use changes length: a use that was selected stays selected.
     const inside = ({ range }: Variable) => comparePositions(range.from, this.range.from) <= 0 && comparePositions(this.range.to, range.to) <= 0;
     const use = findVariables(this.text).findIndex(inside);
@@ -1812,10 +2067,27 @@ export class Editor {
     if (now) this.setSelection(now.range.from, now.range.to);
   }
 
-  /** Replaces each variable that has a value by it, everywhere in the document, as one step to undo. */
-  fillVariables(values: Record<string, string>): void {
-    const doc = fillVariables(this.doc, values);
-    if (doc !== this.doc) this.commitDoc(doc, this.selection);
+  /**
+   * The language variables are written in: dates, numbers, capitals. The
+   * language of the text (`textLanguage`: the one chosen, the `language`
+   * set, the one the file says, or the interface's when it was opened),
+   * with the browser's region.
+   */
+  get formatLocale(): string {
+    return withRegion(this.textLanguage);
+  }
+
+  /**
+   * Replaces each variable that has a value by it, everywhere in the document,
+   * and writes out each block that has one: a list repeats it, yes or no keeps
+   * it or takes it away. As one step to undo.
+   */
+  fillVariables(values: TemplateData): void {
+    let doc = fillVariables(this.doc, values, { locale: this.formatLocale });
+    if (doc === this.doc) return;
+    // While changes are tracked, so is this: the variable taken out, its value put in.
+    if (this.doc.trackRevisions) doc = trackDocEdit(this.doc, doc, this.reviser());
+    this.commitDoc(doc, this.selection);
   }
 
   // --- Links --------------------------------------------------------------
@@ -2113,13 +2385,18 @@ export class Editor {
    * file is a picture that can be a letterhead.
    */
   async setLetterheadFile(file: Blob, fit = true): Promise<boolean> {
-    if (!imageExtension(file.type)) return false;
+    if (!imageExtension(file.type)) {
+      // A file that does not say what it is, as one from a server that does not: the picture says it by how it starts.
+      const type = imageTypeOf(new Uint8Array(await file.slice(0, 8).arrayBuffer()));
+      if (!type) return false;
+      file = new Blob([file], { type });
+    }
     try {
       // Read as a picture first: a file that is not the picture it says it is must not get into the document.
       const asked = fit ? await this.marginsFor(file) : ((await createImageBitmap(file)).close(), {});
       let doc = setLetterhead(this.doc, { bytes: new Uint8Array(await file.arrayBuffer()), type: file.type });
       if (doc === this.doc) return false;
-      doc = this.withMargins(doc, asked);
+      doc = withLetterheadMargins(doc, asked);
       this.commitDoc(doc, this.selection);
       return true;
     } catch {
@@ -2136,7 +2413,7 @@ export class Editor {
     const image = letterheadImage(this.doc);
     if (!image) return false;
     try {
-      const doc = this.withMargins(this.doc, await this.marginsFor(new Blob([image.bytes as BlobPart], { type: image.type })));
+      const doc = withLetterheadMargins(this.doc, await this.marginsFor(new Blob([image.bytes as BlobPart], { type: image.type })));
       if (doc === this.doc) return false;
       this.commitDoc(doc, this.selection);
       return true;
@@ -2157,18 +2434,6 @@ export class Editor {
     context.drawImage(bitmap, 0, 0, width, height);
     bitmap.close();
     return letterheadMargins({ width, height, data: context.getImageData(0, 0, width, height).data }, this.doc.page);
-  }
-
-  private withMargins(doc: Doc, asked: { top?: number; bottom?: number }): Doc {
-    const { page } = doc;
-    // Never so much that no room is left for the text.
-    const most = page.height * 0.4;
-    // To the twentieth of a point, which is what a file can say, and never short of what was asked.
-    const whole = (value: number) => Math.ceil(Math.min(value, most) * 20 - 1e-6) / 20;
-    const marginTop = Math.max(page.marginTop, whole(asked.top ?? 0));
-    const marginBottom = Math.max(page.marginBottom, whole(asked.bottom ?? 0));
-    if (marginTop === page.marginTop && marginBottom === page.marginBottom) return doc;
-    return { ...doc, page: { ...page, marginTop, marginBottom } };
   }
 
   removeLetterhead(): void {
@@ -2238,6 +2503,8 @@ export class Editor {
     return exportPdf(layout, {
       measurer: this.measurer,
       title,
+      doc,
+      language: this.textLanguage,
       font: (spec) => {
         const family = fonts.filter((font) => font.family.toLowerCase() === spec.family.toLowerCase());
         // The ones the document carries, then the ones the application gave.
@@ -2534,7 +2801,19 @@ export class Editor {
 
   /** Starts a new page at the caret. */
   insertPageBreak(): void {
-    this.insertText('\f');
+    // In a cell the break stays in its paragraph: a cell is not split into pages by a paragraph of its own.
+    if (this.inTable || this.area !== 'body') {
+      this.insertText('\f');
+      return;
+    }
+    const range = this.range;
+    const { field: _, ...props } = this.pendingProps ?? this.activeRunProps();
+    const doc = this.collapsed ? this.text : deleteRange(this.text, range);
+    const broken = insertFragment(doc, outsideField(doc, range.from), '\f', props);
+    // As Word's Ctrl+Enter: the break ends its paragraph, and what follows starts a new one at the top of
+    // the next page, the caret in it. A break at the very end would leave that page with no line to be on.
+    const split = splitParagraph(broken.doc, broken.pos);
+    this.commit(split.doc, { anchor: split.pos, focus: split.pos });
   }
 
   /** The columns of the section the caret is in; one outside the body of the document. */
@@ -2670,6 +2949,7 @@ export class Editor {
    * unless `tracked` is false: accepting and rejecting are no changes to track.
    */
   private commit(text: Doc, selection: Selection, kind = '', tracked = true): void {
+    this.typedAt = kind === 'type' ? selection.focus : undefined;
     if (tracked && this.doc.trackRevisions && !this.locked && text !== this.text) {
       const edit = trackEdit(this.text, text, this.reviser());
       const caret = comparePositions(selection.anchor, selection.focus) === 0 ? (this.forward ? 'forward' : 'back') : undefined;
@@ -2735,21 +3015,62 @@ export class Editor {
   private render(): void {
     if (this.view === 'flow') {
       this.flowWidth = this.windowWidth();
-      this.layout = layoutReflow(this.doc, this.measurer, { width: this.flowWidth, margin: FLOW_MARGIN }, this.flowCache);
+      this.layout = layoutReflow(this.shown, this.measurer, { width: this.flowWidth, margin: FLOW_MARGIN }, this.flowCache);
     } else {
-      this.layout = layoutDocument(this.doc, this.measurer, this.layoutCache);
+      this.layout = layoutDocument(this.shown, this.measurer, this.layoutCache);
     }
-    const { pages } = this.layout;
     // The page may have changed size under a zoom that follows the window.
     if (this.fit) this.zoom = this.clampZoom(this.fitZoom(this.fit));
+    this.paint();
+  }
 
+  /** Which pages are in view, with a screen above and below; all of them when there is no view to go by. */
+  private pagesInView(): [number, number] {
+    const last = this.pageEls.length - 1;
+    const view = this.root.getBoundingClientRect();
+    if (this.drawAll || view.height === 0 || last < 0) return [0, last];
+    const top = view.top - view.height;
+    const bottom = view.bottom + view.height;
+    let first = -1;
+    let end = -1;
+    // From the top down: pages go down the window in their order, or row by row side by side.
+    for (let i = 0; i <= last; i++) {
+      const rect = this.pageEls[i].getBoundingClientRect();
+      if (rect.bottom < top) continue;
+      if (rect.top > bottom) break;
+      if (first < 0) first = i;
+      end = i;
+    }
+    return first < 0 ? [0, -1] : [first, end];
+  }
+
+  private isDrawn(page: number): boolean {
+    return page >= this.drawn[0] && page <= this.drawn[1];
+  }
+
+  /** Scrolling brings other pages near: they are drawn, and the ones gone far are emptied. */
+  private onScroll = (): void => {
+    if (this.scrollFrame) return;
+    this.scrollFrame = requestAnimationFrame(() => {
+      this.scrollFrame = 0;
+      const [first, last] = this.pagesInView();
+      if (first === this.drawn[0] && last === this.drawn[1]) return;
+      this.paint();
+      this.renderSelection();
+    });
+  };
+
+  /** Puts the text of the pages near the view in them, and takes it out of the others. */
+  private paint(): void {
+    const { pages } = this.layout;
     while (this.pageEls.length > pages.length) {
       this.pageEls.pop()!.remove();
       this.sheetEls.pop();
       this.selLayers.pop();
     }
     this.painted.length = Math.min(this.painted.length, pages.length);
-    pages.forEach((layoutPage, i) => {
+    // Every page in its place and at its size first: which are in view depends on it.
+    pages.forEach((_, i) => {
       let el = this.pageEls[i];
       if (!el) {
         el = document.createElement('div');
@@ -2765,6 +3086,15 @@ export class Editor {
         this.selLayers.push(document.createElement('div'));
       }
       this.sizePage(i);
+    });
+    this.drawn = this.pagesInView();
+    pages.forEach((layoutPage, i) => {
+      if (!this.isDrawn(i)) {
+        // Far from the view: an empty sheet, drawn again when it comes near.
+        if (this.painted[i]) this.sheetEls[i].replaceChildren(this.selLayers[i]);
+        this.painted[i] = undefined;
+        return;
+      }
 
       // A page whose lines are the same boxes at the same place already shows them.
       // Everything the page shows: its header, its text and its footer.
@@ -2874,11 +3204,12 @@ export class Editor {
         };
         // A line with a tracked change has a bar beside it in the margin, as in Word: one that only
         // put in or took out a paragraph mark has nothing else to show it by.
-        const paragraphsOf = name === 'body' ? this.doc.paragraphs : (band as Band).part ? storyOf(this.doc, (band as Band).part!)?.paragraphs : undefined;
+        const paragraphsOf = name === 'body' ? this.shown.paragraphs : (band as Band).part ? storyOf(this.shown, (band as Band).part!)?.paragraphs : undefined;
         const barAt = this.setupOf(i).marginLeft - CHANGE_BAR_GAP;
         for (const line of band.lines) {
           const into = holder(line);
-          if (!line.turn && (line.fragments.some((f) => f.props.revision) || (line.lastInParagraph && paragraphsOf?.[line.para]?.props.markRevision))) {
+          const para = paragraphsOf?.[line.para];
+          if (!line.turn && (line.fragments.some((f) => f.props.revision || f.props.formatChange) || para?.props.formatChange || (line.lastInParagraph && para?.props.markRevision))) {
             const bar = document.createElement('div');
             bar.className = 'dx-change-bar';
             Object.assign(bar.style, { left: `${barAt}pt`, top: `${line.y}pt`, height: `${line.height}pt` });
@@ -3050,11 +3381,14 @@ export class Editor {
     const flow = this.flow;
     /** Where the next note of each page can start, in pixels from its top. */
     const free: number[] = [];
+    const paras = this.drawnParas();
     for (const { id, range } of noteRanges(this.doc)) {
+      // The card of a note on a page not drawn waits until the page comes near.
+      if (paras && (this.mapOffset(range.to, true).para < paras[0] || this.mapOffset(range.from, true).para > paras[1])) continue;
       const note = byId.get(id);
       // A note is level with where its text starts; one on no text at all, with where it is.
       const at = selectionRects(flow, this.measurer, { from: this.mapOffset(range.from, true), to: this.mapOffset(range.to, true) })[0] ?? caretRect(flow, this.measurer, this.mapOffset(range.from, true));
-      const margin = note && at && this.marginEls[this.pageOf(at.page)];
+      const margin = note && at && this.isDrawn(this.pageOf(at.page)) && this.marginEls[this.pageOf(at.page)];
       if (!note || !margin) continue;
       const page = this.pageOf(at.page);
       const card = document.createElement('div');
@@ -3109,13 +3443,200 @@ export class Editor {
     this.selLayers[this.pageOf(at.page)].appendChild(chip);
   }
 
+  // --- Spelling -------------------------------------------------------------
+
+  /**
+   * What says which words are spelled wrong; none, and nothing is marked.
+   * Only the words of the pages near the view are asked about, a moment after
+   * typing stops, in the language of the text (`textLanguage`).
+   */
+  get spellChecker(): SpellChecker | undefined {
+    return this.speller;
+  }
+
+  set spellChecker(checker: SpellChecker | undefined) {
+    if (checker === this.speller) return;
+    this.speller = checker;
+    this.spelled.clear();
+    this.spellWaiting.clear();
+    this.spellSuggestions.clear();
+    this.renderSelection();
+  }
+
+  /** The words of a paragraph to check, kept while it is the same. */
+  private spellWords = new WeakMap<Paragraph, SpelledWord[]>();
+  private wordsOfParagraph(para: Paragraph): SpelledWord[] {
+    let words = this.spellWords.get(para);
+    if (!words) {
+      // Text taken out, while the change waits, is not checked.
+      const gone: [number, number][] = [];
+      let at = 0;
+      for (const run of para.runs) {
+        if (run.props.revision === 'delete') gone.push([at, at + run.text.length]);
+        at += run.text.length;
+      }
+      words = wordsToCheck(paragraphText(para)).filter((word) => !gone.some(([from, to]) => word.from < to && word.to > from));
+      this.spellWords.set(para, words);
+    }
+    return words;
+  }
+
+  /** What the dictionary said of a word in the language of the text: undefined until it has said. */
+  private spelledRight(word: string): boolean | undefined {
+    if (this.spellIgnored.has(word)) return true;
+    return this.spelled.get(this.textLanguage)?.get(word);
+  }
+
+  /** Marks the words spelled wrong on the pages drawn, and asks about those not known yet. */
+  private markSpelling(paras: [number, number] | undefined): void {
+    if (!this.speller || this.area !== 'body' || !paras || this.locked) return;
+    const typed = this.typedAt;
+    for (let p = paras[0]; p <= paras[1]; p++) {
+      const para = this.text.paragraphs[p];
+      if (!para) continue;
+      for (const word of this.wordsOfParagraph(para)) {
+        // The word being written is not finished yet.
+        if (typed && typed.para === p && typed.offset === word.to) continue;
+        const right = this.spelledRight(word.word);
+        if (right === undefined) this.spellWaiting.add(word.word);
+        if (right !== false) continue;
+        for (const rect of selectionRects(this.flow, this.measurer, { from: { para: p, offset: word.from }, to: { para: p, offset: word.to } })) {
+          if (!this.isDrawn(rect.page)) continue;
+          const div = document.createElement('div');
+          div.className = 'dx-spell';
+          div.style.left = `${rect.x}pt`;
+          div.style.top = `${rect.y + rect.height - 3}pt`;
+          div.style.width = `${rect.width}pt`;
+          this.selLayers[rect.page].appendChild(div);
+        }
+      }
+    }
+    if (this.spellWaiting.size) {
+      window.clearTimeout(this.spellTimer);
+      this.spellTimer = window.setTimeout(() => void this.askSpelling(), SPELL_WAIT_MS);
+    }
+  }
+
+  /** Asks the dictionary about the words waiting, in one question, and marks what it says. */
+  private async askSpelling(): Promise<void> {
+    const speller = this.speller;
+    if (!speller || this.spellAsking || !this.spellWaiting.size) return;
+    const language = this.textLanguage;
+    const words = [...this.spellWaiting];
+    this.spellWaiting.clear();
+    this.spellAsking = true;
+    let known = this.spelled.get(language);
+    if (!known) this.spelled.set(language, (known = new Map()));
+    try {
+      const answers = await speller.check(words, language);
+      words.forEach((word, i) => known.set(word, answers[i] !== false));
+    } catch {
+      // A dictionary that cannot be had marks nothing, rather than every word.
+      for (const word of words) known.set(word, true);
+    } finally {
+      this.spellAsking = false;
+    }
+    if (speller !== this.speller || !this.root.isConnected) return;
+    this.renderSelection();
+    if (this.spellWaiting.size) void this.askSpelling();
+  }
+
+  /** The word spelled wrong the caret is in, or at the end of; undefined when there is none, or it is not known yet. */
+  get misspelling(): { word: string; range: Range } | undefined {
+    if (!this.speller || this.area !== 'body' || !this.collapsed) return undefined;
+    const { para, offset } = this.selection.focus;
+    const paragraph = this.text.paragraphs[para];
+    const word = paragraph && this.wordsOfParagraph(paragraph).find((one) => one.from <= offset && offset <= one.to);
+    if (!word || this.spelledRight(word.word) !== false) return undefined;
+    return { word: word.word, range: { from: { para, offset: word.from }, to: { para, offset: word.to } } };
+  }
+
+  /** What the word spelled wrong at the caret could be instead, the likeliest first. */
+  spellingSuggestions(): Promise<string[]> {
+    const wrong = this.misspelling;
+    if (!wrong || !this.speller) return Promise.resolve([]);
+    const key = `${this.textLanguage}\n${wrong.word}`;
+    let asked = this.spellSuggestions.get(key);
+    if (!asked) {
+      asked = Promise.resolve(this.speller.suggest(wrong.word, this.textLanguage)).catch(() => []);
+      this.spellSuggestions.set(key, asked);
+    }
+    return asked;
+  }
+
+  /** Puts `text` in place of the word spelled wrong at the caret: an edit like any other, undone with ⌘Z and tracked when changes are. */
+  replaceMisspelling(text: string): void {
+    const wrong = this.misspelling;
+    if (!wrong || !text) return;
+    this.setSelection(wrong.range.from, wrong.range.to);
+    this.insertText(text);
+  }
+
+  /** Leaves the word spelled wrong at the caret, and every other one like it, unmarked in this document. */
+  ignoreMisspelling(): void {
+    const wrong = this.misspelling;
+    if (!wrong) return;
+    this.spellIgnored.add(wrong.word);
+    this.renderSelection();
+    this.emit();
+  }
+
+  /** Whether the dictionary takes new words, for "Add to dictionary". */
+  get canAddWords(): boolean {
+    return !!this.speller?.add;
+  }
+
+  /** Gives the word spelled wrong at the caret to the dictionary, as spelled right from now on. */
+  addMisspelling(): void {
+    const wrong = this.misspelling;
+    if (!wrong || !this.speller?.add) return;
+    this.speller.add(wrong.word, this.textLanguage);
+    this.spelled.get(this.textLanguage)?.set(wrong.word, true);
+    this.renderSelection();
+    this.emit();
+  }
+
+  /** The other button on a word spelled wrong: the caret goes into it and its suggestions are offered, in place of the browser's menu. */
+  private onContextMenu = (e: MouseEvent): void => {
+    if (!this.speller || this.area !== 'body') return;
+    const pos = this.positionFromPoint(e.clientX, e.clientY);
+    const paragraph = this.text.paragraphs[pos.para];
+    const word = paragraph && this.wordsOfParagraph(paragraph).find((one) => one.from <= pos.offset && pos.offset <= one.to);
+    if (!word || this.spelledRight(word.word) !== false) return;
+    e.preventDefault();
+    this.focus();
+    this.setSelection(pos);
+    this.onSpellingMenu?.();
+  };
+
+  /** The paragraphs of the body the drawn pages show, first and last, as the pages show them; undefined when that is not known. */
+  private drawnParas(): [number, number] | undefined {
+    if (this.area !== 'body') return undefined;
+    let first = Infinity;
+    let last = -Infinity;
+    for (let i = this.drawn[0]; i <= this.drawn[1]; i++) {
+      for (const line of this.layout.pages[i]?.lines ?? []) {
+        first = Math.min(first, line.para);
+        last = Math.max(last, line.para);
+      }
+    }
+    return first <= last ? [first, last] : undefined;
+  }
+
   private renderSelection(): void {
-    for (const layer of this.selLayers) layer.replaceChildren();
+    // The view may have moved under a change of zoom or of view: the pages near it are drawn first.
+    const near = this.pagesInView();
+    if (near[0] !== this.drawn[0] || near[1] !== this.drawn[1]) this.paint();
+    for (const layer of this.selLayers) if (layer.firstChild) layer.replaceChildren();
+    const paras = this.drawnParas();
+    /** Whether a stretch of the body, given as the document has it, is on no page drawn: nothing to mark for it. */
+    const away = (range: { from: Position; to: Position }) => !!paras && (this.mapOffset(range.to, true).para < paras[0] || this.mapOffset(range.from, true).para > paras[1]);
     // The text box being written in shows where its edges are.
     for (const node of this.pagesEl.querySelectorAll<HTMLElement>('.dx-textbox')) node.classList.toggle('dx-on', this.area === 'textbox' && node.dataset.box === this.areaNote);
     const { from, to } = this.range;
     const flow = this.flow;
     for (const rect of selectionRects(flow, this.measurer, { from: this.mapOffset(from, true), to: this.mapOffset(to, true) })) {
+      if (!this.isDrawn(this.pageOf(rect.page))) continue;
       const div = document.createElement('div');
       div.className = 'dx-sel';
       div.style.left = `${rect.x}pt`;
@@ -3124,27 +3645,52 @@ export class Editor {
       div.style.height = `${rect.height}pt`;
       this.selLayers[this.pageOf(rect.page)].appendChild(div);
     }
-    // The variables of a template stand out from the text around them.
-    for (const variable of findVariables(this.text)) {
-      for (const rect of selectionRects(flow, this.measurer, { from: this.mapOffset(variable.range.from, true), to: this.mapOffset(variable.range.to, true) })) {
-        const div = document.createElement('div');
-        div.className = 'dx-var';
-        div.style.left = `${rect.x}pt`;
-        div.style.top = `${rect.y}pt`;
-        div.style.width = `${rect.width}pt`;
-        div.style.height = `${rect.height}pt`;
-        this.selLayers[this.pageOf(rect.page)].prepend(div);
-      }
+    // The variables of a template stand out from the text around them, in the part being edited and in the others the pages show.
+    const markVariable = (rect: Rect, page: number) => {
+      if (!this.isDrawn(page)) return;
+      const div = document.createElement('div');
+      div.className = 'dx-var';
+      div.style.left = `${rect.x}pt`;
+      div.style.top = `${rect.y}pt`;
+      div.style.width = `${rect.width}pt`;
+      div.style.height = `${rect.height}pt`;
+      this.selLayers[page]?.prepend(div);
+    };
+    for (const variable of paras ? variablesIn(this.text, paras) : variablesOf(this.text)) {
+      if (away(variable.range)) continue;
+      for (const rect of selectionRects(flow, this.measurer, { from: this.mapOffset(variable.range.from, true), to: this.mapOffset(variable.range.to, true) })) markVariable(rect, this.pageOf(rect.page));
     }
+    this.markSpelling(paras);
+    if (this.view !== 'flow') this.layout.pages.forEach((page, i) => {
+      if (!this.isDrawn(i)) return;
+      const bands: ['header' | 'footer' | FootnotePart | TextBoxPart, StoryPart][] = [
+        ['header', storyPart(this.paged, 'header', i)],
+        ['footer', storyPart(this.paged, 'footer', i)],
+        ...(page.footnotes?.notes ?? []).map((note): [FootnotePart, StoryPart] => [note.part, note.part]),
+        ...(page.textBoxes ?? []).map((box): [TextBoxPart, StoryPart] => [box.part, box.part]),
+      ];
+      for (const [key, part] of bands) {
+        if (part === this.part && (i === this.areaPage || this.area === 'footnote' || this.area === 'textbox')) continue;
+        const story = storyOf(this.shown, part);
+        const band = story && bandLayout(this.layout, key, i);
+        if (!band) continue;
+        const shown = storyOnPage(story, i + 1, this.pageCount);
+        for (const variable of variablesOf(shown)) {
+          if (band.paraFirstLine[variable.range.from.para] === undefined) continue;
+          for (const rect of selectionRects(band, this.measurer, variable.range)) markVariable(rect, i);
+        }
+      }
+    });
     // The text each note is about, and more so the one the caret is in.
     if (this.area === 'body' && this.doc.notes?.length) {
       const active = this.activeNote;
       const colors = new Map(this.doc.notes.map((note) => [note.id, note.color ?? NOTE_COLORS[0]]));
       for (const note of noteRanges(this.doc)) {
         const color = colors.get(note.id);
-        if (!color) continue;
+        if (!color || away(note.range)) continue;
         const rgb = [0, 2, 4].map((i) => parseInt(color.slice(i, i + 2), 16)).join(',');
         for (const rect of selectionRects(flow, this.measurer, { from: this.mapOffset(note.range.from, true), to: this.mapOffset(note.range.to, true) })) {
+          if (!this.isDrawn(this.pageOf(rect.page))) continue;
           const div = document.createElement('div');
           div.className = note.id === active ? 'dx-note dx-note-on' : 'dx-note';
           div.dataset.note = note.id;
@@ -3160,7 +3706,9 @@ export class Editor {
     }
     // Every place the search finds, under the selection; past a few hundred they stop being told apart anyway.
     for (const match of this.found.slice(0, MAX_FIND_MARKS)) {
+      if (this.area === 'body' && away(match)) continue;
       for (const rect of selectionRects(flow, this.measurer, { from: this.mapOffset(match.from, true), to: this.mapOffset(match.to, true) })) {
+        if (!this.isDrawn(this.pageOf(rect.page))) continue;
         const div = document.createElement('div');
         div.className = 'dx-find';
         div.style.left = `${rect.x}pt`;
@@ -3684,7 +4232,9 @@ export class Editor {
       const how = document.createElement('div');
       how.className = 'dx-note-by';
       how.textContent = t('link.follow', { key: MOD_KEY });
+      speaks(how);
       tip.append(address, how);
+      applyTheme(tip, this.themeName);
       document.body.appendChild(tip);
       this.linkTip = tip;
     }
@@ -3729,6 +4279,7 @@ export class Editor {
       const text = document.createElement('div');
       text.textContent = note.text;
       tip.append(by, text);
+      applyTheme(tip, this.themeName);
       document.body.appendChild(tip);
       this.noteTip = tip;
       this.noteTipFor = note.id;
@@ -4004,7 +4555,7 @@ export class Editor {
       return;
     }
     if (mod && !e.altKey) {
-      switch (e.key.toLowerCase()) {
+      switch (e.key?.toLowerCase()) {
         case 'b':
           this.toggleMark('bold');
           break;
@@ -4112,13 +4663,17 @@ export class Editor {
     const { anchor, focus } = this.selection;
     if (comparePositions(focus, before.focus) === 0 && comparePositions(anchor, before.anchor) === 0) return;
     const doc = this.text;
-    const parts: string[] = [];
+    const parts: Spoken[] = [];
+    /** Text of the document, in its language when it has one of its own. */
+    const lang = this.textLanguage;
+    const own = (text: string): Spoken => (lang ? { text, lang } : text);
     if (this.area === 'body') {
       const page = lineForPosition(this.flow, this.mapOffset(focus, true)).page;
       if (page !== this.spokenPage && this.spokenPage >= 0) parts.push(t('a11y.page', { page: this.pageOf(page) + 1 }));
       this.spokenPage = page;
     }
-    const selecting = comparePositions(anchor, focus) !== 0;
+    // Shift and an arrow that brings the focus back to the anchor takes the last of the selection away: that is said too.
+    const selecting = comparePositions(anchor, focus) !== 0 || (comparePositions(before.anchor, before.focus) !== 0 && comparePositions(anchor, before.anchor) === 0);
     // While selecting, what is said is what was selected, not where it is.
     if (focus.para !== before.focus.para && !selecting) parts.push(...this.whereIs(focus.para, before.focus.para));
     // In the mode for screen readers, the text is the screen reader's to read, from the field: only where it is is said.
@@ -4126,44 +4681,113 @@ export class Editor {
     if (reader && selecting) {
       // Nothing is said of a selection: the screen reader says what it selected.
     } else if (selecting) {
-      // Further from the anchor than it was: what it went over is now selected.
-      const grew = Math.abs(this.distance(anchor, focus)) > Math.abs(this.distance(anchor, before.focus)) || comparePositions(anchor, before.anchor) !== 0;
-      const moved = textInRange(doc, orderedRange(before.focus, focus));
+      // By where the focus went: away from the anchor, or past it to the other side, is more selected. Pictures count, which the text leaves out.
+      const side = comparePositions(anchor, focus);
+      const step = comparePositions(focus, before.focus);
+      const crossed = comparePositions(anchor, before.focus) !== 0 && Math.sign(comparePositions(anchor, before.focus)) !== Math.sign(side);
+      const grew = side !== 0 && (comparePositions(anchor, before.anchor) !== 0 || crossed || (side < 0 ? step > 0 : step < 0));
+      const range = orderedRange(before.focus, focus);
+      const moved = range.from.para === range.to.para ? this.spokenSlice(doc.paragraphs[range.from.para], range.from.offset, range.to.offset) : textInRange(doc, range);
       // A character that is the mark between two paragraphs is the end of the first.
-      const said = moved === '\n' && focus.para !== before.focus.para ? t('a11y.endOfParagraph') : this.moved === 'char' ? spokenChar(moved) : spokenText(moved);
+      const said = range.from.para !== range.to.para && moved === '\n' ? t('a11y.endOfParagraph') : this.moved === 'char' && moved.length <= 1 ? spokenChar(moved) : spokenText(moved);
       parts.push(t(grew ? 'a11y.selected' : 'a11y.unselected', { text: said }));
     } else {
       const text = paragraphText(doc.paragraphs[focus.para]);
       if (reader) {
         // What the caret is at is read from the field.
-      } else if (this.moved === 'char') parts.push(spokenChar(text[focus.offset]));
+      } else if (this.moved === 'char') {
+        // The marks the caret stepped over to get here are said too: going left, a note's number is behind it.
+        const p = doc.paragraphs[focus.para];
+        if (before.focus.para === focus.para && before.focus.offset > focus.offset) {
+          const crossed = this.spokenSlice(p, focus.offset + 1, before.focus.offset).trim();
+          if (crossed) parts.push(crossed);
+        }
+        const at = this.spokenAt(p, focus.offset);
+        // A letter is the document's; a space or a picture is said in the words of the interface.
+        parts.push(at === text[focus.offset] ? own(at) : at);
+      }
       else if (this.moved === 'word') {
         const word = wordRangeAt(doc, focus);
-        parts.push(word.to.offset > word.from.offset ? text.slice(word.from.offset, word.to.offset) : spokenChar(text[focus.offset]));
+        parts.push(word.to.offset > word.from.offset ? own(text.slice(word.from.offset, word.to.offset)) : spokenChar(text[focus.offset]));
       } else {
         const line = lineForPosition(this.flow, this.mapOffset(focus, true));
         const from = this.mapOffset({ para: line.para, offset: line.start }, false).offset;
         const to = this.mapOffset({ para: line.para, offset: line.end }, false).offset;
-        parts.push(spokenText(text.slice(from, to)));
+        const said = spokenText(this.spokenSlice(doc.paragraphs[focus.para], from, to));
+        parts.push(said === t('a11y.blank') ? said : own(said));
       }
       const link = linkAt(doc, focus);
       const was = linkAt(doc, before.focus);
       if (link?.href && link.href !== was?.href) parts.push(t('a11y.link', { href: link.href }));
       const revision = revisionAt(doc.paragraphs, focus);
-      if (revision && revision !== revisionAt(doc.paragraphs, before.focus)) {
-        parts.push(t(revision.type === 'delete' ? 'a11y.removed' : 'a11y.inserted', { author: revision.author }));
+      const left = revisionAt(doc.paragraphs, before.focus);
+      // Each call makes the change anew: it is the same one when it starts at the same place, of the same kind.
+      const same = left && revision && left.type === revision.type && comparePositions(left.range.from, revision.range.from) === 0;
+      if (revision && !same) {
+        parts.push(t(revision.type === 'delete' ? 'a11y.removed' : revision.type === 'format' ? 'a11y.formatted' : 'a11y.inserted', { author: revision.author }));
       }
     }
-    // Under what the screen reader reads from the field, not over it.
-    this.announcer.say(parts.join('. '), !reader);
+    // Under what the screen reader reads from the field, not over it. A part that ends a sentence needs no other stop.
+    const said: Spoken[] = [];
+    for (const part of parts) {
+      const last = said[said.length - 1];
+      if (last !== undefined) said.push(/[.!?:…]$/.test(typeof last === 'string' ? last : last.text) ? ' ' : '. ');
+      said.push(part);
+    }
+    this.announcer.say(said, !reader);
   }
 
-  /** How far `to` is from `from`, in characters of the text, paragraphs counting one each. */
-  private distance(from: Position, to: Position): number {
-    const sign = comparePositions(from, to);
-    if (sign === 0) return 0;
-    const range = sign < 0 ? { from, to } : { from: to, to: from };
-    return textInRange(this.text, range).length * (sign < 0 ? 1 : -1);
+  /**
+   * What an object of the text is called, read out: a picture with its
+   * description, a text box, the number of a note at the foot of the page.
+   * Undefined for the marks that are nothing to hear (where a comment starts
+   * or ends, a bookmark).
+   */
+  private spokenObject(run: Run): string | undefined {
+    const xml = run.props.object;
+    if (!xml) return undefined;
+    const note = footnoteReferenceId(xml);
+    if (note !== undefined) return t('a11y.footnoteRef', { n: footnoteNumbers(this.doc).get(note) ?? '' });
+    if (!/<w:drawing\b|<w:pict\b/.test(xml)) return undefined;
+    if (/<w:txbxContent\b/.test(xml)) return t('a11y.textBox');
+    const alt = altText(xml);
+    return alt ? t('a11y.picture', { alt }) : t('a11y.pictureNoAlt');
+  }
+
+  /** What is at `offset` of a paragraph, read out: a picture by its name; past marks that take no room, what they are and the character after them. */
+  private spokenAt(p: Paragraph, offset: number): string {
+    const said: string[] = [];
+    let at = offset;
+    let start = 0;
+    for (const run of p.runs) {
+      const end = start + run.text.length;
+      if (at >= start && at < end) {
+        if (!run.props.object) break;
+        const name = this.spokenObject(run);
+        // A picture in the line is what the caret is at; a mark the caret steps over is said, and so is what follows it.
+        if (!run.props.anchor) return name ?? spokenChar(run.text[at - start]);
+        if (name) said.push(name);
+        at = end;
+      }
+      start = end;
+    }
+    said.push(spokenChar(paragraphText(p)[at]));
+    return said.join(', ');
+  }
+
+  /** A stretch of a paragraph as it is read: each object by its name. */
+  private spokenSlice(p: Paragraph, from: number, to: number): string {
+    let out = '';
+    let start = 0;
+    for (const run of p.runs) {
+      const end = start + run.text.length;
+      if (end > from && start < to) {
+        const name = run.props.object ? this.spokenObject(run) : undefined;
+        out += run.props.object ? (name ? ` ${name} ` : '') : run.text.slice(Math.max(0, from - start), Math.min(run.text.length, to - start));
+      }
+      start = end;
+    }
+    return out;
   }
 
   /** What changed of where the caret is, from paragraph `was` to paragraph `para`: a table cell, a heading, a list. */
@@ -4270,11 +4894,14 @@ export class Editor {
     /** How far the finger is from the line of text the handle hangs under. */
     let lift = 0;
     let held = false;
+    /** Whether the drag moved what the handle hangs under: one that did not was a tap on it. */
+    let moved = false;
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
       el.setPointerCapture(e.pointerId);
       held = true;
+      moved = false;
       const box = el.getBoundingClientRect();
       lift = e.clientY - box.top + (parseFloat(el.dataset.line ?? '0') || 0) / 2;
     });
@@ -4291,6 +4918,7 @@ export class Editor {
       // Its two ends never meet: a selection of nothing would lose the handle being dragged.
       if (end !== 'caret' && comparePositions(next.anchor, next.focus) === 0) return;
       if (comparePositions(next.anchor, anchor) === 0 && comparePositions(next.focus, focus) === 0) return;
+      moved = true;
       this.caretHandleUntil = Date.now() + CARET_HANDLE_MS;
       this.selection = next;
       this.goalX = null;
@@ -4302,8 +4930,10 @@ export class Editor {
       if (!held) return;
       held = false;
       if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
-      if (end === 'caret') this.showCaretHandle();
-      else this.onTouchSelect?.();
+      if (end !== 'caret') return this.onTouchSelect?.();
+      this.showCaretHandle();
+      // A tap on the handle of the caret: what can be done there, Paste first, as a phone offers it.
+      if (!moved) this.onTouchSelect?.();
     };
     el.addEventListener('pointerup', done);
     el.addEventListener('pointercancel', done);
@@ -4426,10 +5056,17 @@ export class Editor {
     const again = now - this.lastTap.time < TAP_AGAIN_MS && Math.hypot(touch.x - this.lastTap.x, touch.y - this.lastTap.y) < TAP_AGAIN_PX;
     const count = again ? this.lastTap.count + 1 : 1;
     this.lastTap = { time: now, x: touch.x, y: touch.y, count };
+    /** Where the caret was, when the document had it: a tap on it again offers what can be done there. */
+    const caret = this.collapsed && document.activeElement === this.input ? this.selection.focus : undefined;
     this.press({ clientX: touch.x, clientY: touch.y, detail: count, shiftKey: false, target: e.target });
     this.onMouseUp(new MouseEvent('mouseup'));
-    if (this.collapsed) this.showCaretHandle();
-    else this.onTouchSelect?.();
+    if (!this.collapsed) this.onTouchSelect?.();
+    else {
+      this.showCaretHandle();
+      // A tap on a word spelled wrong offers what it could be, as a phone does.
+      if (count === 1 && this.misspelling) this.onSpellingMenu?.();
+      else if (count === 1 && caret && comparePositions(caret, this.selection.focus) === 0) this.onTouchSelect?.();
+    }
   };
 
   private onTouchCancel = (): void => {

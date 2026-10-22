@@ -6,21 +6,26 @@ import { useState } from 'react';
 export function CodeTabs({ samples }: { samples: { name: string; html: string }[] }) {
   const [shown, setShown] = useState(0);
   return (
-    <div className="code min-w-0 overflow-hidden rounded-xl bg-[#22272e] shadow-[0_20px_50px_-24px_rgba(15,30,70,0.45)]">
-      <div className="flex gap-0.5 overflow-x-auto bg-[#1b1f25] px-2 pt-2" role="tablist">
+    <div className="min-w-0 overflow-hidden rounded-[18px] border border-border bg-white shadow-[0_20px_40px_-20px_rgba(47,46,43,0.18)]">
+      <div className="flex flex-wrap gap-1 border-b border-[#f0eee9] p-2.5" role="tablist" aria-label="Examples">
         {samples.map((sample, i) => (
           <button
             key={sample.name}
+            type="button"
             role="tab"
             aria-selected={shown === i}
             onClick={() => setShown(i)}
-            className={`whitespace-nowrap rounded-t-lg px-3.5 py-2 text-[13px] font-semibold ${shown === i ? 'bg-[#22272e] text-white' : 'text-[#9aa4b8] hover:text-white'}`}
+            className={`cursor-pointer whitespace-nowrap rounded-lg px-3 py-1.75 text-sm font-medium transition-colors ${shown === i ? 'bg-hover text-ink' : 'text-muted hover:bg-hover'}`}
           >
             {sample.name}
           </button>
         ))}
       </div>
-      <div className="min-h-[330px] [&_pre]:rounded-none" dangerouslySetInnerHTML={{ __html: samples[shown].html }} />
+      <div
+        role="tabpanel"
+        className="min-h-90 [&_pre]:m-0 [&_pre]:overflow-x-auto [&_pre]:rounded-none [&_pre]:bg-white! [&_pre]:px-6 [&_pre]:pb-7 [&_pre]:pt-6 [&_pre]:font-code [&_pre]:text-[14.5px] [&_pre]:leading-[1.75]"
+        dangerouslySetInnerHTML={{ __html: samples[shown].html }}
+      />
     </div>
   );
 }

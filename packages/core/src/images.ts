@@ -8,12 +8,25 @@ import { type Doc, type Media, type Paragraph, type Position, type Run, ANCHOR_C
 import { normalizeRuns, propsAt, sliceRuns } from './ops';
 import { type Anchor, type DocxSource, type StoryPart, anchoredObject, imageInPart } from './docx/source';
 import { storyPath } from './stories';
+import { decodeEntities, escapeXml } from './docx/xml';
 
 const EMU_PER_POINT = 12700;
 /** What stands for the relationship id of a picture that is not in a package yet: this and its key in `doc.media`. */
 const NEW = 'dx:';
 
 const EXTENSIONS: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif' };
+
+/**
+ * The kind of picture some bytes are, by how they start, for one that came
+ * without saying: a PNG, a JPEG or a GIF; undefined for anything else.
+ */
+export function imageTypeOf(bytes: Uint8Array): string | undefined {
+  const starts = (...head: number[]) => head.every((byte, i) => bytes[i] === byte);
+  if (starts(0x89, 0x50, 0x4e, 0x47)) return 'image/png';
+  if (starts(0xff, 0xd8, 0xff)) return 'image/jpeg';
+  if (starts(0x47, 0x49, 0x46, 0x38)) return 'image/gif';
+  return undefined;
+}
 
 /** The file extension for a kind of picture that can be put in a document, or undefined. */
 export function imageExtension(type: string): string | undefined {
@@ -97,6 +110,38 @@ export function resizePicture(doc: Doc, pos: Position, width: number, height: nu
   const resized: Run = { text: OBJECT_CHAR, props: { ...run.props, object: xml, objectWidth: width, objectHeight: height } };
   const without = { ...p, runs: [...sliceRuns(p.runs, 0, pos.offset), ...sliceRuns(p.runs, pos.offset + 1, length(p))] };
   return replaceParagraph(doc, pos.para, withRuns({ ...without, runs: without.runs.length ? without.runs : [{ text: '', props: p.runs[0].props }] }, pos.offset, [resized]));
+}
+
+// --- Alternative text ---------------------------------------------------------------
+// What a picture or a shape is, for whoever cannot see it: Word's "Alt Text",
+// kept in the drawing as the description of its properties (wp:docPr descr).
+
+const DOC_PR = /<wp:docPr\b[^>]*?>/;
+
+/** The description of a drawing for whoever cannot see it, as Word keeps it; undefined when it has none. */
+export function altText(xml: string | undefined): string | undefined {
+  const tag = xml && DOC_PR.exec(xml)?.[0];
+  const descr = tag && /\bdescr="([^"]*)"/.exec(tag)?.[1];
+  return descr ? decodeEntities(descr) : undefined;
+}
+
+/** Whether Word was told the drawing is only there to look at ("Mark as decorative"): it has nothing to say, and a reader skips it. */
+export function isDecorative(xml: string | undefined): boolean {
+  return !!xml && /<(?:\w+:)?decorative\b[^>]*\bval="(?:1|true)"/.test(xml);
+}
+
+/** Gives the picture or the shape at `pos`, in the line or floating, a description for whoever cannot see it; an empty one takes it away. */
+export function setAltText(doc: Doc, pos: Position, text: string): Doc {
+  const run = runAt(doc, pos);
+  const xml = run?.props.object;
+  const tag = xml && DOC_PR.exec(xml)?.[0];
+  if (!run || !xml || !tag) return doc;
+  const without = tag.replace(/\s+descr="[^"]*"/, '');
+  const value = text.replace(/\s+/g, ' ').trim();
+  const next = value ? without.replace(/^<wp:docPr\b/, `<wp:docPr descr="${escapeXml(value)}"`) : without;
+  if (next === tag) return doc;
+  const p = doc.paragraphs[pos.para];
+  return replaceParagraph(doc, pos.para, { ...p, runs: p.runs.map((one) => (one === run ? { ...run, props: { ...run.props, object: xml.replace(tag, next) } } : one)) });
 }
 
 // --- Floating pictures ------------------------------------------------------------

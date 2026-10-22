@@ -1,0 +1,6 @@
+/* The included editor as it comes: its colours and its islands are the library's own. */
+.fe,
+.fe-frame {
+  height: 100%;
+  min-height: 0;
+}

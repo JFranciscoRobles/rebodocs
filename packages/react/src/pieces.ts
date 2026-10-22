@@ -5,7 +5,7 @@
 // them their own way. All of them go inside a `DocsProvider`.
 
 import { type CSSProperties, type ReactNode, createElement, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { type ActiveFormat, type FindOptions, type FormatId, type OutlineItem, type PageNumbering, type PageSetup, docText, formatText, formatValue } from '@rebodocs/core';
+import { type ActiveFormat, type Block, type FindOptions, type FormatId, type OutlineItem, type PageNumbering, type PageSetup, type TemplateData, docText, formatText, formatValue } from '@rebodocs/core';
 import { type Bubble, type NoteView, type ZoomFit, createRuler, getLocale, keyboardInset, onKeyboard, onLocaleChange, styleName } from '@rebodocs/editor';
 import { useDocs, useDocsValue } from './headless';
 
@@ -161,11 +161,13 @@ export interface DocsVariables {
   insert(name: string): void;
   /** Selects the next place a variable is used. */
   select(name: string): void;
-  /** Puts a value in place of each variable that has one, everywhere, as one step to undo. */
-  fill(values: Record<string, string>): void;
+  /** The blocks of the template, {{#name}} … {{/name}}: repeated for each item of a list, or kept only when a value is there. */
+  blocks: Block[];
+  /** Puts a value in place of each variable that has one, and writes out each block that has one, everywhere, as one step to undo. */
+  fill(values: TemplateData): void;
   /** What every use of each variable asks of its value: capitals, bold, how a date or a number is written. */
   formats: Record<string, ActiveFormat[]>;
-  /** How many times each is used in the document, its header and its footer. */
+  /** How many times each is used in the document, its headers, footers, notes and text boxes. */
   uses: Record<string, number>;
   /** Gives a format to every use of a variable, or takes it away. A way of writing a date or a number takes the place of the one there was, and so does a change of capitals. */
   setFormat(name: string, id: FormatId, on: boolean, arg?: string): void;
@@ -176,12 +178,14 @@ export interface DocsVariables {
 export function useDocsVariables(): DocsVariables {
   const { editor, commands } = useDocs();
   const names = useDocsValue((e) => e.variables, []);
+  const blocks = useDocsValue((e) => e.blocks, [] as Block[]);
   const active = useDocsValue((e) => e.activeVariable ?? null, null);
   const formats = useDocsValue((e) => Object.fromEntries(e.variables.map((name) => [name, e.variableFormats(name)])), {} as Record<string, ActiveFormat[]>);
   const uses = useDocsValue((e) => Object.fromEntries(e.variables.map((name) => [name, e.variableUses(name)])), {} as Record<string, number>);
   return useMemo(
     () => ({
       names,
+      blocks,
       active: active ?? undefined,
       insert: (name) => commands.insertVariable(name),
       select: (name) => void editor?.selectVariable(name),
@@ -190,11 +194,11 @@ export function useDocsVariables(): DocsVariables {
       uses,
       setFormat: (name, id, on, arg) => editor?.setVariableFormat(name, id, on, arg),
       preview: (name, value) => {
-        const { text, problems } = formatValue(value, (formats[name] ?? []).map((format) => formatText(format.id, format.arg)));
+        const { text, problems } = formatValue(value, (formats[name] ?? []).map((format) => formatText(format.id, format.arg)), { locale: editor?.formatLocale });
         return { text, bad: value !== '' && problems.length > 0 };
       },
     }),
-    [editor, commands, names, active, formats, uses],
+    [editor, commands, names, blocks, active, formats, uses],
   );
 }
 

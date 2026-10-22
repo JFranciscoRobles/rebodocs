@@ -178,6 +178,26 @@ describe('two people at once', () => {
     return first;
   };
 
+  it('sends what was typed or deleted before a word that starts the same at the start of a word', () => {
+    // " always" typed before " add" also reads as "lways a" put in after "Late payments a".
+    const typed = edit(base('Late payments add a fee.'), 'b', (doc) => insertText(doc, { para: 0, offset: 13 }, ' always').doc);
+    expect(typed.ops).toMatchObject([{ t: 'splice', at: 14, remove: 0, insert: [{ text: 'always ' }] }]);
+    const deleted = edit(base('Late payments always add a fee.'), 'b', (doc) => deleteRange(doc, { from: { para: 0, offset: 13 }, to: { para: 0, offset: 20 } }));
+    expect(deleted.ops).toMatchObject([{ t: 'splice', at: 14, remove: 7, insert: [] }]);
+    // Bold made at the same time over "Late payments add" stays on whole words.
+    const doc = same(
+      base('Late payments add a fee.'),
+      (d) => applyRunProps(d, { from: { para: 0, offset: 0 }, to: { para: 0, offset: 17 } }, { bold: true }),
+      (d) => insertText(d, { para: 0, offset: 13 }, ' always').doc,
+    );
+    expect(doc.paragraphs[0].runs.filter((run) => run.props.bold).map((run) => run.text)).toEqual(['Late payments ', 'add']);
+  });
+
+  it('leaves where it is what was typed at the start of a word already', () => {
+    const typed = edit(base('Late payments add a fee.'), 'b', (doc) => insertText(doc, { para: 0, offset: 20 }, 'small ').doc);
+    expect(typed.ops).toMatchObject([{ t: 'splice', at: 20, remove: 0, insert: [{ text: 'small ' }] }]);
+  });
+
   it('keeps what both typed in the same paragraph', () => {
     const doc = base('hola mundo');
     const out = same(doc, (d) => insertText(d, { para: 0, offset: 0 }, 'A ').doc, (d) => insertText(d, { para: 0, offset: 10 }, ' B').doc);

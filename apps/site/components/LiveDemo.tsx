@@ -3,6 +3,7 @@
 // The editor itself, on the page: the same component an application installs.
 import { type Versions, DocsEditor } from '@rebodocs/react';
 import { useEffect, useState } from 'react';
+import { spellcheck } from '../../demo/src/spelling';
 
 // The versions kept on this page, while it is open: an application keeps them beside its documents.
 const kept: { id: string; date: string; label?: string; author?: string; docx: Uint8Array }[] = [];
@@ -27,16 +28,16 @@ export function LiveDemo() {
   }, []);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-white shadow-[0_24px_60px_-24px_rgba(15,30,70,0.35)]">
-      <div className="flex h-9 items-center gap-1.5 border-b border-[#d5d8df] bg-[#e9ebf0] px-3">
-        <i className="size-2.5 rounded-full bg-[#c3c7d0]" />
-        <i className="size-2.5 rounded-full bg-[#c3c7d0]" />
-        <i className="size-2.5 rounded-full bg-[#c3c7d0]" />
-        <span className="ml-2 text-xs text-muted">receipt.docx</span>
+    <div className="overflow-hidden rounded-2xl border border-border bg-white">
+      <div className="flex h-11 items-center gap-2 border-b border-[#f0eee9] px-4">
+        <i className="size-2.75 rounded-full bg-[#f2c9c4]" />
+        <i className="size-2.75 rounded-full bg-[#f5e2b0]" />
+        <i className="size-2.75 rounded-full bg-[#c8e3cd]" />
+        <span className="ml-2.5 text-sm font-semibold text-ink">receipt.docx</span>
       </div>
       <div className="h-[min(720px,78vh)] min-h-[460px]">
         {file ? (
-          <DocsEditor docx={file} name="receipt.docx" locale="en" features={{ files: true, language: true }} versions={versions} />
+          <DocsEditor docx={file} name="receipt.docx" locale="en" features={{ files: true, language: true, theme: true }} versions={versions} spellcheck={spellcheck} />
         ) : (
           <p className="grid h-full place-items-center text-sm text-muted">{failed ? 'The sample document could not be loaded.' : 'Opening the document…'}</p>
         )}

@@ -4,6 +4,9 @@
 import { strFromU8, unzipSync } from 'fflate';
 import {
   type Border,
+  type FormatChange,
+  PARAGRAPH_FORMAT,
+  RUN_FORMAT,
   type BorderStyle,
   type CellLines,
   type CellRef,
@@ -482,10 +485,23 @@ interface InlineContext {
   field?: { code: string; result: boolean; filled?: boolean };
   /** Where the links of the part go outside the document, by relationship id. */
   links?: Map<string, string>;
-  /** The tracked change the runs now coming are part of: inside a `w:ins` or a `w:del`. */
-  revision?: Pick<RunProps, 'revision' | 'revisionAuthor' | 'revisionDate'>;
+  /** The tracked change the runs now coming are part of: inside a `w:ins` or a `w:del`, or a `w:del` inside a `w:ins`. */
+  revision?: Pick<RunProps, 'revision' | 'revisionAuthor' | 'revisionDate' | 'insertedBy' | 'insertedDate' | 'revisionMove'>;
   /** Told of each drawing with a text box in it: its `w:txbxContent`, and the XML of the run. */
   box?: (content: XmlNode, objectXml: string) => void;
+}
+
+/** The keys given of an object, those set. */
+const pick = <T extends object>(props: T, keys: readonly string[]): T => {
+  const out: Record<string, unknown> = {};
+  for (const key of keys) if ((props as Record<string, unknown>)[key] !== undefined) out[key] = (props as Record<string, unknown>)[key];
+  return out as T;
+};
+
+/** A change of formatting as Word keeps one, `w:rPrChange` or `w:pPrChange`: who, when, and the formatting before, read from the element inside. */
+function formatChangeOf<T>(change: XmlNode | undefined, before: (old: XmlNode | undefined) => T, inner: string): FormatChange<T> | undefined {
+  if (!change) return undefined;
+  return defined<FormatChange<T>>({ author: change.attrs['w:author'] ?? '', date: change.attrs['w:date'], before: before(child(change, inner)) });
 }
 
 /** A tracked change as an element says it: put in or taken out, by whom, when. */
@@ -495,6 +511,20 @@ function revisionOf(node: XmlNode, type: 'insert' | 'delete'): Pick<RunProps, 'r
 
 /** Tracked changes, and what they are: a move is a change too, taken out where it was and put in where it went. */
 const REVISIONS: Record<string, 'insert' | 'delete'> = { 'w:ins': 'insert', 'w:moveTo': 'insert', 'w:del': 'delete', 'w:moveFrom': 'delete' };
+
+/**
+ * The moves being read: the name of each, from where its range starts to
+ * where it ends, which may be paragraphs later. A move without its range is
+ * named by who made it and when, which its two halves share.
+ */
+let moveRanges = new Map<string, string>();
+const unnamedMoves = new Map<string, string>();
+function moveName(kind: 'From' | 'To', change: XmlNode): string {
+  for (const [key, name] of moveRanges) if (key.startsWith(kind)) return name;
+  const key = `${change.attrs['w:author'] ?? ''}\u0000${change.attrs['w:date'] ?? ''}`;
+  if (!unnamedMoves.has(key)) unnamedMoves.set(key, `dxmove${unnamedMoves.size + 1}`);
+  return unnamedMoves.get(key)!;
+}
 
 /** The fields whose result changes from page to page. */
 function pageField(field: InlineContext['field']): string | undefined {
@@ -522,6 +552,7 @@ function collectRun(r: XmlNode, wrap: string, ctx: InlineContext): void {
     opaque: rPr ? xml.slice(rPr.openEnd, rPr.closeStart) : undefined,
     wrap: wrap || undefined,
     ...ctx.revision,
+    formatChange: formatChangeOf(child(rPr, 'w:rPrChange'), (old) => pick({ ...ctx.base, ...resolveStyle(sheet, val(child(old, 'w:rStyle'))).rPr, ...parseRunProps(old) }, RUN_FORMAT), 'w:rPr'),
   });
   ctx.last = props;
 
@@ -615,7 +646,11 @@ function collectInline(node: XmlNode, wrap: string, ctx: InlineContext): void {
     const revision = REVISIONS[c.name];
     if (revision) {
       const outer = ctx.revision;
-      ctx.revision = revisionOf(c, revision);
+      let own: InlineContext['revision'] = revisionOf(c, revision);
+      if (c.name === 'w:moveFrom' || c.name === 'w:moveTo') own = { ...own, revisionMove: moveName(c.name === 'w:moveFrom' ? 'From' : 'To', c) };
+      // Taken out of what someone put in: two changes, each to decide on its own.
+      if (revision === 'delete' && outer?.revision === 'insert') own = defined({ ...own, insertedBy: outer.revisionAuthor ?? '', insertedDate: outer.revisionDate });
+      ctx.revision = own;
       collectInline(c, wrap, ctx);
       ctx.revision = outer;
       continue;
@@ -634,10 +669,26 @@ function collectInline(node: XmlNode, wrap: string, ctx: InlineContext): void {
       ctx.field = outer;
       continue;
     }
-    // Where a move started and ended: the move is read as text taken out and text put in, which need no such marks.
-    if (/^w:move(?:From|To)Range(?:Start|End)$/.test(c.name)) continue;
+    // Where a move started and ended: what names the changes of the move inside, written again around them.
+    const range = /^w:move(From|To)Range(Start|End)$/.exec(c.name);
+    if (range) {
+      const key = `${range[1]}\u0000${c.attrs['w:id'] ?? ''}`;
+      if (range[2] === 'Start') moveRanges.set(key, c.attrs['w:name'] ?? `dxmove-${c.attrs['w:id'] ?? ''}`);
+      else moveRanges.delete(key);
+      continue;
+    }
     // Bookmarks, comment ranges, math... carried as anchors, part of the change they are inside, if any.
-    const props = defined<RunProps>({ ...ctx.last, wrap: wrap || undefined, revision: undefined, revisionAuthor: undefined, revisionDate: undefined, ...ctx.revision });
+    const props = defined<RunProps>({
+      ...ctx.last,
+      wrap: wrap || undefined,
+      revision: undefined,
+      revisionAuthor: undefined,
+      revisionDate: undefined,
+      insertedBy: undefined,
+      insertedDate: undefined,
+      revisionMove: undefined,
+      ...ctx.revision,
+    });
     ctx.out.push(objectRun(props, xml.slice(c.start, c.end)));
   }
 }
@@ -743,7 +794,19 @@ function parseParagraph(p: XmlNode, ctx: BlockContext): Paragraph {
   // The mark that ends the paragraph, put in or taken out while changes were tracked.
   const markChange = mark?.children.find((c) => c.name === 'w:ins' || c.name === 'w:del' || c.name === 'w:moveTo' || c.name === 'w:moveFrom');
   const markRevision = markChange && revisionOf(markChange, REVISIONS[markChange.name]);
-  const own = markRevision ? defined({ ...props, markRevision: markRevision.revision, markAuthor: markRevision.revisionAuthor, markDate: markRevision.revisionDate }) : props;
+  const marked = markRevision ? defined({ ...props, markRevision: markRevision.revision, markAuthor: markRevision.revisionAuthor, markDate: markRevision.revisionDate }) : props;
+  // Its formatting changed while changes were tracked: what it was, read as the paragraph is.
+  const formatChange = formatChangeOf(
+    child(pPr, 'w:pPrChange'),
+    (old) => {
+      const oldStyle = val(child(old, 'w:pStyle')) ?? sheet.defaultParagraphStyle;
+      const was = resolveStyle(sheet, oldStyle);
+      const styledWas = defined({ ...ctx.tableStyle?.pPr, ...was.pPr, tabs: mergeTabs(ctx.tableStyle?.pPr.tabs, was.pPr.tabs) });
+      return pick({ ...resolveParagraphProps(sheet, ctx.numbering, oldStyle, styledWas, parseParagraphProps(old)), styleId: oldStyle }, PARAGRAPH_FORMAT);
+    },
+    'w:pPr',
+  );
+  const own = formatChange ? { ...marked, formatChange } : marked;
   const paragraph = defined<Paragraph>({
     props: styleId ? { ...own, styleId } : own,
     runs: normalizeRuns(runs, markProps),
@@ -932,6 +995,9 @@ function parseTable(tbl: XmlNode, ctx: BlockContext): void {
     // Only the rows the table starts with are headings: one in the middle that says it is, is not.
     header &&= !!trPr && !!toggle(trPr, 'w:tblHeader');
     if (header) row.header = true;
+    // A row put in or taken out while changes were tracked.
+    const change = trPr?.children.find((c) => c.name === 'w:ins' || c.name === 'w:del');
+    if (change) row.revision = defined({ type: change.name === 'w:ins' ? ('insert' as const) : ('delete' as const), author: change.attrs['w:author'] ?? '', date: change.attrs['w:date'] });
     tcs.forEach((tc, c) => {
       const tcPr = child(tc, 'w:tcPr');
       const merge = child(tcPr, 'w:vMerge');
@@ -1133,8 +1199,30 @@ function mainPartPath(files: Record<string, Uint8Array>): string {
   return 'word/document.xml';
 }
 
-export function importDocx(data: Uint8Array): Doc {
-  const files = unzipSync(data);
+export interface ImportOptions {
+  /**
+   * The most the files of the package may take unpacked, in bytes, as the
+   * package says it; 256 MB when not given. A DOCX that says more is refused
+   * before it is unpacked: one sent by someone else may be made to fill the memory.
+   */
+  maxSize?: number;
+}
+
+/** The most a package may take unpacked when nothing else is said. */
+export const MAX_DOCX_SIZE = 256 * 1024 * 1024;
+
+export function importDocx(data: Uint8Array, options: ImportOptions = {}): Doc {
+  moveRanges = new Map();
+  unnamedMoves.clear();
+  const limit = options.maxSize ?? MAX_DOCX_SIZE;
+  let total = 0;
+  const files = unzipSync(data, {
+    filter: (file) => {
+      total += file.originalSize;
+      if (total > limit) throw new Error(`The DOCX is too large unpacked: more than ${Math.round(limit / 1024 / 1024)} MB`);
+      return true;
+    },
+  });
   const mainPath = mainPartPath(files);
   const main = files[mainPath];
   if (!main) throw new Error('Not a DOCX file: the main document part is missing');

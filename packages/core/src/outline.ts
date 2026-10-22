@@ -13,13 +13,19 @@ export interface OutlineItem {
   text: string;
 }
 
-/** The titles and headings of the document that have text, in order. Those inside tables are not part of it. */
-export function outline(doc: Doc): OutlineItem[] {
+/** The level of each paragraph style that makes a heading, by its id: 0 for a title, then from 1. */
+export function headingLevels(doc: Doc): Map<string, number> {
   const levels = new Map<string, number>();
   for (const style of paragraphStyles(doc)) {
     if (style.outlineLevel) levels.set(style.id, style.outlineLevel);
     else if (style.wordName?.toLowerCase() === 'title') levels.set(style.id, 0);
   }
+  return levels;
+}
+
+/** The titles and headings of the document that have text, in order. Those inside tables are not part of it. */
+export function outline(doc: Doc): OutlineItem[] {
+  const levels = headingLevels(doc);
   const out: OutlineItem[] = [];
   doc.paragraphs.forEach((p, para) => {
     const level = levels.get(p.props.styleId ?? '');

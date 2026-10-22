@@ -8,8 +8,8 @@
 //   </DocsProvider>
 
 import { type CSSProperties, type ReactNode, createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import type { Editor } from '@rebodocs/editor';
-import { type Docs, type DocsCommands, type DocsHeadlessOptions, type DocsState, createDocs } from './docs';
+import { type Editor, addFonts } from '@rebodocs/editor';
+import { type Docs, type DocsCommands, type DocsHeadlessOptions, type DocsState, createDocs, fontsKey } from './docs';
 
 export interface DocsProviderProps extends DocsHeadlessOptions {
   children?: ReactNode;
@@ -48,6 +48,7 @@ const EMPTY: DocsState = {
   pictureSelected: false,
   letterhead: false,
   trackChanges: false,
+  changesView: 'all',
   revisionCount: 0,
   area: 'body',
   page: 1,
@@ -61,6 +62,7 @@ const EMPTY: DocsState = {
   findIndex: 0,
   name: '',
   dirty: false,
+  saves: 0,
   collab: 'off',
   peers: [],
   me: { name: '', color: '' },
@@ -115,6 +117,28 @@ export function DocsProvider({ children, ...options }: DocsProviderProps): React
   useEffect(() => {
     if (author !== undefined) docs?.setAuthor(author);
   }, [docs, author]);
+
+  // Fonts given later are added as the first were; the same ones in a new array are not read again.
+  const givenFonts = fontsKey(options.fonts);
+  const firstFonts = useRef(givenFonts);
+  useEffect(() => {
+    if (firstFonts.current === givenFonts) return;
+    firstFonts.current = givenFonts;
+    if (latest.current.fonts?.length) void addFonts(latest.current.fonts);
+  }, [givenFonts]);
+  const { embedFonts, language, spellcheck, theme } = options;
+  useEffect(() => {
+    if (docs) docs.editor.language = language;
+  }, [docs, language]);
+  useEffect(() => {
+    if (docs) docs.editor.spellChecker = spellcheck;
+  }, [docs, spellcheck]);
+  useEffect(() => {
+    if (docs) docs.editor.theme = theme ?? 'light';
+  }, [docs, theme]);
+  useEffect(() => {
+    if (docs) docs.editor.embedFonts = embedFonts ?? true;
+  }, [docs, embedFonts]);
 
   // The one it was made with is already on its way; another one given later takes its place.
   const given = useRef<{ docs: Docs | undefined; letterhead: typeof letterhead }>({ docs: undefined, letterhead });

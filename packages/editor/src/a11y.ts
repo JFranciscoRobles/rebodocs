@@ -3,11 +3,14 @@
 // of the text: so the editor says, in a live region, what the caret moved
 // over, what was selected or deleted, and where the caret is.
 
-import { type MessageKey, t } from './i18n';
+import { type MessageKey, onLocaleChange, plural, speaks, t } from './i18n';
+
+/** A piece of what is said: words of the interface, or text of the document in the language it is in. */
+export type Spoken = string | { text: string; lang?: string };
 
 export interface Announcer {
-  /** Says `text`; `urgent` interrupts what is being said, as for the result of a key. */
-  say(text: string, urgent?: boolean): void;
+  /** Says `text`, or its pieces one after another; `urgent` interrupts what is being said, as for the result of a key. */
+  say(text: string | Spoken[], urgent?: boolean): void;
   readonly element: HTMLElement;
   destroy(): void;
 }
@@ -26,19 +29,32 @@ export function createAnnouncer(parent: HTMLElement): Announcer {
     el.setAttribute('aria-live', live);
     el.setAttribute('aria-atomic', 'true');
     el.style.cssText = VISUALLY_HIDDEN;
+    speaks(el);
     parent.appendChild(el);
   }
+  // What it says is in the language of the interface, which may change while it is there.
+  const stopLocale = onLocaleChange(() => [polite, assertive].forEach(speaks));
   let flip = false;
   return {
     element: polite,
     say(text, urgent = false) {
-      if (!text) return;
+      const pieces = typeof text === 'string' ? [text] : text;
+      if (!pieces.some((piece) => (typeof piece === 'string' ? piece : piece.text))) return;
       const el = urgent ? assertive : polite;
       // The same words twice in a row are said twice: a space that comes and goes makes them new.
       flip = !flip;
-      el.textContent = text + (flip ? '\u00a0' : '');
+      // Text of the document in a language of its own is marked so, for the screen reader to read it with that voice.
+      const nodes = pieces.map((piece) => {
+        if (typeof piece === 'string' || !piece.lang) return document.createTextNode(typeof piece === 'string' ? piece : piece.text);
+        const span = document.createElement('span');
+        span.lang = piece.lang;
+        span.textContent = piece.text;
+        return span;
+      });
+      el.replaceChildren(...nodes, document.createTextNode(flip ? '\u00a0' : ''));
     },
     destroy() {
+      stopLocale();
       polite.remove();
       assertive.remove();
     },
@@ -61,7 +77,7 @@ export function spokenText(text: string): string {
   const clean = text.replace(/[\u2060\u200B]/g, '').replace(/\uFFFC/g, ` ${t('a11y.object')} `).replace(/\f/g, ' ').replace(/[\t\n]+/g, ' ').trim();
   if (!clean) return t('a11y.blank');
   if (clean.length <= MAX_SPOKEN) return clean;
-  return t('a11y.long', { start: clean.slice(0, 80), count: String(clean.length) });
+  return plural('a11y.long', clean.length, { start: clean.slice(0, 80), count: clean.length });
 }
 
 // --- Regions -----------------------------------------------------------------------
@@ -236,8 +252,8 @@ export function colorName(hex: string | undefined): string {
 
 const STYLE_ID = 'dx-a11y-style';
 const CSS = `
-:where(.dx-tb,.dx-pn,.dx-sb,.dx-bb,.dx-fb,.dx-side,.dx-page-dlg,.dx-ig,.dx-vv,.dx-ruler) :focus-visible{outline:2px solid #0b57d0;outline-offset:-2px}
-.dx-ruler [tabindex]:focus-visible{outline:2px solid #0b57d0;outline-offset:1px;border-radius:2px}
+:where(.dx-tb,.dx-pn,.dx-sb,.dx-bb,.dx-fb,.dx-side,.dx-page-dlg,.dx-ig,.dx-vv,.dx-ruler) :focus-visible{outline:2px solid var(--dx-ui-accent,#0b57d0);outline-offset:-2px}
+.dx-ruler [tabindex]:focus-visible{outline:2px solid var(--dx-ui-accent,#0b57d0);outline-offset:1px;border-radius:2px}
 @media (prefers-reduced-motion:reduce){
 .dx-focused .dx-caret{animation:none!important}
 .dx-side,.dx-side-scrim{transition:none!important}

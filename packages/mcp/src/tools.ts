@@ -13,8 +13,10 @@ import {
   insertTextBox,
   textBoxOf,
   textBoxPart,
+  type RevisionChange,
   type RevisionView,
   acceptRevisions,
+  byAuthor,
   comparePositions,
   decideAllRevisions,
   rejectRevisions,
@@ -91,11 +93,22 @@ import {
   defined,
   deleteRange,
   fillVariables,
+  findAllVariables,
+  altText,
+  setAltText,
+  flattenValues,
+  templateBlocks,
+  type TemplateData,
   findAll,
-  findVariables,
   insertSignatures,
   insertTable,
+  hasRevisions,
   insertText,
+  letterheadOf,
+  pngLetterheadMargins,
+  removeLetterhead,
+  setLetterhead,
+  withLetterheadMargins,
   MIN_COLUMN_WIDTH,
   movePicture,
   resizePicture,
@@ -208,6 +221,12 @@ function afterIndex(doc: Doc, args: Args): number {
 
 /** The text of a paragraph as a person reads it: without the marks that take no room, a picture as a word. */
 /** The text of a paragraph as an assistant reads it; with the numbers of the notes, their references as [^n]. */
+/** A picture as the assistant reads it: with its description, when it has one, as a screen reader says it. */
+const imageText = (run: { text: string; props: { object?: string } }) => {
+  const alt = altText(run.props.object);
+  return (alt ? `[image: ${alt}]` : '[image]').repeat(run.text.length);
+};
+
 /** A paragraph as the assistant reads it: tracked changes as {+put in+} and [-taken out-], and its mark too when it is one. */
 const shown = (p: Paragraph, notes?: Map<string, number>): string => {
   let out = '';
@@ -216,7 +235,7 @@ const shown = (p: Paragraph, notes?: Map<string, number>): string => {
   for (const run of p.runs) {
     const note = notes && footnoteReferenceId(run.props.object);
     const text =
-      note !== undefined && notes?.has(note) ? `[^${notes.get(note)}]`.repeat(run.text.length) : run.props.anchor ? '' : run.props.object ? '[image]'.repeat(run.text.length) : run.text;
+      note !== undefined && notes?.has(note) ? `[^${notes.get(note)}]`.repeat(run.text.length) : run.props.anchor ? '' : run.props.object ? imageText(run) : run.text;
     if (!text) continue;
     const revision = run.props.revision ?? '';
     if (revision !== open) {
@@ -229,6 +248,21 @@ const shown = (p: Paragraph, notes?: Map<string, number>): string => {
   if (p.props.markRevision) out += p.props.markRevision === 'insert' ? '{+¶+}' : '[-¶-]';
   return out.replace(/\f/g, '[page break]').replace(/\t/g, ' → ');
 };
+
+/** Where `offset` of the paragraph's text falls in the text `shown` gives, with its marks of changes, pictures and tabs. */
+function shownOffset(p: Paragraph, offset: number): number {
+  const runs: Paragraph['runs'] = [];
+  let left = offset;
+  for (const run of p.runs) {
+    if (left <= 0) break;
+    runs.push({ ...run, text: run.text.slice(0, left) });
+    left -= run.text.length;
+  }
+  const before = shown({ ...p, runs, props: { ...p.props, markRevision: undefined } });
+  // A change still open where the text was cut has been closed by shown: that mark is not before the place.
+  const last = [...runs].reverse().find((run) => run.text && !run.props.anchor);
+  return before.length - (last?.props.revision === 'insert' || last?.props.revision === 'delete' ? 2 : 0);
+}
 
 const words = (doc: Doc): number => doc.paragraphs.reduce((sum, p) => sum + (shown(p).match(/\S+/g)?.length ?? 0), 0);
 
@@ -423,7 +457,7 @@ function sayRuns(p: Paragraph): string[] {
   const out: { text: string; looks: string }[] = [];
   for (const run of p.runs) {
     if (run.props.anchor) continue;
-    const text = run.props.object ? '[image]'.repeat(run.text.length) : run.text;
+    const text = run.props.object ? imageText(run) : run.text;
     const looks = sayLooks(run.props);
     const last = out[out.length - 1];
     if (last && last.looks === looks) last.text += text;
@@ -577,6 +611,7 @@ export const TOOLS: Tool[] = [
           doc.trackRevisions || revisionsOf(doc).length
             ? `${doc.trackRevisions ? 'Changes are tracked: what you change stays marked for the person to accept or reject.' : 'Changes are not tracked.'} ${revisionsOf(doc).length} tracked changes, shown in read_document as {+put in+} and [-taken out-] (list_changes).`
             : '',
+          letterheadOf(doc) ? 'It has a letterhead: a picture the size of the page behind the text of every page (set_letterhead).' : '',
           story('Header', doc.header),
           story('Footer', doc.footer),
           doc.firstPage ? `The first page${sectionMarks(doc).length ? ' of the last section' : ''} has a header and a footer of its own ("first_header", "first_footer").` : '',
@@ -656,7 +691,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'compare_documents',
     description:
-      'What changed between this document and another version of it in a .docx file ("path"): the paragraphs put in, taken out and changed, of the text and of its headers, footers and notes at the foot of the page, with what was taken out as [-…-] and what was put in as {+…+}. By default the file is the earlier version; with "file_is" "later", it is the later one.',
+      'What changed between this document and another version of it in a .docx file ("path"): the paragraphs put in, taken out and changed, of the text and of its headers, footers, notes at the foot of the page and text boxes, and the notes on the text (as add_note makes), with what was taken out as [-…-] and what was put in as {+…+}. Tracked changes are compared as if accepted, as Word does. By default the file is the earlier version; with "file_is" "later", it is the later one.',
     properties: {
       path: { type: 'string', description: 'The path of the other version, a .docx file.' },
       file_is: { type: 'string', enum: ['earlier', 'later'], description: 'Whether the file is the earlier version (the default) or the later one.' },
@@ -673,8 +708,8 @@ export const TOOLS: Tool[] = [
         return fail('The file is not a Word document that can be read.');
       }
       const later = optionalText(args, 'file_is') === 'later';
-      const { changes } = later ? compareDocs(doc, other) : compareDocs(other, doc);
-      if (!changes.length) return { text: 'There is no difference in the text, the headers, the footers or the notes.' };
+      const { changes, notes } = later ? compareDocs(doc, other) : compareDocs(other, doc);
+      if (!changes.length && !notes.length) return { text: 'There is no difference in the text, the headers, the footers, the notes or the text boxes.' };
       /** Where a change is, by the numbers of this document when it has the paragraph. */
       const where = (change: Change) => {
         const mine = later ? change.before : change.after;
@@ -682,13 +717,18 @@ export const TOOLS: Tool[] = [
         const place = mine !== undefined ? `[${mine + 1}]` : `(only in the file, its paragraph ${theirs! + 1})`;
         if (!change.part) return place;
         const note = change.part.startsWith('footnote:') ? footnoteNumbers(later ? doc : other).get(change.part.slice(9)) ?? footnoteNumbers(later ? other : doc).get(change.part.slice(9)) : undefined;
-        return `${note !== undefined ? `Note ${note}` : storyKind(change.part) === 'header' ? 'Header' : 'Footer'} ${place}`;
+        const kind = storyKind(change.part);
+        return `${note !== undefined ? `Footnote ${note}` : kind === 'textbox' ? 'Text box' : kind === 'header' ? 'Header' : 'Footer'} ${place}`;
       };
       const WORDS = { added: 'put in', removed: 'taken out', changed: 'changed', formatted: 'same text, another look' } as const;
       const MOST = 200;
       const lines = changes.slice(0, MOST).map((change) => `${where(change)} ${WORDS[change.kind]}: ${describeChange(change)}`);
       if (changes.length > MOST) lines.push(`…and ${changes.length - MOST} more.`);
-      const head = `${changes.length} ${changes.length === 1 ? 'change' : 'changes'} from the ${later ? 'document' : 'file'} to the ${later ? 'file' : 'document'}; the numbers in brackets are those of this document's paragraphs:`;
+      const NOTE_WORDS = { added: 'written', removed: 'taken out', changed: 'changed' } as const;
+      for (const change of notes) lines.push(`Note by ${change.author} ${NOTE_WORDS[change.kind]}: ${describeChange(change)}`);
+      const total = changes.length + notes.length;
+      const tracked = hasRevisions(doc) || hasRevisions(other) ? ' Tracked changes were taken as accepted, so the numbers are those the paragraphs would have with them accepted.' : '';
+      const head = `${total} ${total === 1 ? 'change' : 'changes'} from the ${later ? 'document' : 'file'} to the ${later ? 'file' : 'document'}; the numbers in brackets are those of this document's paragraphs:${tracked}`;
       return { text: `${head}\n${lines.join('\n')}` };
     },
   },
@@ -708,8 +748,9 @@ export const TOOLS: Tool[] = [
       const found = findAll(doc, query, { matchCase: optionalFlag(args, 'match_case') ?? false, wholeWord: optionalFlag(args, 'allword') ?? false });
       if (!found.length) return { text: `"${query}" is not in the document.` };
       const shownOnes = found.slice(0, 50).map((range) => {
-        const whole = shown(doc.paragraphs[range.from.para]);
-        const at = whole.toLowerCase().indexOf(query.toLowerCase());
+        const para = doc.paragraphs[range.from.para];
+        const whole = shown(para);
+        const at = shownOffset(para, range.from.offset);
         const start = Math.max(0, at - 40);
         return `[${range.from.para + 1}] ${start ? '…' : ''}${whole.slice(start, at + query.length + 40)}${at + query.length + 40 < whole.length ? '…' : ''}`;
       });
@@ -1076,7 +1117,7 @@ export const TOOLS: Tool[] = [
   },
   {
     name: 'list_changes',
-    description: 'The tracked changes of the document, numbered: who made each, whether it put text in or took it out, the text, and the paragraph it is in. accept_changes and reject_changes take these numbers.',
+    description: 'The tracked changes of the document, numbered: who made each, whether it put text in, took it out, moved it or changed its formatting, the text, and the paragraph it is in. Text one person put in and another took out is two changes. accept_changes and reject_changes take these numbers.',
     properties: {},
     writes: false,
     run(doc) {
@@ -1093,22 +1134,29 @@ export const TOOLS: Tool[] = [
       const lines = list.map((r, i) => {
         const what = r.text.replace(/[\u2060\uFFFC]/g, '');
         const text = what === '¶' ? 'a paragraph break' : `"${what.replace(/¶$/, '')}"${what.endsWith('¶') ? ' and the paragraph break after it' : ''}`;
-        return `${i + 1}. ${r.author || 'Someone'} ${r.type === 'insert' ? 'put in' : 'took out'} ${text} (${where(r)}${r.date ? `, ${r.date.slice(0, 16).replace('T', ' ')}` : ''})`;
+        const did = r.row ? (r.type === 'insert' ? 'put in a table row with' : 'took out a table row with') : r.type === 'format' ? `changed the formatting (${(r.format ?? []).join(', ')}) of` : r.move ? (r.type === 'insert' ? 'moved here' : 'moved away') : r.type === 'insert' ? 'put in' : 'took out';
+        return `${i + 1}. ${r.author || 'Someone'} ${did} ${text} (${where(r)}${r.date ? `, ${r.date.slice(0, 16).replace('T', ' ')}` : ''})`;
       });
       return { text: `${state} ${list.length} tracked ${list.length === 1 ? 'change' : 'changes'}:\n${lines.join('\n')}` };
     },
   },
   {
     name: 'accept_changes',
-    description: 'Accepts tracked changes: what was put in stays, unmarked, and what was taken out goes. With "changes", the ones of those numbers in list_changes; without, all of them.',
-    properties: { changes: { type: 'array', items: { type: 'integer' }, description: 'The numbers of the changes, from list_changes. All of them when left out.' } },
+    description: 'Accepts tracked changes: what was put in stays, unmarked, and what was taken out goes. With "changes", the ones of those numbers in list_changes; with "author", all of that person\'s; without either, all of them. A move is accepted whole.',
+    properties: {
+      changes: { type: 'array', items: { type: 'integer' }, description: 'The numbers of the changes, from list_changes. All of them when left out.' },
+      author: { type: 'string', description: 'Only the changes of this person, as list_changes names them.' },
+    },
     writes: true,
     run: (doc, args) => decideChanges(doc, args, true),
   },
   {
     name: 'reject_changes',
-    description: 'Rejects tracked changes: what was put in goes, and what was taken out comes back. With "changes", the ones of those numbers in list_changes; without, all of them.',
-    properties: { changes: { type: 'array', items: { type: 'integer' }, description: 'The numbers of the changes, from list_changes. All of them when left out.' } },
+    description: 'Rejects tracked changes: what was put in goes, and what was taken out comes back. With "changes", the ones of those numbers in list_changes; with "author", all of that person\'s; without either, all of them. A move is rejected whole.',
+    properties: {
+      changes: { type: 'array', items: { type: 'integer' }, description: 'The numbers of the changes, from list_changes. All of them when left out.' },
+      author: { type: 'string', description: 'Only the changes of this person, as list_changes names them.' },
+    },
     writes: true,
     run: (doc, args) => decideChanges(doc, args, false),
   },
@@ -1119,40 +1167,56 @@ export const TOOLS: Tool[] = [
     writes: false,
     run(doc) {
       const names = variableNames(doc);
-      if (!names.length) return { text: 'The document has no variables. One is written between double braces: {{cliente}}, or with a format, {{fecha | fecha larga}}.' };
+      const blocks = templateBlocks(doc);
+      const KIND = { text: 'some text', row: 'a row of a table', paragraphs: 'paragraphs' };
+      const blockLines = blocks.map((block) => `{{${block.inverted ? '^' : '#'}${block.name}}} — ${KIND[block.kind]}, ${block.inverted ? 'kept when the value is not there' : 'repeated for each item of a list, or kept for true'}`);
+      if (!names.length && !blocks.length) return { text: 'The document has no variables. One is written between double braces: {{cliente}}, or with a format, {{fecha | fecha larga}}. A block, {{#lines}} … {{/lines}}, is repeated for each item of a list.' };
       const formats = new Map<string, Set<string>>();
-      for (const part of [doc, doc.header, doc.footer]) {
-        for (const use of part ? findVariables(part) : []) {
-          const set = formats.get(use.name) ?? new Set<string>();
-          formats.set(use.name, set);
-          for (const format of use.formats) set.add(format);
-        }
+      for (const use of findAllVariables(doc)) {
+        const set = formats.get(use.name) ?? new Set<string>();
+        formats.set(use.name, set);
+        for (const format of use.formats) set.add(format);
       }
-      return { text: names.map((name) => `${name} — used ${variableUses(doc, name)}×${formats.get(name)?.size ? `; formats: ${[...formats.get(name)!].join(', ')}` : ''}`).join('\n') };
+      return { text: [...names.map((name) => `${name} — used ${variableUses(doc, name)}×${formats.get(name)?.size ? `; formats: ${[...formats.get(name)!].join(', ')}` : ''}`), ...(blockLines.length ? ['Blocks:', ...blockLines] : [])].join('\n') };
     },
   },
   {
     name: 'fill_variables',
-    description: 'Puts a value in place of each template variable that is given one, everywhere in the document, its header and its footer, in the format the variable asks for. Dates go as YYYY-MM-DD and numbers plain (1234.5): the format writes them out. Variables with no value stay as they are.',
-    properties: { values: { type: 'object', description: 'The value of each variable, by its name: { "cliente": "Ana Pérez", "fecha": "2026-10-12" }.', additionalProperties: { type: ['string', 'number'] } } },
+    description:
+      'Puts a value in place of each template variable that is given one, everywhere in the document (its headers, footers, notes and text boxes too), in the format the variable asks for, and writes out each block given one: {{#name}} … {{/name}} is repeated for each item of a list (a row of a table, paragraphs, or text), kept for true and taken out for false; {{^name}} … {{/name}} the other way round. Dates go as YYYY-MM-DD and numbers plain (1234.5): the format writes them out. Variables and blocks with no value stay as they are.',
+    properties: {
+      values: {
+        type: 'object',
+        description: 'The value of each variable, by its name: { "cliente": "Ana Pérez", "fecha": "2026-10-12" }. Nested objects fill dotted names ({ "cliente": { "nombre": "Ana" } } fills {{cliente.nombre}}); a list fills a block, each item an object whose fields fill {{lines.item}}, {{lines.price}}…; true or false keeps a block or takes it out.',
+        additionalProperties: true,
+      },
+      locale: { type: 'string', description: 'The language dates and numbers are written in, as a tag: "en-US", "es-MX", "de-DE". The language of the document when left out, or English when it says none.' },
+      currency: { type: 'string', description: 'The code of the currency "moneda" writes: "EUR", "MXN". A dollar sign when left out.' },
+    },
     required: ['values'],
     writes: true,
     run(doc, args, context) {
       const given = args.values && typeof args.values === 'object' && !Array.isArray(args.values) ? (args.values as Args) : fail('"values" must be an object with the value of each variable by its name.');
-      const values: Record<string, string> = {};
-      for (const [name, value] of Object.entries(given)) if (value !== null && value !== undefined) values[name] = String(value);
+      const values = given as TemplateData;
+      const flat = flattenValues(values);
       const names = variableNames(doc);
-      const unknown = Object.keys(values).filter((name) => !names.includes(name));
-      const today = context.now ? { today: context.now } : {};
+      const blocks = templateBlocks(doc).map((block) => block.name);
+      // A name is the document's when a variable or a block is called so, or has it before a dot.
+      const known = [...names, ...blocks];
+      const unknown = Object.keys(values).filter((name) => !known.some((other) => other === name || other.startsWith(`${name}.`)));
+      const today = { ...(context.now ? { today: context.now } : {}), ...(optionalText(args, 'locale') ? { locale: optionalText(args, 'locale') } : {}), ...(optionalText(args, 'currency') ? { currency: optionalText(args, 'currency') } : {}) };
       const problems = variableProblems(doc, values, today).map(({ name, format, kind }) =>
-        kind === 'format' ? `{{${name}}} asks for a format that does not exist, "${format}": it was ignored.` : `The value of {{${name}}}, "${values[name]}", is not one "${format}" can write: it was put as given.`,
+        kind === 'format' ? `{{${name}}} asks for a format that does not exist, "${format}": it was ignored.` : `The value of {{${name}}}, "${flat[name]}", is not one "${format}" can write: it was put as given.`,
       );
       const next = fillVariables(doc, values, today);
       const left = variableNames(next);
+      const blocksLeft = templateBlocks(next).map((block) => block.name);
       return {
         text: [
           `Filled ${names.length - left.length} of ${names.length} variables.`,
+          blocks.length ? `Wrote out ${new Set(blocks).size - new Set(blocksLeft).size} of ${new Set(blocks).size} blocks.` : '',
           left.length ? `Still without a value: ${left.join(', ')}.` : '',
+          blocksLeft.length ? `Blocks still without a value: ${[...new Set(blocksLeft)].join(', ')}.` : '',
           unknown.length ? `Not variables of this document: ${unknown.join(', ')}.` : '',
           ...problems,
         ]
@@ -1386,11 +1450,13 @@ export const TOOLS: Tool[] = [
   {
     name: 'edit_image',
     areas: true,
-    description: 'Changes a picture that is in the document: "resize" it (with "width_cm"; its height follows), "move" it to a paragraph of its own after another (with "after_paragraph"), "align" the paragraph it is in (with "align"), or "delete" it. read_document shows a picture as [image].',
+    description:
+      'Changes a picture that is in the document: "resize" it (with "width_cm"; its height follows), "move" it to a paragraph of its own after another (with "after_paragraph"), "align" the paragraph it is in (with "align"), "describe" it for whoever cannot see it (with "description", what a screen reader says; empty takes it away), or "delete" it. read_document shows a picture as [image], or [image: its description].',
     properties: {
       paragraph: { type: 'integer', description: 'The paragraph the picture is in.' },
       occurrence: { type: 'integer', description: 'Which picture of the paragraph, when it has several: 1 for the first.' },
-      action: { type: 'string', enum: ['resize', 'move', 'align', 'delete'] },
+      action: { type: 'string', enum: ['resize', 'move', 'align', 'describe', 'delete'] },
+      description: { type: 'string', description: 'For describe: what the picture shows, in a sentence, as Word\'s "Alt Text".' },
       width_cm: { type: 'number', description: 'For resize: how wide to show it, in centimetres.' },
       after_paragraph: { type: 'integer', description: 'For move: the paragraph it goes after; 0 for the start.' },
       align: { type: 'string', enum: ['left', 'center', 'right'], description: 'For align.' },
@@ -1425,6 +1491,11 @@ export const TOOLS: Tool[] = [
           const align = text(args, 'align');
           if (align !== 'left' && align !== 'center' && align !== 'right') fail('"align" must be "left", "center" or "right".');
           return { text: `Paragraph ${para + 1} is aligned ${align}.`, doc: setParagraphProps(doc, para, para, { align: align as 'left' | 'center' | 'right' }), reveal: pos };
+        }
+        case 'describe': {
+          const said = typeof args.description === 'string' ? args.description : fail('describe needs "description": what the picture shows, or "" to take it away.');
+          const next = setAltText(doc, pos, said);
+          return { text: said.trim() ? `The picture is described as: ${said.trim()}` : 'The picture has no description now.', doc: next === doc ? undefined : next, reveal: pos };
         }
         case 'delete':
           return { text: 'Picture deleted.', doc: deleteRange(doc, { from: pos, to: { para, offset: pos.offset + 1 } }), reveal: pos };
@@ -1550,6 +1621,34 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'set_letterhead',
+    description:
+      'Gives the document a letterhead: a picture from a file (PNG, JPEG or GIF), stretched over the whole page behind the text of every page, in place of the one it had. For a PNG, the top and bottom margins grow to clear what it prints there. With "remove", takes it away; the rest of the header stays. get_overview says whether the document has one.',
+    properties: {
+      path: { type: 'string', description: 'The path of the picture file, the shape of the paper.' },
+      remove: { type: 'boolean', description: 'True to take the letterhead away instead.' },
+    },
+    writes: true,
+    run(doc, args) {
+      if (args.remove === true) {
+        if (!letterheadOf(doc)) return { text: 'The document has no letterhead.' };
+        return { text: 'Letterhead removed. The margins are as they were.', doc: removeLetterhead(doc) };
+      }
+      // The file is read by whoever runs the tool, which gives its bytes here: a page cannot open a path.
+      const type = optionalText(args, 'type') ?? '';
+      const data = optionalText(args, 'data') ?? fail('Give "path", the picture file, or "remove": true.');
+      if (!imageExtension(type)) fail('Only PNG, JPEG and GIF pictures can be a letterhead.');
+      const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+      if (!pictureSize(bytes, type)) fail('The file is not a picture that can be read.');
+      let next = setLetterhead(doc, { bytes, type });
+      const asked = type === 'image/png' ? pngLetterheadMargins(bytes, next.page) : undefined;
+      if (asked) next = withLetterheadMargins(next, asked);
+      const cm = (pt: number) => (pt / CM).toFixed(1);
+      const margins = next.page === doc.page ? 'The margins clear it already.' : `Top margin ${cm(next.page.marginTop)} cm, bottom ${cm(next.page.marginBottom)} cm, to clear what it prints.`;
+      return { text: `Letterhead set, behind the text of every page. ${asked ? margins : 'Its margins were not read: set them with set_page_setup if its printing needs room.'}`, doc: next };
+    },
+  },
+  {
     name: 'set_page_setup',
     description:
       'Changes the size of the paper, its orientation, or its margins; and, for one section of a document of several, whether it has a header and footer of its own and whether its first page has its own. Give only what is to change. Without "section", the page of every section changes.',
@@ -1618,7 +1717,7 @@ export const TOOLS: Tool[] = [
     properties: {
       place: { type: 'string', enum: ['header', 'footer', 'none'], description: '"none" takes the number away.' },
       align: { type: 'string', enum: ['left', 'center', 'right'], description: 'Centre when left out.' },
-      format: { type: 'string', enum: ['number', 'numberOfTotal', 'page', 'pageOfTotal'], description: 'How it reads: "3", "3 / 9", "Página 3" or "Página 3 de 9". The first when left out.' },
+      format: { type: 'string', enum: ['number', 'numberOfTotal', 'page', 'pageOfTotal'], description: 'How it reads: "3", "3 / 9", "Page 3" or "Page 3 of 9" (in the words of the document’s language: "Página 3 de 9" in Spanish). The first when left out.' },
     },
     required: ['place'],
     writes: true,
@@ -1785,6 +1884,13 @@ function decideChanges(doc: Doc, args: Args, accept: boolean): ToolResult {
   const list = revisionsOf(doc);
   if (!list.length) return { text: 'There are no tracked changes.' };
   const given = args.changes;
+  const author = args.author;
+  if (author !== undefined && author !== null && typeof author !== 'string') return fail('"author" must be the name of a person, as list_changes gives it.');
+  if ((given === undefined || given === null) && typeof author === 'string') {
+    const theirs = list.filter((r) => r.author === author).length;
+    if (!theirs) return fail(`No tracked change is by "${author}". The people with changes: ${[...new Set(list.map((r) => r.author))].map((a) => `"${a}"`).join(', ')}.`);
+    return { text: `${accept ? 'Accepted' : 'Rejected'} the ${theirs} tracked ${theirs === 1 ? 'change' : 'changes'} by ${author}.`, doc: decideAllRevisions(doc, accept, byAuthor(author)) };
+  }
   if (given === undefined || given === null) {
     return { text: `${accept ? 'Accepted' : 'Rejected'} all ${list.length} tracked ${list.length === 1 ? 'change' : 'changes'}.`, doc: decideAllRevisions(doc, accept) };
   }
@@ -1795,10 +1901,12 @@ function decideChanges(doc: Doc, args: Args, accept: boolean): ToolResult {
   chosen.sort((a, b) => (a.part ?? '').localeCompare(b.part ?? '') || comparePositions(b.range.from, a.range.from));
   let next = doc;
   for (const r of chosen) {
-    if (!r.part) next = accept ? acceptRevisions(next, r.range) : rejectRevisions(next, r.range);
+    // That change alone: not another person's over the same text.
+    const pick = (change: RevisionChange) => change.type === r.type && change.author === r.author && (change.move ?? '') === (r.move ?? '');
+    if (!r.part) next = accept ? acceptRevisions(next, r.range, pick) : rejectRevisions(next, r.range, pick);
     else {
       const story = storyOf(next, r.part)!;
-      next = withStory(next, r.part, { ...story, paragraphs: (accept ? acceptRevisions(story, r.range) : rejectRevisions(story, r.range)).paragraphs });
+      next = withStory(next, r.part, { ...story, paragraphs: (accept ? acceptRevisions(story, r.range, pick) : rejectRevisions(story, r.range, pick)).paragraphs });
     }
   }
   return { text: `${accept ? 'Accepted' : 'Rejected'} ${chosen.length} tracked ${chosen.length === 1 ? 'change' : 'changes'}. The numbers of the others may have moved: list_changes again before using one.`, doc: next };

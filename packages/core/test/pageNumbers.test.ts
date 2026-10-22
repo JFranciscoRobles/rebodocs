@@ -42,16 +42,21 @@ describe('page numbers', () => {
     expect(numbered.paragraphs).toBe(plain.paragraphs);
 
     const layout = layoutDocument(numbered, measurer);
-    expect(layout.pages.map((p) => textOf(p.footer))).toEqual(['Página 1 de 3', 'Página 2 de 3', 'Página 3 de 3']);
-    // 13 characters of 10pt text are 65pt wide: centred in the 160pt between the margins, at the foot of the page.
-    expect(layout.pages[1].footer!.lines[0]).toMatchObject({ x: 20 + (160 - 65) / 2, y: 180 });
+    expect(layout.pages.map((p) => textOf(p.footer))).toEqual(['Page 1 of 3', 'Page 2 of 3', 'Page 3 of 3']);
+    // 11 characters of 10pt text are 55pt wide: centred in the 160pt between the margins, at the foot of the page.
+    expect(layout.pages[1].footer!.lines[0]).toMatchObject({ x: 20 + (160 - 55) / 2, y: 180 });
 
     const forms = (['number', 'numberOfTotal', 'page', 'pageOfTotal'] as const).map((format) => {
       const doc = setPageNumbering(plain, { place: 'header', align: 'right', format });
       expect(pageNumbering(doc)).toEqual({ place: 'header', align: 'right', format });
       return textOf(layoutDocument(doc, measurer).pages[1].header);
     });
-    expect(forms).toEqual(['2', '2 / 3', 'Página 2', 'Página 2 de 3']);
+    expect(forms).toEqual(['2', '2 / 3', 'Page 2', 'Page 2 of 3']);
+
+    // In a document in Spanish, its words; words given are the ones used.
+    const spanish = importDocx(exportDocx(plain, { language: 'es-MX' }));
+    expect(textOf(layoutDocument(setPageNumbering(spanish, { place: 'footer', align: 'center', format: 'pageOfTotal' }), measurer).pages[1].footer)).toBe('Página 2 de 3');
+    expect(textOf(layoutDocument(setPageNumbering(plain, { place: 'footer', align: 'center', format: 'page', words: { page: 'Seite', of: 'von' } }), measurer).pages[1].footer)).toBe('Seite 2');
 
     // The number takes the font of the text, not of a mark that happens to come first.
     const marked = { ...plain, paragraphs: [{ props: {}, runs: [{ text: '\u2060', props: { fontFamily: 'Symbol', object: '<w:bookmarkStart/>', anchor: true } }, { text: 'Text', props: { fontFamily: 'Georgia' } }] }] };

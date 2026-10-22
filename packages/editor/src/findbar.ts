@@ -3,8 +3,9 @@
 
 import { installRegionKeys, markRegion } from './a11y';
 import type { Editor } from './editor';
-import { getLocale, t } from './i18n';
+import { getLocale, speaks, t } from './i18n';
 import { IS_MAC } from './platform';
+import { applyTheme } from './theme';
 
 export interface FindBar {
   /** Opens the panel; with `replace`, with the row to replace in view. */
@@ -17,17 +18,17 @@ const STYLE_ID = 'dx-findbar-style';
 const MOD = IS_MAC;
 
 const CSS = `
-.dx-fb{position:fixed;z-index:25;display:none;flex-direction:column;gap:6px;padding:8px;border:1px solid #d2d6de;border-radius:8px;background:#fff;box-shadow:0 6px 20px rgba(0,0,0,.14);font:13px system-ui,-apple-system,"Segoe UI",sans-serif;color:#2b2f38}
+.dx-fb{position:fixed;z-index:25;display:none;flex-direction:column;gap:6px;padding:10px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:16px;background:var(--dx-ui-bg,#fff);box-shadow:0 6px 20px rgba(47,46,43,.14);font:13px system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--dx-ui-ink,#2f2e2b)}
 .dx-fb.dx-fb-open{display:flex}
 .dx-fb-row{display:flex;align-items:center;gap:4px}
-.dx-fb input{width:190px;height:28px;padding:0 8px;border:1px solid #d2d6de;border-radius:6px;font:inherit;color:inherit}
-.dx-fb input:focus-visible,.dx-fb button:focus-visible{outline:2px solid #0b57d0;outline-offset:-2px}
-.dx-fb-count{min-width:62px;padding:0 4px;color:#5f6470;font-size:12px;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap}
-.dx-fb button{display:inline-flex;align-items:center;justify-content:center;height:28px;min-width:28px;padding:0 6px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer}
-.dx-fb button:hover:not(:disabled){background:#e2e6ee}
-.dx-fb button.dx-on{background:#d3e3fd;color:#0b57d0}
+.dx-fb input{width:190px;height:32px;padding:0 8px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:9px;font:inherit;color:inherit}
+.dx-fb input:focus-visible,.dx-fb button:focus-visible{outline:2px solid var(--dx-ui-accent,#0b57d0);outline-offset:-2px}
+.dx-fb-count{min-width:62px;padding:0 4px;color:var(--dx-ui-muted,#5f5d58);font-size:12px;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap}
+.dx-fb button{display:inline-flex;align-items:center;justify-content:center;height:32px;min-width:32px;padding:0 6px;border:0;border-radius:9px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.dx-fb button:hover:not(:disabled){background:var(--dx-ui-hover,#f3f1ec)}
+.dx-fb button.dx-on{background:var(--dx-ui-active,#e8f0fd);color:var(--dx-ui-accent,#0b57d0)}
 .dx-fb button:disabled{opacity:.35;cursor:default}
-.dx-fb button.dx-fb-text{padding:0 10px;border:1px solid #d2d6de}
+.dx-fb button.dx-fb-text{padding:0 10px;border:1px solid var(--dx-ui-line,#e6e3dc)}
 `;
 
 const svg = (body: string) =>
@@ -53,6 +54,7 @@ export function createFindBar(editor: Editor): FindBar {
   bar.className = 'dx-fb';
   bar.setAttribute('role', 'search');
   bar.setAttribute('aria-label', t('a11y.find'));
+  speaks(bar);
   // F6 goes to it from the document while it is open, and back.
   markRegion(bar, 'find', () => (isOpen ? query : null));
   installRegionKeys();
@@ -186,7 +188,7 @@ export function createFindBar(editor: Editor): FindBar {
   // The usual key opens it, in place of the search of the browser.
   const onKey = (e: KeyboardEvent) => {
     if (!(MOD ? e.metaKey : e.ctrlKey) || e.altKey || e.shiftKey) return;
-    const key = e.key.toLowerCase();
+    const key = e.key?.toLowerCase();
     if (key !== 'f' && key !== 'h') return;
     e.preventDefault();
     open(key === 'h');
@@ -195,12 +197,16 @@ export function createFindBar(editor: Editor): FindBar {
   window.addEventListener('resize', place);
   const unsubscribe = editor.onChange(refresh);
   document.body.appendChild(bar);
+  // In the colours of its editor, now and when they change.
+  applyTheme(bar, editor.theme);
+  const stopTheme = editor.onChange(() => applyTheme(bar, editor.theme));
 
   return {
     open,
     close,
     destroy() {
       unsubscribe();
+      stopTheme();
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('resize', place);
       bar.remove();

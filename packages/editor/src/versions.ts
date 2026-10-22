@@ -8,8 +8,9 @@
 import { type Comparison, type Doc, compareDocs, importDocx } from '@rebodocs/core';
 import { holdFocus } from './a11y';
 import { Editor } from './editor';
-import { getLocale, t } from './i18n';
+import { getLocale, plural, t } from './i18n';
 import { IS_MAC } from './platform';
+import { applyTheme } from './theme';
 
 /** A version of the document, as the application lists it. */
 export interface VersionInfo {
@@ -100,28 +101,28 @@ export const UNDO_KEY = IS_MAC ? '⌘Z' : 'Ctrl+Z';
 
 const STYLE_ID = 'dx-versions-style';
 const CSS = `
-.dx-vv{position:absolute;z-index:30;display:flex;flex-direction:column;background:#eef0f4;font:13px system-ui,-apple-system,"Segoe UI",sans-serif;color:#2b2f38}
-.dx-vv-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px;border-bottom:1px solid #d9dce3;background:#fff}
+.dx-vv{position:absolute;z-index:30;display:flex;flex-direction:column;background:var(--dx-ui-line,#e6e3dc);font:13px system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--dx-ui-ink,#2f2e2b)}
+.dx-vv-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px;border-bottom:1px solid var(--dx-ui-line,#e6e3dc);background:var(--dx-ui-bg,#fff)}
 .dx-vv-title{font-weight:600}
-.dx-vv-bar label{display:flex;align-items:center;gap:6px;color:#4a4f5a}
-.dx-vv-bar select{max-width:220px;height:30px;padding:0 6px;border:1px solid #d2d6de;border-radius:6px;background:#fff;color:inherit;font:inherit}
-.dx-vv-count{color:#4a4f5a;font-variant-numeric:tabular-nums}
+.dx-vv-bar label{display:flex;align-items:center;gap:6px;color:var(--dx-ui-muted,#5f5d58)}
+.dx-vv-bar select{max-width:220px;height:30px;padding:0 6px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:9px;background:var(--dx-ui-bg,#fff);color:inherit;font:inherit}
+.dx-vv-count{color:var(--dx-ui-muted,#5f5d58);font-variant-numeric:tabular-nums}
 .dx-vv-nav{display:inline-flex;align-items:center;gap:6px}
 .dx-vv-gap{flex:1}
-.dx-vv-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:30px;min-width:30px;padding:0 10px;border:1px solid #d2d6de;border-radius:6px;background:#fff;color:inherit;font:inherit;cursor:pointer;white-space:nowrap}
-.dx-vv-btn:hover:not(:disabled){background:#eef1f6}
+.dx-vv-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:30px;min-width:30px;padding:0 10px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:9px;background:var(--dx-ui-bg,#fff);color:inherit;font:inherit;cursor:pointer;white-space:nowrap}
+.dx-vv-btn:hover:not(:disabled){background:var(--dx-ui-hover,#f3f1ec)}
 .dx-vv-btn:disabled{opacity:.4;cursor:default}
-.dx-vv-btn.dx-vv-main{border-color:#0b57d0;background:#0b57d0;color:#fff}
-.dx-vv-btn.dx-vv-main:hover:not(:disabled){background:#0a4dba}
-.dx-vv-seg{display:inline-flex;border:1px solid #d2d6de;border-radius:6px;overflow:hidden}
-.dx-vv-seg button{height:28px;padding:0 10px;border:0;background:#fff;color:inherit;font:inherit;cursor:pointer}
-.dx-vv-seg button+button{border-left:1px solid #d2d6de}
-.dx-vv-seg button.dx-on{background:#d3e3fd;color:#0b57d0}
-.dx-vv-legend{padding:4px 12px;border-bottom:1px solid #e3e6ec;background:#fafbfc;color:#5f6470;font-size:12px}
+.dx-vv-btn.dx-vv-main{border-color:var(--dx-ui-accent,#0b57d0);background:var(--dx-ui-accent,#0b57d0);color:var(--dx-ui-on-accent,#fff)}
+.dx-vv-btn.dx-vv-main:hover:not(:disabled){background:var(--dx-ui-accent-hover,#08398a)}
+.dx-vv-seg{display:inline-flex;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:9px;overflow:hidden}
+.dx-vv-seg button{height:28px;padding:0 10px;border:0;background:var(--dx-ui-bg,#fff);color:inherit;font:inherit;cursor:pointer}
+.dx-vv-seg button+button{border-left:1px solid var(--dx-ui-line,#e6e3dc)}
+.dx-vv-seg button.dx-on{background:var(--dx-ui-active,#e8f0fd);color:var(--dx-ui-accent,#0b57d0)}
+.dx-vv-legend{padding:4px 12px;border-bottom:1px solid var(--dx-ui-line,#e6e3dc);background:var(--dx-ui-bar,#fbfaf8);color:var(--dx-ui-muted,#5f5d58);font-size:12px}
 .dx-vv-legend s{color:#c62828}
 .dx-vv-legend u{color:#1a7f37}
 .dx-vv-doc{position:relative;flex:1;min-height:0}
-.dx-vv-btn:focus-visible,.dx-vv-seg button:focus-visible,.dx-vv-bar select:focus-visible{outline:2px solid #0b57d0;outline-offset:-2px}
+.dx-vv-btn:focus-visible,.dx-vv-seg button:focus-visible,.dx-vv-bar select:focus-visible{outline:2px solid var(--dx-ui-accent,#0b57d0);outline-offset:-2px}
 `;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text = ''): HTMLElementTagNameMap[K] {
@@ -209,6 +210,7 @@ export function createVersionView(editor: Editor, versions: Versions, options: V
     const host = target.parentElement;
     if (!host) return;
     if (root.parentElement !== host) host.appendChild(root);
+    applyTheme(root, editor.theme);
     if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
     root.style.left = `${target.offsetLeft}px`;
     root.style.top = `${target.offsetTop}px`;
@@ -234,8 +236,9 @@ export function createVersionView(editor: Editor, versions: Versions, options: V
     const changes = comparison?.changes ?? [];
     const inText = changes.filter((change) => !change.part).length;
     const elsewhere = changes.length - inText;
-    const words = inText === 0 ? t('compare.none') : inText === 1 ? t('compare.one') : t('compare.count', { n: inText });
-    count.textContent = elsewhere ? `${words} · ${t('compare.elsewhere', { n: elsewhere })}` : words;
+    const words = inText === 0 ? t('compare.none') : plural('compare.count', inText, { n: inText });
+    const notes = comparison?.notes.length ?? 0;
+    count.textContent = [words, elsewhere ? t('compare.elsewhere', { n: elsewhere }) : '', notes ? t('compare.notes', { n: notes }) : ''].filter(Boolean).join(' · ');
     const n = marks().length;
     prev.disabled = !showMarked || n === 0 || at <= 0;
     next.disabled = !showMarked || n === 0 || at >= n - 1;

@@ -7,7 +7,7 @@ import { createApi } from '../server/api';
 import { type Bucket, DOCX, openBucket } from '../server/bucket';
 
 // A bucket that keeps its files in memory and speaks as much of S3 as is asked
-// of one here: listing, reading, writing and the rule of origins. It does not
+// of one here: listing, reading, writing, deleting and the rule of origins. It does not
 // check signatures; what it has seen of each request is kept to look at.
 const objects = new Map<string, { body: Buffer; type: string; at: Date }>();
 const seen: { method: string; path: string; query: URLSearchParams; type?: string }[] = [];
@@ -29,6 +29,9 @@ const s3 = createServer(async (request, response) => {
     const prefix = url.searchParams.get('prefix') ?? '';
     const contents = [...objects].filter(([name]) => name.startsWith(prefix)).map(([name, file]) => `<Contents><Key>${name}</Key><Size>${file.body.length}</Size><LastModified>${file.at.toISOString()}</LastModified></Contents>`);
     xml(200, `<ListBucketResult><Name>bucket</Name><IsTruncated>false</IsTruncated>${contents.join('')}</ListBucketResult>`);
+  } else if (request.method === 'DELETE') {
+    objects.delete(key);
+    response.writeHead(204).end();
   } else if (request.method === 'PUT') {
     objects.set(key, { body, type: request.headers['content-type'] ?? '', at: new Date() });
     response.writeHead(200, { etag: '"0"' }).end();
@@ -142,6 +145,37 @@ describe('a bucket behind the backend', () => {
     expect(paragraphText(importDocx(new Uint8Array(await (await fetch(read.body.url)).arrayBuffer())).paragraphs[0])).toBe('First draft');
     expect((await ask('/api/files')).body.some((file: { key: string }) => file.key.startsWith('versions/'))).toBe(false);
     expect((await ask(`/api/versions?key=${encodeURIComponent(listed[1].id)}`, { method: 'POST', body: '{}' })).status).toBe(400);
+  });
+
+  it('never signs an address to write over a version, nor makes a PDF of one', async () => {
+    const version = 'versions/contract.docx/20261021T100000Z.docx';
+    for (const [path, init] of [
+      [`/api/url?key=${encodeURIComponent(version)}`, { method: 'POST' }],
+      [`/api/pdf?key=${encodeURIComponent(version)}`, { method: 'POST', body: '{}' }],
+    ] as const) {
+      const { status, body } = await ask(path, init);
+      expect(status).toBe(400);
+      expect(body.error).toContain('version');
+    }
+    // It can still be read.
+    expect((await ask(`/api/url?key=${encodeURIComponent(version)}`)).status).toBe(200);
+  });
+
+  it('keeps as many versions as it is told, the oldest going as new ones come', async () => {
+    const few = createApi(() => bucket, { keepVersions: 2 });
+    const server = createServer((request, response) => void few(request, response));
+    const at = `http://127.0.0.1:${await listen(server)}`;
+    const kept: string[] = [];
+    for (const text of ['one', 'two', 'three']) {
+      const body = await (await fetch(`${at}/api/versions?key=few.docx`, { method: 'POST', body: JSON.stringify({ label: text }) })).json();
+      await fetch(body.url, { method: 'PUT', headers: { 'content-type': body.type }, body: docxOf(text) as BodyInit });
+      kept.push(body.version.id);
+      await new Promise((done) => setTimeout(done, 5));
+    }
+    const listed = await (await fetch(`${at}/api/versions?key=few.docx`)).json();
+    expect(listed.map((v: { label: string }) => v.label).sort()).toEqual(['three', 'two']);
+    expect(objects.has(kept[0])).toBe(false);
+    server.close();
   });
 
   it('tells the bucket which origins may reach it', async () => {

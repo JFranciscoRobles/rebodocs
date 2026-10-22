@@ -3,10 +3,10 @@ import { FullEditor } from './FullEditor'
 import { HeadlessEditor } from './HeadlessEditor'
 import './App.css'
 
-type Mode = 'full' | 'headless'
+type Mode = 'full' | 'screen' | 'headless'
 
 function App() {
-  const [mode, setMode] = useState<Mode>(location.hash === '#headless' ? 'headless' : 'full')
+  const [mode, setMode] = useState<Mode>(location.hash === '#headless' ? 'headless' : location.hash === '#screen' ? 'screen' : 'full')
   const [docx, setDocx] = useState<Uint8Array>()
   const [name, setName] = useState('documento.docx')
 
@@ -18,7 +18,7 @@ function App() {
       .then((bytes) => {
         if (gone) return
         setDocx((now) => now ?? new Uint8Array(bytes))
-        setName((now) => (now === 'documento.docx' ? 'contrato.docx' : now))
+        setName((now) => (now === 'documento.docx' ? 'agreement.docx' : now))
       })
       .catch(() => {})
     return () => {
@@ -40,18 +40,21 @@ function App() {
           <button className={mode === 'full' ? 'on' : ''} onClick={() => setMode('full')}>
             DocsEditor
           </button>
+          <button className={mode === 'screen' ? 'on' : ''} onClick={() => setMode('screen')}>
+            Another layout
+          </button>
           <button className={mode === 'headless' ? 'on' : ''} onClick={() => setMode('headless')}>
             Headless
           </button>
         </nav>
         <label className="open">
-          Abrir .docx
+          Open a .docx
           <input type="file" accept=".docx" hidden onChange={(e) => open(e.target.files?.[0])} />
         </label>
       </header>
       <main className="stage">
-        {mode === 'full' ? (
-          <FullEditor docx={docx} name={name} />
+        {mode !== 'headless' ? (
+          <FullEditor key={mode} docx={docx} name={name} layout={mode === 'screen' ? 'another' : 'included'} />
         ) : (
           <HeadlessEditor docx={docx} name={name} />
         )}

@@ -24,3 +24,6 @@ apps/desktop/src-tauri/gen
 
 # Notas sueltas.
 /start.md
+
+# Copied from the root when @rebodocs/react is built, to be published with it.
+/packages/react/THIRD_PARTY_NOTICES.md

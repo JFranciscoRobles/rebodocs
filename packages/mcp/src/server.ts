@@ -257,7 +257,7 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
     const { document, ...rest } = args;
     const on = await target(document);
     // A picture is read here, where the file is: a page cannot open a path.
-    if (name === 'insert_image') {
+    if (name === 'insert_image' || (name === 'set_letterhead' && rest.path !== undefined && rest.remove !== true)) {
       const path = pathOf(rest.path);
       const type = IMAGE_TYPES[extname(path).toLowerCase()] ?? refuse('Only PNG, JPEG and GIF pictures can be put in a document.');
       if (!existsSync(path) || statSync(path).isDirectory()) refuse(`There is no file "${path}".`);
@@ -305,7 +305,7 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
           return answer({
             protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0],
             capabilities: { tools: {} },
-            serverInfo: { name: 'rebodocs', version: '0.8.7' },
+            serverInfo: { name: 'rebodocs', version: '0.9.0' },
             instructions: INSTRUCTIONS,
           });
         }
