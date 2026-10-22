@@ -51,3 +51,22 @@ describe('the dark theme', () => {
     expect(contrast(DARK_THEME['--dx-ui-on-accent'], DARK_THEME['--dx-ui-accent'])).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe('inkOn', () => {
+  it('gives the ink that stands out more on each colour of the people of a room', async () => {
+    const { inkOn } = await import('../src/theme');
+    const { PEER_COLORS } = await import('../../collab/src/server');
+    const lum = (hex: string) =>
+      [0, 2, 4]
+        .map((at) => parseInt(hex.slice(at, at + 2), 16) / 255)
+        .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+        .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+    for (const color of PEER_COLORS) {
+      const l = lum(color);
+      const ratio = inkOn(color) === '#000' ? (l + 0.05) / 0.05 : 1.05 / (l + 0.05);
+      expect(ratio, color).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(inkOn('FFFFFF')).toBe('#000');
+    expect(inkOn('000000')).toBe('#fff');
+  });
+});

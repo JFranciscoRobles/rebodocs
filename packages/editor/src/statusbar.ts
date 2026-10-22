@@ -10,7 +10,7 @@ import { getLocale, plural, t, withRegion } from './i18n';
 const TEXT_LANGUAGES = ['es-MX', 'es-ES', 'es-AR', 'es-CO', 'en-US', 'en-GB', 'pt-BR', 'pt-PT', 'fr-FR', 'de-DE', 'it-IT', 'nl-NL', 'ca-ES'];
 import { installRegionKeys, markRegion } from './a11y';
 import { IS_MAC } from './platform';
-import { applyTheme } from './theme';
+import { applyTheme, inkOn } from './theme';
 
 export interface StatusBar {
   /** Brings the bar in step with what is not the editor's to tell: whether an assistant is connected. */
@@ -97,7 +97,7 @@ const CSS = `
 .dx-sb-ai[data-state=on]::before{background:#34a853}
 .dx-sb-ai[data-state=offline]::before{background:#ea4335}
 .dx-sb-who{display:inline-flex;align-items:center;padding-left:2px}
-.dx-sb-dot{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:-4px;border:1.5px solid var(--dx-ui-bar,#fbfaf8);border-radius:50%;color:var(--dx-ui-on-accent,#fff);font-size:10px;font-weight:700;text-transform:uppercase}
+.dx-sb-dot{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:-4px;border:1.5px solid var(--dx-ui-bar,#fbfaf8);border-radius:50%;font-size:10px;font-weight:700;text-transform:uppercase}
 .dx-sb-pop{position:fixed;z-index:40;width:300px;padding:14px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:16px;background:var(--dx-ui-bg,#fff);box-shadow:0 8px 28px rgba(47,46,43,.18);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--dx-ui-ink,#2f2e2b);user-select:none;white-space:normal}
 .dx-sb-pop label{display:block;margin:0 0 3px;color:var(--dx-ui-muted,#5f5d58);font-size:11px;font-weight:600}
 .dx-sb-pop input{width:100%;box-sizing:border-box;height:32px;margin-bottom:10px;padding:0 8px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:9px;font:inherit;color:inherit;background:var(--dx-ui-bg,#fff)}
@@ -320,6 +320,7 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
       const node = document.createElement('span');
       node.className = 'dx-sb-dot';
       node.style.background = `#${color || '80868b'}`;
+      node.style.color = inkOn(color || '80868b');
       node.textContent = initial(name);
       node.title = name;
       return node;

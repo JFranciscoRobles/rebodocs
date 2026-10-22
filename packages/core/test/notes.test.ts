@@ -1,6 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type Doc, addNote, createDoc, deleteRange, docText, exportDocx, importDocx, insertText, noteExcerpt, noteRanges, notesAt, pruneNotes, removeNote, setNoteColor, setNoteText } from '../src';
+import { type Doc, addNote, createDoc, deleteRange, docText, exportDocx, importDocx, insertText, noteExcerpt, noteRanges, notesAt, pruneNotes, removeNote, setNoteColor, setNoteText, variableNotes } from '../src';
 
 const base = () => createDoc([{ props: {}, runs: [{ text: 'El precio es de mil pesos.', props: {} }] }, { props: {}, runs: [{ text: 'Segundo párrafo.', props: {} }] }]);
 const visible = (doc: Doc) => docText(doc).replace(/⁠/g, '');
@@ -153,5 +153,26 @@ describe('notes', () => {
     doc = addNote(doc, { from: { para: 1, offset: 9 }, to: { para: 1, offset: 12 } }, { ...when, text: 'Tercera, sin color' }).doc;
     const back = importDocx(exportDocx(doc));
     expect(back.notes!.map((n) => [n.text, n.color])).toEqual([['Primera; con = signos', '4285F4'], ['Segunda', '34A853'], ['Tercera, sin color', undefined]]);
+  });
+});
+
+describe('notes on variables', () => {
+  const template = () => createDoc([{ props: {}, runs: [{ text: 'Vende {{clienteNombre}} el inmueble en {{inmuebleDomicilio}} a {{clienteNombre}}.', props: {} }] }]);
+  const at = (doc: Doc, text: string) => doc.paragraphs[0].runs.map((r) => r.text).join('').indexOf(text);
+
+  it('says what a note on a variable, or on a part of it, says; once, and nothing for the others', () => {
+    let doc = template();
+    const name = at(doc, '{{clienteNombre}}');
+    doc = addNote(doc, { from: { para: 0, offset: name }, to: { para: 0, offset: name + 17 } }, { text: 'Como viene en la INE', author: 'Ana' }).doc;
+    // A note on more text than the variable, and one that only touches it.
+    doc = addNote(doc, { from: { para: 0, offset: 0 }, to: { para: 0, offset: at(doc, 'Nombre}}') + 3 } }, { text: 'El vendedor', author: 'Ana' }).doc;
+    const second = doc.paragraphs[0].runs.map((r) => r.text).join('').lastIndexOf('{{clienteNombre}}');
+    doc = addNote(doc, { from: { para: 0, offset: second }, to: { para: 0, offset: second + 17 } }, { text: 'Como viene en la INE', author: 'Luis' }).doc;
+    // In the order of the text, each once.
+    expect(variableNotes(doc)).toEqual({ clienteNombre: ['El vendedor', 'Como viene en la INE'] });
+    // Text right next to it is not on it.
+    const after = at(template(), ' el inmueble');
+    const next = addNote(template(), { from: { para: 0, offset: after }, to: { para: 0, offset: after + 3 } }, { text: 'No', author: 'Ana' }).doc;
+    expect(variableNotes(next)).toEqual({});
   });
 });

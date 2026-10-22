@@ -162,6 +162,7 @@ export const GROUPS: Group[] = [
       { sigs: ['insertVariable(name: string)', 'selectVariable(name: string) → boolean', 'activeVariable: string | undefined'], text: 'selectVariable goes to the next place it is used after the caret, into a header, a footer, a note or a text box when it is there.', nothing: 'selectVariable returns false for a variable the document does not use.' },
       { sigs: ['fillVariables(values: Record<string, string>)'], text: 'Replaces them everywhere, as one step to undo; while changes are tracked, as changes.', run: 'fill' },
       { sigs: ['variableUses(name: string) → number'], text: 'How many times one is used, headers, footers, notes and text boxes included.' },
+      { sigs: ['variableNotes(name: string) → string[]'], text: 'What the notes on it say, on the variable or on a part of it: in a template, what to fill it with. The panel shows them under its box.' },
       { sigs: ['variableFormats(name: string) → ActiveFormat[]', 'setVariableFormat(name, id: FormatId, on: boolean, arg?)'], text: 'The formats every use of a variable has — capitals, bold, how a date or number is written — and giving or taking one away, as one step to undo.' },
       { sigs: ['insertSignatures(titles: string[])'], text: 'A block of signature lines.', nothing: 'Inside a table, or when canEditTables is false.' },
     ],

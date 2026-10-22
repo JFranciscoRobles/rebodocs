@@ -187,7 +187,7 @@ function Editor({ file }: { file: Uint8Array }) {
   },
 ];
 
-export const EDITOR_ADDS = ['locale', 'locales', 'features', 'versions', 'className', 'style', 'onReady', 'ref'];
+export const EDITOR_ADDS = ['features', 'versions', 'className', 'style', 'onReady', 'ref'];
 export const EDITOR_HANDLE = ['exportDocx()', 'save()', 'dirty', 'name', 'editor', 'collab', 'setName', 'setAuthor', 'setLocale', 'setTheme', 'setLetterhead', 'showPanel', 'hidePanel', 'focus'];
 
 export type PropGroup = 'Data' | 'Events' | 'Keys' | 'Together';
@@ -210,6 +210,8 @@ export const PROPS: PropDoc[] = [
   { name: 'unsaved', type: 'boolean', kind: 'bool', group: 'Data', does: 'Whether docx has changes not saved yet, as a draft your app kept: dirty from the start.', warn: 'Read with docx' },
   { name: 'name', type: 'string', kind: 'data', group: 'Data', does: 'What the document is called, given to what is saved and exported. Follows its prop.' },
   { name: 'author', type: 'string', kind: 'data', group: 'Data', does: 'Who the person is: what their notes are signed with. Follows its prop.' },
+  { name: 'locale', type: 'string', kind: 'data', group: 'Data', does: "The language of the texts the library still has: the bar beside the selection, what a screen reader is told. 'es', 'en', or one in locales; left out, the browser's, or English. The whole page's, as setLocale. Follows its prop." },
+  { name: 'locales', type: 'Record<string, Texts>', kind: 'data', group: 'Data', does: 'More languages, or other words for these, as { fr: texts }.' },
   { name: 'letterhead', type: 'Blob | { bytes, type } | string | null', kind: 'obj', group: 'Data', does: 'A PNG or JPG to use as letterhead, as a file, its bytes or its address; null for none.' },
   { name: 'fonts', type: 'FontSource[]', kind: 'obj', group: 'Data', does: 'Typefaces of your own, each with its family and its file. For the whole page; one added later is loaded then.' },
   { name: 'embedFonts', type: "boolean | 'subset'", kind: 'data', group: 'Data', does: "Whether the DOCX carries the fonts of fonts its text uses, when their licence lets it: whole unless false, or cut down to the characters used with 'subset'. Follows its prop." },

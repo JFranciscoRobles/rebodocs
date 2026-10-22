@@ -3,7 +3,7 @@ export { type FontSource, addFont, addFonts, fontFaces, fontFamilies, fontFile, 
 export { type Responsive, type ResponsiveOptions, createResponsive } from './responsive';
 export { Editor, MAX_ZOOM, MIN_ZOOM, type ChangesView, type EditArea, type MarkKey, type NoteView, type PeerCaret, type Selection, type ViewMode, type ZoomFit } from './editor';
 export { CanvasMeasurer, cssFont, cssFontFamily } from './measurer';
-export { DARK_THEME, type Theme, applyTheme } from './theme';
+export { DARK_THEME, type Theme, applyTheme, inkOn } from './theme';
 export { type Dictionary, type SpellChecker, type SpellCheckerOptions, type SpelledWord, createSpellChecker, wordsToCheck } from './spellcheck';
 export { type Toolbar, type ToolbarOptions, createToolbar } from './toolbar';
 export { type StatusBar, type StatusBarOptions, createStatusBar } from './statusbar';

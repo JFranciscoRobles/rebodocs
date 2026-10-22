@@ -204,6 +204,7 @@ import {
   variableFormats,
   variableNames,
   variableText,
+  variableNotes,
   variableUses,
   textInRange,
   toggleList,
@@ -239,7 +240,7 @@ import { fontFaces, fontFile, onFontsChange } from './fonts';
 import { IS_MAC, keyboardInset } from './platform';
 import { CanvasMeasurer, cssFont } from './measurer';
 import { type SpellChecker, type SpelledWord, wordsToCheck } from './spellcheck';
-import { type Theme, applyTheme } from './theme';
+import { type Theme, applyTheme, inkOn } from './theme';
 
 /** Someone else's caret on the document: who they are, and where their selection is. */
 export interface PeerCaret {
@@ -443,7 +444,7 @@ body>:not(.dx-print){display:none!important}
 .dx-peer-sel{position:absolute;opacity:.25;pointer-events:none}
 .dx-sel,.dx-var,.dx-find,.dx-note,.dx-peer-sel{mix-blend-mode:multiply}
 .dx-peer{position:absolute;width:2px;margin-left:-1px;pointer-events:none;z-index:2}
-.dx-peer span{position:absolute;left:0;bottom:100%;padding:1pt 4pt;border-radius:3pt 3pt 3pt 0;color:#fff;font:600 7.5pt/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;white-space:nowrap}
+.dx-peer span{position:absolute;left:0;bottom:100%;padding:1pt 4pt;border-radius:3pt 3pt 3pt 0;font:600 7.5pt/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;white-space:nowrap}
 .dx-caret{position:absolute;width:1.5px;background:var(--dx-caret,#000);pointer-events:none;display:none}
 .dx-focused .dx-caret{display:block;animation:dx-blink 1.06s steps(1) infinite}
 .dx-readonly .dx-caret{display:none!important}
@@ -2047,6 +2048,14 @@ export class Editor {
   variableFormats(name: string): ActiveFormat[] {
     return variableFormats(this.doc, name);
   }
+
+  /** What the notes on the variable say, on it or on a part of it: in a template, what to fill it with. */
+  variableNotes(name: string): string[] {
+    if (this.notesOfVariables?.doc !== this.doc) this.notesOfVariables = { doc: this.doc, notes: variableNotes(this.doc) };
+    return this.notesOfVariables.notes[name] ?? [];
+  }
+  /** Those of every variable, kept while the document is the same: the panel asks for each one. */
+  private notesOfVariables: { doc: Doc; notes: Record<string, string[]> } | undefined;
 
   /** How many times the variable is used in the document, its headers, footers, notes and text boxes. */
   variableUses(name: string): number {
@@ -3806,6 +3815,8 @@ export class Editor {
       const label = document.createElement('span');
       label.textContent = peer.name || t('collab.someone');
       label.style.background = color;
+      // Black on the light ones, white on the dark: the name is read on any of them.
+      label.style.color = inkOn(peer.color);
       bar.appendChild(label);
       this.selLayers[pageOf(caret.page)]?.appendChild(bar);
     }

@@ -71,3 +71,14 @@ export function applyTheme(element: HTMLElement, theme: Theme): void {
   element.classList.toggle('dx-theme-dark', theme === 'dark');
   element.classList.toggle('dx-theme-auto', theme === 'auto');
 }
+
+/** The ink that reads on a colour given as hex RGB (without '#'): black or white, whichever stands out more from it. */
+export function inkOn(hex: string): '#000' | '#fff' {
+  const channel = (at: number) => {
+    const v = parseInt(hex.slice(at, at + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const light = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+  // Contrast with black is (L + .05) / .05, with white 1.05 / (L + .05): black wins above L ≈ .179.
+  return (light + 0.05) / 0.05 >= 1.05 / (light + 0.05) ? '#000' : '#fff';
+}

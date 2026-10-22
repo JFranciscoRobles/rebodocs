@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { DocsEditor } from '@rebodocs/react'
+import { DocsEditor, inkOn } from '@rebodocs/react'
 import { type Room, type StoredFile, createDoc, enterRoom, listDocs, versionsOf } from './api'
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -146,7 +146,7 @@ Every document is a room. It opens when the first person comes in and closes whe
               <span className="people">
                 <span className="person me">{open.as} (you)</span>
                 {live.people.map((person, index) => (
-                  <span key={index} className="person" style={{ background: `#${person.color}` }}>{person.name}</span>
+                  <span key={index} className="person" style={{ background: `#${person.color}`, color: inkOn(person.color) }}>{person.name}</span>
                 ))}
               </span>
               <button onClick={() => void copyLink()}>Copy link</button>

@@ -4,12 +4,13 @@
 // it stands in. After the name it can say how its value is to be written:
 // {{fecha | fecha larga | mayúsculas}}.
 
-import { type Doc, type Range, type RunProps, defined } from './model';
+import { type Doc, type Range, type RunProps, comparePositions, defined } from './model';
 import { replaceRange } from './find';
 import { applyRunProps } from './ops';
 import { type StoryPart, storyOf, textParts, withStory } from './stories';
 import { type Block, type TemplateData, expandBlocks, findBlocks, flattenValues } from './blocks';
 import { documentLanguage } from './docx/source';
+import { noteRanges } from './notes';
 
 export interface Variable {
   name: string;
@@ -403,6 +404,26 @@ export function templateBlocks(doc: Doc): Block[] {
  */
 export function findAllVariables(doc: Doc): (Variable & { part?: StoryPart })[] {
   return parts(doc).flatMap(({ part, doc: text }) => findVariables(text).map((variable) => (part ? { ...variable, part } : variable)));
+}
+
+/**
+ * What the notes on the variables say: for each variable a note is put on, on
+ * it or on a part of it, the text of each such note, once. In a template, a
+ * note on a variable says what to fill it with: "As written on the ID".
+ */
+export function variableNotes(doc: Doc): Record<string, string[]> {
+  const texts = new Map((doc.notes ?? []).map((note) => [note.id, note.text.trim()]));
+  const notes = noteRanges(doc).filter((note) => texts.get(note.id));
+  const out: Record<string, string[]> = {};
+  if (!notes.length) return out;
+  for (const variable of findVariables(doc)) {
+    for (const note of notes) {
+      const touches = comparePositions(note.range.from, variable.range.to) < 0 && comparePositions(variable.range.from, note.range.to) < 0;
+      const text = texts.get(note.id)!;
+      if (touches && !out[variable.name]?.includes(text)) (out[variable.name] ??= []).push(text);
+    }
+  }
+  return out;
 }
 
 /** How many times the variable is used in the document, its headers, footers, notes and text boxes. */

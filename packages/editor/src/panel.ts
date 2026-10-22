@@ -112,6 +112,7 @@ const CSS = `
 .dx-pn-fmt select{flex:1;min-width:0;height:26px;padding:0 2px;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:6px;background:var(--dx-ui-bg,#fff);color:inherit;font:12px system-ui,sans-serif}
 .dx-pn-field .dx-pn-chip{flex:none;display:inline-flex;justify-content:center;align-items:center;width:26px;height:26px;padding:0;border:1px solid var(--dx-ui-line,#e6e3dc);border-radius:6px;background:var(--dx-ui-bg,#fff);font:13px Georgia,serif}
 .dx-pn-field .dx-pn-chip.dx-on{border-color:var(--dx-ui-accent,#0b57d0);background:var(--dx-ui-active,#e8f0fd);color:var(--dx-ui-accent,#0b57d0)}
+.dx-pn-fnote{margin:-2px 2px 6px;color:var(--dx-ui-muted,#5f5d58);font-size:12px;line-height:1.35;white-space:pre-line;overflow-wrap:anywhere}
 .dx-pn-preview{padding:4px 2px 0;color:var(--dx-ui-muted,#5f5d58);font-size:12px;line-height:1.35;overflow-wrap:anywhere}
 .dx-pn-preview.dx-pn-bad{color:#b3261e}
 .dx-pn-foot{display:flex;flex-direction:column;gap:6px;padding:8px;border-top:1px solid var(--dx-ui-line,#e6e3dc)}
@@ -595,6 +596,15 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
     if (uses > 1) top.appendChild(el('small', '', plural('var.uses', uses, { n: uses })));
     top.appendChild(iconButton('variable-go', t('var.goTo'), ICON_TARGET, () => editor.selectVariable(variable)));
 
+    // What a note on the variable says: what to fill it with.
+    const said = editor.variableNotes(variable).join('\n');
+    const note = said ? el('div', 'dx-pn-fnote', '') : undefined;
+    if (note) {
+      note.textContent = said;
+      note.id = `${input.id}-note`;
+      input.setAttribute('aria-describedby', note.id);
+    }
+
     const formats = el('div', 'dx-pn-fmt');
     formats.hidden = !opened.has(variable);
     const gear = iconButton('variable-formats', t('var.formats'), ICON_SLIDERS, () => {
@@ -682,7 +692,7 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
       fillOne();
     });
     showPreview();
-    card.append(top, row, formats, preview);
+    card.append(top, ...(note ? [note] : []), row, formats, preview);
     return card;
   };
 
@@ -728,7 +738,7 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
     const names = editor.variables;
     const blocks = editor.blocks;
     updateFill();
-    const key = JSON.stringify([names.map((variable) => [variable, editor.variableFormats(variable), editor.variableUses(variable)]), blocks]);
+    const key = JSON.stringify([names.map((variable) => [variable, editor.variableFormats(variable), editor.variableUses(variable), editor.variableNotes(variable)]), blocks]);
     if (key !== shownVariables || !body.firstChild) {
       shownVariables = key;
       // The box being typed in is made again: the keyboard comes back to the same variable's.

@@ -8,11 +8,20 @@
 //   </DocsProvider>
 
 import { type CSSProperties, type ReactNode, createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { type Editor, addFonts } from '@rebodocs/editor';
+import { type Editor, type Texts, addFonts, addLocale, setLocale } from '@rebodocs/editor';
 import { type Docs, type DocsCommands, type DocsHeadlessOptions, type DocsState, createDocs, fontsKey } from './docs';
 
 export interface DocsProviderProps extends DocsHeadlessOptions {
   children?: ReactNode;
+  /**
+   * The language of the texts the library has: the bar beside the selection,
+   * and what a screen reader is told. 'es', 'en', or one given in `locales`.
+   * Left out, the first of the browser's languages it speaks, or English. It
+   * is the whole page's, as `setLocale`.
+   */
+  locale?: string;
+  /** More languages, or other words for these, as { fr: texts }. */
+  locales?: Record<string, Texts>;
 }
 
 interface Held {
@@ -84,6 +93,14 @@ export function DocsProvider({ children, ...options }: DocsProviderProps): React
   const saves = !!options.onSave;
   const linkKey = !!options.onLinkKey;
   const findKey = !!options.onFindKey;
+
+  // The language before the document is made, as the effects run in order: the bar beside the selection reads its texts in it.
+  const { locale } = options;
+  const localesKey = JSON.stringify(options.locales ?? {});
+  useEffect(() => {
+    for (const [code, texts] of Object.entries(latest.current.locales ?? {})) addLocale(code, texts);
+    if (locale) setLocale(locale);
+  }, [locale, localesKey]);
 
   useEffect(() => {
     if (!element) return;

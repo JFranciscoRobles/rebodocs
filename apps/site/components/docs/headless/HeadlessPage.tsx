@@ -209,9 +209,9 @@ commands.restoreVersion(doc);`,
         {block(first)}
         <p className={prose}>
           <code className={mono}>DocsProvider</code> takes the props of <code className={mono}>DocsEditor</code> that are about the document (<code className={mono}>docx</code>,{' '}
-          <code className={mono}>name</code>, <code className={mono}>author</code>, <code className={mono}>collab</code>, <code className={mono}>onSave</code>…), not those of the interface it does not
-          draw (<code className={mono}>features</code>, <code className={mono}>locale</code>, <code className={mono}>locales</code>, <code className={mono}>className</code>,{' '}
-          <code className={mono}>onReady</code>). It has three of its own: <code className={mono}>onLinkKey</code>, <code className={mono}>onFindKey</code> and <code className={mono}>bubble</code>, below.
+          <code className={mono}>name</code>, <code className={mono}>author</code>, <code className={mono}>collab</code>, <code className={mono}>onSave</code>…), and{' '}
+          <code className={mono}>locale</code> and <code className={mono}>locales</code> for the texts the library still has (the bar beside the selection, what a screen reader is told); not
+          those of the interface it does not draw (<code className={mono}>features</code>, <code className={mono}>className</code>, <code className={mono}>onReady</code>). It has three of its own: <code className={mono}>onLinkKey</code>, <code className={mono}>onFindKey</code> and <code className={mono}>bubble</code>, below.
           It puts nothing on the page itself: its children are where they are.
         </p>
         <p className={prose}>

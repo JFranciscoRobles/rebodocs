@@ -74,6 +74,7 @@ export const CORE: { sig: string; text: string }[] = [
   { sig: 'findAllVariables(doc) → (Variable & { part? })[]', text: 'Every use of every variable, in every part, with the part it is in (none for the text) and its range in that part: \'firstHeader\', \'header@0\' for a section’s own, \'footnote:1\', \'textbox:7\'.' },
   { sig: 'templateBlocks(doc) → { name, inverted, kind }[]', text: 'The blocks of the template in every part, each once by its name and sign: kind is \'row\', \'paragraphs\' or \'text\'.' },
   { sig: 'variableUses(doc, name) → number', text: 'How many times a variable is used.' },
+  { sig: 'variableNotes(doc) → Record<string, string[]>', text: 'For each variable a note is on, or on a part of, what those notes say, in the order of the text: a description for whoever fills it.' },
   { sig: 'variableFormats(doc, name) → { id, arg }[]', text: 'The formats every use of a variable has: what the panel shows as set.' },
   {
     sig: 'setVariableFormat(doc, name, id, on, arg?, language?) → Doc',
@@ -93,7 +94,7 @@ export const EDITOR: { sig: string; text: string }[] = [
   { sig: 'editor.insertVariable(name)', text: 'Puts {{name}} at the caret, or in place of the selection.' },
   { sig: 'editor.fillVariables(data)', text: 'Fills them everywhere and writes out the blocks given a value, in the language of formatLocale, as one step to undo. While changes are tracked, the filling is tracked: each variable taken out, its value put in.' },
   { sig: 'editor.selectVariable(name)', text: 'Selects the next place the variable is used after the caret, going round at the end: in the text, then the headers and footers, the notes and the text boxes, going into the one it is in.' },
-  { sig: 'editor.variableFormats(name) · editor.variableUses(name)', text: 'As in the core, on the document of the editor.' },
+  { sig: 'editor.variableFormats(name) · editor.variableUses(name) · editor.variableNotes(name)', text: 'As in the core, on the document of the editor.' },
   { sig: 'editor.setVariableFormat(name, id, on, arg?)', text: 'As in the core, written in the language of the interface, as one step to undo, and tracked while changes are.' },
   { sig: 'editor.formatLocale', text: 'The language values are written in: the language of the text (chosen at the foot of the editor, the language prop, the one the file says, or the interface’s when the document was opened), with the browser’s region.' },
   { sig: 'editor.insertSignatures(titles?)', text: 'Signatures at the caret, ADVISER and CLIENT when no titles are given, with the first name selected to type over.' },

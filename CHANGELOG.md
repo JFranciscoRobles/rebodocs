@@ -4,6 +4,26 @@ Every package of Rebodocs is released at the same version. Before 1.0, a
 minor version (0.x.0) may change the API; such changes are listed under
 **Changed** with what to do about them.
 
+## 0.9.1
+
+### Added
+
+- `locale` and `locales` on `DocsProvider`, as on `DocsEditor`: the language
+  of the texts the library still has in a headless interface (the bar beside
+  the selection, what a screen reader is told), without calling `setLocale`.
+- **A note on a variable describes it.** A note put on a variable, or on a
+  part of it, is shown under its box in the panel of variables: in a template,
+  what to fill it with ("As written on the ID"). `variableNotes(doc)` in the
+  core, `editor.variableNotes(name)` in the editor.
+- `inkOn(hex)`: black or white, whichever reads better on a colour.
+
+### Fixed
+
+- The name over another person's caret, and their initials in the bar at the
+  bottom, were white on every colour of a room, which does not read on the
+  orange, green and teal ones (3.1:1). They now take black or white,
+  whichever stands out more: 4.5:1 or more on all eight.
+
 ## 0.9.0
 
 ### Added

@@ -132,7 +132,8 @@ export function Editor({ file }: { file: Uint8Array }) {
 | `useDocsResponsive()`, `useDocsCount()` | Narrow windows and on-screen keyboards; words and characters. |
 
 `<DocsRuler />` is the ruler, and `<DocsProvider bubble>` adds the bar beside
-the selection. A [complete interface](https://github.com/JFranciscoRobles/rebodocs/tree/main/apps/demo/src/HeadlessEditor.tsx)
+the selection. `locale` sets the language of the few texts the library still
+draws there (the bar, what a screen reader is told). A [complete interface](https://github.com/JFranciscoRobles/rebodocs/tree/main/apps/demo/src/HeadlessEditor.tsx)
 built on the hooks is in the repository.
 
 ## Without React

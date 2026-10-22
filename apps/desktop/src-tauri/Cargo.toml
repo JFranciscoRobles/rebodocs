@@ -1,6 +1,6 @@
 [package]
 name = "rebodocs-desktop"
-version = "0.9.0"
+version = "0.9.1"
 description = "Rebodocs as a desktop application"
 license = "MIT"
 edition = "2021"
