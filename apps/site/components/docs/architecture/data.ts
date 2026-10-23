@@ -94,12 +94,17 @@ export const PLACES: { pkg: string; places: Place[] }[] = [
   {
     pkg: '@rebodocs/editor',
     places: [
-      { paths: ['packages/editor/src/editor.ts'], what: 'The pages, the caret, input.' },
+      { paths: ['packages/editor/src/editor.ts'], what: 'The Editor: its API and its state.' },
+      { paths: ['packages/editor/src/painter.ts', 'pointer.ts', 'keys.ts'], what: 'The pages and the caret drawn; the mouse and the fingers; the keys and the clipboard.' },
       { paths: ['packages/editor/src/'], what: 'One file per interface piece.' },
     ],
   },
   {
     pkg: '@rebodocs/collab',
-    places: [{ paths: ['packages/collab/src/changes.ts'], what: 'The change format and its transform.' }],
+    places: [
+      { paths: ['packages/collab/src/changes.ts'], what: 'The change format and its transform.' },
+      { paths: ['packages/collab/src/room.ts', 'server.ts'], what: 'A room, and the HTTP around it.' },
+      { paths: ['packages/collab/src/sync.ts', 'session.ts'], what: 'An editor kept in step with its room, and its connection.' },
+    ],
   },
 ];

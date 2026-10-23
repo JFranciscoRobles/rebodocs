@@ -92,8 +92,8 @@ const back = restoreVersion(after, before);   // the document to put in place of
     <>
       <h1 className="m-0 mt-3 font-display text-[clamp(36px,4vw,48px)] font-extrabold leading-[1.08] tracking-[-0.03em]">Versions</h1>
       <p className="m-0 mt-3.5 max-w-[700px] text-lg leading-[1.6] text-muted">
-        A version is a copy of the document as it was at some moment, kept as a DOCX. Rebodocs does not store versions: your application keeps them wherever it keeps its documents. Rebodocs lists them,
-        compares any two, and takes the document back to one.
+        A version is a copy of the document as it was at some moment, kept as a DOCX. Rebodocs does not store versions: your application keeps them wherever it keeps its documents. Rebodocs lists
+        them, compares any two, and takes the document back to one.
       </p>
       <Compared paragraphs={EXAMPLE.paragraphs} className="mt-6 max-w-[760px] rounded-[10px] bg-surface px-5 py-4 text-[17px] leading-[1.6] text-ink" />
       <div className="mt-4">
@@ -107,8 +107,8 @@ const back = restoreVersion(after, before);   // the document to put in place of
         </SectionHead>
         <LazyHistoryDemo />
         <p className={prose}>
-          Compare with “First draft” and pick the other version under <em>To</em>: two versions compare as well as a version and the document. A line made bold is a change of look: listed, but the line
-          is not marked.
+          Compare with “First draft” and pick the other version under <em>To</em>: two versions compare as well as a version and the document. A line made bold is a change of look: listed, but the
+          line is not marked.
         </p>
       </section>
 
@@ -164,7 +164,8 @@ const back = restoreVersion(after, before);   // the document to put in place of
           ))}
         </dl>
         <p className={prose}>
-          The count says how many changes there are in the text, how many in headers, footers, notes at the foot of the page and text boxes, and how many notes on the text were written, taken out or changed. The document compared is the one a save would write: what a DOCX cannot hold is no change.
+          The count says how many changes there are in the text, how many in headers, footers, notes at the foot of the page and text boxes, and how many notes on the text were written, taken out or
+          changed. The document compared is the one a save would write: what a DOCX cannot hold is no change.
         </p>
       </section>
 
@@ -191,8 +192,8 @@ const back = restoreVersion(after, before);   // the document to put in place of
           with it.
         </p>
         <p className={prose}>
-          The collaboration server keeps no versions. With <code className={mono}>--backend</code>, your system receives each save (<code className={mono}>PUT url/&lt;id&gt;</code>), and the last one of a
-          session of work, when everybody has left, says so with <code className={mono}>X-Rebodocs-Session-End: 1</code> and names who changed the document in{' '}
+          The collaboration server keeps no versions. With <code className={mono}>--backend</code>, your system receives each save (<code className={mono}>PUT url/&lt;id&gt;</code>), and the last one
+          of a session of work, when everybody has left, says so with <code className={mono}>X-Rebodocs-Session-End: 1</code> and names who changed the document in{' '}
           <code className={mono}>X-Rebodocs-Authors</code>: the moment to keep a version, signed by them. See{' '}
           <a href="/docs/collaboration/#a-version-for-each-session" className={LINK}>
             a version for each session
@@ -207,7 +208,8 @@ const back = restoreVersion(after, before);   // the document to put in place of
           <a href="/docs/assistants/" className={LINK}>
             MCP server
           </a>{' '}
-          has <code className={mono}>compare_documents</code>: what changed between the open document and another version of it in a file, by the numbers of the document&apos;s paragraphs, and the notes on the text written, taken out or changed.
+          has <code className={mono}>compare_documents</code>: what changed between the open document and another version of it in a file, by the numbers of the document&apos;s paragraphs, and the
+          notes on the text written, taken out or changed.
         </SectionHead>
         <div className={`mt-6 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: mcp }} />
         <p className={prose}>
@@ -221,8 +223,8 @@ const back = restoreVersion(after, before);   // the document to put in place of
           <a href="/docs/storage/" className={LINK}>
             The storage demo
           </a>{' '}
-          keeps a version each time a document is saved, as a file beside it under <code className={mono}>versions/&lt;document&gt;/</code>. Its key holds when it was kept, who kept it and its name, so one
-          listing request gives them all.
+          keeps a version each time a document is saved, as a file beside it under <code className={mono}>versions/&lt;document&gt;/</code>. Its key holds when it was kept, who kept it and its name,
+          so one listing request gives them all.
         </p>
       </section>
 

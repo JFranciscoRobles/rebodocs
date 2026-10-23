@@ -31,7 +31,7 @@ import {
   setCellProps,
   setRowHeight,
   splitParagraph,
-} from '../src';
+} from '../src/internal';
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 
@@ -59,11 +59,12 @@ const tbl = (rows: string, tblPr = '<w:tblStyle w:val="TableGrid"/>', grid = [20
 // 300pt wide page with 10pt margins: a 280pt text area.
 function open(body: string): Doc {
   const document =
-    `<w:document ${W}><w:body>${body}` +
-    '<w:sectPr><w:pgSz w:w="6000" w:h="2000"/><w:pgMar w:top="200" w:right="200" w:bottom="200" w:left="200"/></w:sectPr>' +
-    '</w:body></w:document>';
-  return importDocx(zipSync({ 'word/document.xml': strToU8(document), 'word/styles.xml': strToU8(STYLES) }));
+    `<w:document ${W}><w:body>${body}` + '<w:sectPr><w:pgSz w:w="6000" w:h="2000"/><w:pgMar w:top="200" w:right="200" w:bottom="200" w:left="200"/></w:sectPr>' + '</w:body></w:document>';
+  return importDocx(zipSync({ 'word/document.xml': strToU8(document), 'word/styles.xml': strToU8(STYLES), 'word/settings.xml': strToU8(MODERN) }));
 }
+
+/** Settings that ask for the layout of Word 2013 on: tables line up with the margins by their borders. */
+const MODERN = `<w:settings ${W}><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`;
 
 const GRID = p('before') + tbl(tr(tc(p('A1')) + tc(p('B1') + p('B1b'))) + tr(tc(p('A2')) + tc(p('B2')))) + p('after');
 
@@ -71,9 +72,7 @@ describe('tables', () => {
   it('reads the structure and points every cell paragraph at its cell', () => {
     const doc = open(GRID);
     expect(docText(doc)).toBe('before\nA1\nB1\nB1b\nA2\nB2\nafter');
-    expect(doc.paragraphs.map((x) => x.cell && [x.cell.row, x.cell.cell])).toEqual([
-      undefined, [0, 0], [0, 1], [0, 1], [1, 0], [1, 1], undefined,
-    ]);
+    expect(doc.paragraphs.map((x) => x.cell && [x.cell.row, x.cell.cell])).toEqual([undefined, [0, 0], [0, 1], [0, 1], [1, 0], [1, 1], undefined]);
     // The style draws a line above the table and between its rows, and none down its sides.
     const line = { width: 0, color: '000000', style: 'single' };
     const cell = (id: number, below = true) => ({ id, span: 1, borders: true, borderTop: 0, borderBottom: 0, lines: below ? { top: line, bottom: line } : { top: line } });
@@ -111,37 +110,48 @@ describe('tables', () => {
     const [page] = layout.pages;
     // 'before' takes 10pt + 5pt after; the first row holds two 15pt paragraphs in its second cell.
     expect(page.cells.map((c) => [c.x, c.y, c.width, c.height])).toEqual([
-      [10, 25, 100, 30], [110, 25, 100, 30], [10, 55, 100, 15], [110, 55, 100, 15],
+      [10, 25, 100, 30],
+      [110, 25, 100, 30],
+      [10, 55, 100, 15],
+      [110, 55, 100, 15],
     ]);
     expect(layout.lines.map((l) => [l.x, l.y, l.cell])).toEqual([
-      [10, 10, undefined], [15, 25, 0], [115, 25, 1], [115, 40, 1], [15, 55, 2], [115, 55, 3], [10, 70, undefined],
+      [10, 10, undefined],
+      [15, 25, 0],
+      [115, 25, 1],
+      [115, 40, 1],
+      [15, 55, 2],
+      [115, 55, 3],
+      [10, 70, undefined],
     ]);
   });
 
   it('wraps text to the width of its cell', () => {
     const layout = layoutDocument(open(tbl(tr(tc(p('aaaa bbbb cccc dddd eeee ffff')) + tc(p('x'))))), measurer);
     // 100pt column less 5pt on each side: 18 characters to a line.
-    expect(layout.lines.filter((l) => l.para === 0).map((l) => [l.start, l.end])).toEqual([[0, 15], [15, 29]]);
+    expect(layout.lines.filter((l) => l.para === 0).map((l) => [l.start, l.end])).toEqual([
+      [0, 15],
+      [15, 29],
+    ]);
     expect(layout.pages[0].cells[1].height).toBe(layout.pages[0].cells[0].height);
   });
 
   it('sizes columns from the grid, a relative width, spans and row settings', () => {
     const wide = layoutDocument(open(tbl(tr(tc(p('a')) + tc(p('b'))), '<w:tblW w:w="5000" w:type="pct"/>', [1000, 3000])), measurer);
-    expect(wide.pages[0].cells.map((c) => [c.x, c.width])).toEqual([[10, 70], [80, 210]]);
+    expect(wide.pages[0].cells.map((c) => [c.x, c.width])).toEqual([
+      [10, 70],
+      [80, 210],
+    ]);
 
     // A grid wider than the text area is narrowed to fit, unless the table is fixed.
     const big = [4000, 4000];
     expect(layoutDocument(open(tbl(tr(tc(p('a')) + tc(p('b'))), '', big)), measurer).pages[0].cells.map((c) => c.width)).toEqual([140, 140]);
-    expect(
-      layoutDocument(open(tbl(tr(tc(p('a')) + tc(p('b'))), '<w:tblLayout w:type="fixed"/>', big)), measurer).pages[0].cells.map((c) => c.width),
-    ).toEqual([200, 200]);
+    expect(layoutDocument(open(tbl(tr(tc(p('a')) + tc(p('b'))), '<w:tblLayout w:type="fixed"/>', big)), measurer).pages[0].cells.map((c) => c.width)).toEqual([200, 200]);
 
-    const spans = tbl(
-      tr(tc(p('wide'), '<w:gridSpan w:val="2"/>')) + tr(tc(p('b')), '<w:trPr><w:gridBefore w:val="1"/><w:trHeight w:val="600"/></w:trPr>'),
-      '<w:jc w:val="center"/>',
-    );
+    const spans = tbl(tr(tc(p('wide'), '<w:gridSpan w:val="2"/>')) + tr(tc(p('b')), '<w:trPr><w:gridBefore w:val="1"/><w:trHeight w:val="600"/></w:trPr>'), '<w:jc w:val="center"/>');
     expect(layoutDocument(open(spans), measurer).pages[0].cells.map((c) => [c.x, c.y, c.width, c.height])).toEqual([
-      [50, 10, 200, 15], [150, 25, 100, 30],
+      [50, 10, 200, 15],
+      [150, 25, 100, 30],
     ]);
   });
 
@@ -151,11 +161,26 @@ describe('tables', () => {
     const thick = '<w:tcBorders><w:bottom w:val="single" w:sz="16"/></w:tcBorders>';
     const doc = open(tbl(tr(tc(p('a')) + tc(p('b'))) + tr(tc(p('c'), thick) + tc(p('d'))) + tr(tc(p('e')) + tc(p('f'))), borders));
     expect(doc.tables![0].rows.map((row) => row.cells.map((c) => [c.borderTop, c.borderBottom]))).toEqual([
-      [[1.5, 0.5], [1.5, 0.5]], [[0.5, 2], [0.5, 0.5]], [[0.5, 1], [0.5, 1]],
+      [
+        [1.5, 0.5],
+        [1.5, 0.5],
+      ],
+      [
+        [0.5, 2],
+        [0.5, 0.5],
+      ],
+      [
+        [0.5, 1],
+        [0.5, 1],
+      ],
     ]);
     const layout = layoutDocument(doc, measurer);
     // Rows hold a 15pt paragraph: 1.5 + 15 + 0.5, then 15 + 2, then 15 + 1.
-    expect(layout.pages[0].cells.filter((c) => c.cell === 0).map((c) => [c.y, c.height])).toEqual([[10, 17], [27, 17], [44, 16]]);
+    expect(layout.pages[0].cells.filter((c) => c.cell === 0).map((c) => [c.y, c.height])).toEqual([
+      [10, 17],
+      [27, 17],
+      [44, 16],
+    ]);
     // Text starts under the table's top border.
     expect(layout.lines.filter((l) => l.cell !== undefined && layout.pages[0].cells[l.cell].cell === 0).map((l) => l.y)).toEqual([11.5, 27, 44]);
   });
@@ -166,7 +191,10 @@ describe('tables', () => {
     expect(doc.tables![0].rows[0].cells[0]).toMatchObject({ padTop: 2, padLeft: 20, padRight: 10 });
     const layout = layoutDocument(doc, measurer);
     // 100pt column less 20pt and 10pt: 14 characters to a line (the space after them hangs), 20pt in and 2pt down.
-    expect(layout.lines.filter((l) => l.para === 0).map((l) => [l.x, l.y, l.end])).toEqual([[30, 12, 15], [30, 22, 19]]);
+    expect(layout.lines.filter((l) => l.para === 0).map((l) => [l.x, l.y, l.end])).toEqual([
+      [30, 12, 15],
+      [30, 22, 19],
+    ]);
     // The margin above the text is the row's: the other cell's text goes 2pt down too, as in Word.
     expect(layout.lines[2]).toMatchObject({ x: 115, y: 12 });
     expect(layout.pages[0].cells[0].height).toBe(27);
@@ -179,7 +207,11 @@ describe('tables', () => {
     const layout = layoutDocument(doc, measurer);
     // 40pt of row: eight characters to a line, the lines turned about the bottom left corner of what the cell holds.
     const lines = layout.lines.filter((l) => l.para === 0);
-    expect(lines.map((l) => [l.x, l.y, l.start])).toEqual([[15, 50, 0], [15, 60, 5], [15, 70, 10]]);
+    expect(lines.map((l) => [l.x, l.y, l.start])).toEqual([
+      [15, 50, 0],
+      [15, 60, 5],
+      [15, 70, 10],
+    ]);
     expect(lines[0].turn).toEqual({ angle: -90, x: 15, y: 50 });
     expect(layout.pages[0].cells[0].height).toBe(40);
     // The caret lies across the line, and reads up the page.
@@ -218,7 +250,7 @@ describe('tables', () => {
     expect(back.tables![0].rows[0].cells.map((c) => c.direction)).toEqual([undefined, 'down']);
   });
 
-  it('makes a row of an exact height taller by the margin below its text, and gives every cell the row\'s margins', () => {
+  it("makes a row of an exact height taller by the margin below its text, and gives every cell the row's margins", () => {
     const margins = '<w:tcMar><w:top w:w="100" w:type="dxa"/><w:bottom w:w="200" w:type="dxa"/></w:tcMar>';
     const layout = layoutDocument(open(tbl(tr(tc(p('a'), margins) + tc(p('b')), '<w:trPr><w:trHeight w:val="600" w:hRule="exact"/></w:trPr>'))), measurer);
     expect(layout.pages[0].cells[0].height).toBe(40);
@@ -230,26 +262,43 @@ describe('tables', () => {
     const layout = layoutDocument(open(tbl(tr(tc(inner + p('after')) + tc(p('b'))))), measurer);
     const at = (text: string) => layout.lines.find((l) => l.fragments.some((f) => f.text === text))!;
     // 80pt of page and 15pt rows: five rows of the inner table on the first page, the others on the next, from its top.
-    expect(['n0', 'n4', 'n5', 'n7', 'after', 'b'].map((text) => [at(text).page, at(text).y])).toEqual([[0, 10], [0, 70], [1, 10], [1, 40], [1, 55], [0, 10]]);
+    expect(['n0', 'n4', 'n5', 'n7', 'after', 'b'].map((text) => [at(text).page, at(text).y])).toEqual([
+      [0, 10],
+      [0, 70],
+      [1, 10],
+      [1, 40],
+      [1, 55],
+      [0, 10],
+    ]);
     // The cell around it goes on in the next page too, ending on the first right under the text, as in Word;
     // each of its lines is in a box of its own page.
-    expect(layout.pages.map((page) => page.cells.filter((c) => c.table === 0).map((c) => c.height))).toEqual([[75, 75], [60, 60]]);
+    expect(layout.pages.map((page) => page.cells.filter((c) => c.table === 0).map((c) => c.height))).toEqual([
+      [75, 75],
+      [60, 60],
+    ]);
     for (const line of layout.lines) expect(layout.pages[line.page].cells[line.cell!]).toBeDefined();
     expect(layout.pages[1].cells[at('n5').cell!]).toMatchObject({ table: 1, row: 5, y: 10 });
   });
 
   it('keeps a row of a table in a cell whole when it must be, and breaks it between its lines otherwise', () => {
     const rows = (cant: boolean) =>
-      Array.from({ length: 3 }, (_, i) => tr(tc(p(`n${i}`)) + tc(p(`m${i}`)))).join('') +
-      tr(tc(p('t1') + p('t2') + p('t3')) + tc(p('m')), cant ? '<w:trPr><w:cantSplit/></w:trPr>' : '');
+      Array.from({ length: 3 }, (_, i) => tr(tc(p(`n${i}`)) + tc(p(`m${i}`)))).join('') + tr(tc(p('t1') + p('t2') + p('t3')) + tc(p('m')), cant ? '<w:trPr><w:cantSplit/></w:trPr>' : '');
     const lay = (cant: boolean) => layoutDocument(open(tbl(tr(tc(p('top') + tbl(rows(cant), '<w:tblStyle w:val="TableGrid"/>', [900, 900])) + tc(p('b'))))), measurer);
     const where = (cant: boolean) => {
       const layout = lay(cant);
       return ['t1', 't2', 't3'].map((text) => layout.lines.find((l) => l.fragments.some((f) => f.text === text))!).map((l) => [l.page, l.y]);
     };
     // The row starts 70pt down a page of 80pt: its first line fits, its second does not.
-    expect(where(true)).toEqual([[1, 10], [1, 25], [1, 40]]);
-    expect(where(false)).toEqual([[0, 70], [1, 10], [1, 25]]);
+    expect(where(true)).toEqual([
+      [1, 10],
+      [1, 25],
+      [1, 40],
+    ]);
+    expect(where(false)).toEqual([
+      [0, 70],
+      [1, 10],
+      [1, 25],
+    ]);
   });
 
   it('moves a row of a table in a cell whose text fits on the page but not its end to the next, whole, as Word does', () => {
@@ -258,16 +307,22 @@ describe('tables', () => {
     const layout = layoutDocument(open(tbl(tr(tc(p('top') + tbl(rows, '<w:tblStyle w:val="TableGrid"/>', [900, 900])) + tc(p('b'))))), measurer);
     // The row starts 55pt down: its two lines fit in the 80pt of the page, the 15pt below them do not.
     const at = (text: string) => layout.lines.find((l) => l.fragments.some((f) => f.text === text))!;
-    expect(['n1', 't1', 't2'].map((text) => [at(text).page, at(text).y])).toEqual([[0, 40], [1, 10], [1, 25]]);
+    expect(['n1', 't1', 't2'].map((text) => [at(text).page, at(text).y])).toEqual([
+      [0, 40],
+      [1, 10],
+      [1, 25],
+    ]);
   });
 
   it('draws cells merged down as one box', () => {
-    const merged = tbl(
-      tr(tc(p('top'), '<w:vMerge w:val="restart"/>') + tc(p('b1'))) + tr(tc(p(''), '<w:vMerge/>') + tc(p('b2'))) + tr(tc(p('a3')) + tc(p('b3'))),
-    );
+    const merged = tbl(tr(tc(p('top'), '<w:vMerge w:val="restart"/>') + tc(p('b1'))) + tr(tc(p(''), '<w:vMerge/>') + tc(p('b2'))) + tr(tc(p('a3')) + tc(p('b3'))));
     const layout = layoutDocument(open(merged), measurer);
     expect(layout.pages[0].cells.map((c) => [c.x, c.y, c.height])).toEqual([
-      [10, 10, 30], [110, 10, 15], [110, 25, 15], [10, 40, 15], [110, 40, 15],
+      [10, 10, 30],
+      [110, 10, 15],
+      [110, 25, 15],
+      [10, 40, 15],
+      [110, 40, 15],
     ]);
     // The paragraph of the continued cell is laid out inside the merged box.
     expect(layout.lines[2]).toMatchObject({ para: 2, cell: 0, y: 25 });
@@ -289,14 +344,23 @@ describe('tables', () => {
     const layout = layoutDocument(doc, measurer);
     // Both cells get a box on each page: down to the bottom of the first, and as tall as what is left on the second.
     expect(layout.pages.map((pg) => pg.cells.map((c) => [c.cell, c.y, c.height]))).toEqual([
-      [[0, 10, 80], [1, 10, 80]],
-      [[0, 10, 45], [1, 10, 45]],
+      [
+        [0, 10, 80],
+        [1, 10, 80],
+      ],
+      [
+        [0, 10, 45],
+        [1, 10, 45],
+      ],
     ]);
     const cellLines = (cell: number) => layout.lines.filter((l) => l.para === cell).map((l) => [l.page, l.y]);
     expect(cellLines(0).map(([pg]) => pg)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1]);
     expect(cellLines(0)[8]).toEqual([1, 10]);
     // The short cell is all on the first page, and the text after the table follows the second part of the row.
-    expect(layout.lines.filter((l) => l.para === 1 || l.para === 2).map((l) => [l.page, l.y])).toEqual([[0, 10], [0, 25]]);
+    expect(layout.lines.filter((l) => l.para === 1 || l.para === 2).map((l) => [l.page, l.y])).toEqual([
+      [0, 10],
+      [0, 25],
+    ]);
     expect(layout.lines[layout.lines.length - 1]).toMatchObject({ para: 3, page: 1, y: 55 });
     // Lines stay in paragraph order, each paragraph's own lines together.
     expect(layout.lines.map((l) => l.para)).toEqual([...new Array<number>(12).fill(0), 1, 2, 3]);
@@ -311,7 +375,16 @@ describe('tables', () => {
     const tall = p('aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii');
     // 20pt are left: one line of the 30pt row would fit, so it is broken there...
     const broken = layoutDocument(open(lead + tbl(tr(tc(tall) + tc(p('x'))))), measurer);
-    expect(broken.pages.map((pg) => pg.cells.map((c) => [c.y, c.height]))).toEqual([[[70, 20], [70, 20]], [[10, 15], [10, 15]]]);
+    expect(broken.pages.map((pg) => pg.cells.map((c) => [c.y, c.height]))).toEqual([
+      [
+        [70, 20],
+        [70, 20],
+      ],
+      [
+        [10, 15],
+        [10, 15],
+      ],
+    ]);
     // ...unless the row says it cannot be split: then it moves whole.
     const whole = layoutDocument(open(lead + tbl(tr(tc(tall) + tc(p('x')), '<w:trPr><w:cantSplit/></w:trPr>'))), measurer);
     expect(whole.pages.map((pg) => pg.cells.length)).toEqual([0, 2]);
@@ -399,7 +472,12 @@ describe('tables', () => {
     const doc = open(tbl(tr(tc(p('outer') + tbl(tr(tc(p('inner'))), '', [1500]) + p('tail')) + tc(p('b')))));
     expect(doc.tables).toHaveLength(2);
     expect(doc.tables![1].parent).toEqual({ table: 0, row: 0, cell: 0 });
-    expect(doc.paragraphs.map((x) => [x.cell!.table, x.cell!.cell])).toEqual([[0, 0], [1, 0], [0, 0], [0, 1]]);
+    expect(doc.paragraphs.map((x) => [x.cell!.table, x.cell!.cell])).toEqual([
+      [0, 0],
+      [1, 0],
+      [0, 0],
+      [0, 1],
+    ]);
     // Untouched, it goes back into the file as it came.
     expect(importDocx(exportDocx(doc))).toEqual(doc);
     // The inner table sits in the outer cell, between the paragraphs around it.
@@ -450,7 +528,10 @@ describe('changing the shape of a table', () => {
     const { doc, pos } = insertTable(plain, { para: 0, offset: 5 }, 2, 3);
     expect(docText(doc)).toBe('hello\n\n\n\n\n\n\n world');
     expect(pos).toEqual({ para: 1, offset: 0 });
-    expect(grid(doc)).toEqual([['', '', ''], ['', '', '']]);
+    expect(grid(doc)).toEqual([
+      ['', '', ''],
+      ['', '', ''],
+    ]);
     // Three equal columns across the 468pt text area; cells take the caret's formatting but not the paragraph's spacing.
     expect(doc.tables![0].columns).toEqual([156, 156, 156]);
     expect(doc.paragraphs[1].runs[0].props.bold).toBe(true);
@@ -476,7 +557,10 @@ describe('changing the shape of a table', () => {
     expect(xml.indexOf('top')).toBeLessThan(xml.indexOf('<w:tbl>'));
     expect(xml.indexOf('</w:tbl>')).toBeLessThan(xml.lastIndexOf('<w:p>'));
     const back = importDocx(exportDocx(doc));
-    expect(grid(back)).toEqual([['A1', ''], ['', 'B2']]);
+    expect(grid(back)).toEqual([
+      ['A1', ''],
+      ['', 'B2'],
+    ]);
     expect(back.tables![0]).toMatchObject({ columns: [234, 234], fixed: true, padLeft: 5.4, padRight: 5.4 });
     expect(back.tables![0].rows[0].cells[0]).toMatchObject({ borders: true, borderTop: 0.5, borderBottom: 0.5 });
     expect(docText(back)).toBe(docText(doc));
@@ -485,17 +569,28 @@ describe('changing the shape of a table', () => {
   it('adds and removes rows, leaving the other paragraphs as they were', () => {
     const doc = open(GRID);
     const below = insertRow(doc, paraOf(doc, 'A1'), true);
-    expect(grid(below)).toEqual([['A1', 'B1/B1b'], ['', ''], ['A2', 'B2']]);
+    expect(grid(below)).toEqual([
+      ['A1', 'B1/B1b'],
+      ['', ''],
+      ['A2', 'B2'],
+    ]);
     expect(below.tables![0].rows.map((row) => row.id)).toEqual([0, 2, 1]);
     // Every paragraph that was there is the same object, so export copies it as it was.
     expect(doc.paragraphs.every((x) => below.paragraphs.includes(x))).toBe(true);
-    expect(grid(insertRow(doc, paraOf(doc, 'B2'), false))).toEqual([['A1', 'B1/B1b'], ['', ''], ['A2', 'B2']]);
+    expect(grid(insertRow(doc, paraOf(doc, 'B2'), false))).toEqual([
+      ['A1', 'B1/B1b'],
+      ['', ''],
+      ['A2', 'B2'],
+    ]);
     // The new cells are formatted like the ones of the row they were made from.
     expect(below.paragraphs[4].runs[0].props.italic).toBe(true);
     expect(locateCell(below, 4)).toMatchObject({ rowIndex: 1, cellIndex: 0, column: 0 });
 
     const removed = deleteRow(below, paraOf(below, 'A1'));
-    expect(grid(removed.doc)).toEqual([['', ''], ['A2', 'B2']]);
+    expect(grid(removed.doc)).toEqual([
+      ['', ''],
+      ['A2', 'B2'],
+    ]);
     expect(removed.pos).toEqual({ para: 1, offset: 0 });
     // Removing every row removes the table.
     let gone = deleteRow(doc, paraOf(doc, 'A2'));
@@ -515,9 +610,15 @@ describe('changing the shape of a table', () => {
     // It is as wide as the one beside it, and the table keeps its width.
     expect(right.tables![0].columns.map((w) => Math.round(w * 100) / 100)).toEqual([66.67, 66.67, 66.67]);
     // At the edge of the table the column is outside the wide cell, so that row gets a cell too.
-    expect(grid(insertColumn(doc, paraOf(doc, 'a'), false))).toEqual([['', 'wide'], ['', 'a', 'b']]);
+    expect(grid(insertColumn(doc, paraOf(doc, 'a'), false))).toEqual([
+      ['', 'wide'],
+      ['', 'a', 'b'],
+    ]);
     const end = insertColumn(doc, paraOf(doc, 'b'), true);
-    expect(grid(end)).toEqual([['wide', ''], ['a', 'b', '']]);
+    expect(grid(end)).toEqual([
+      ['wide', ''],
+      ['a', 'b', ''],
+    ]);
     expect(end.tables![0].rows[0].cells.map((c) => c.span)).toEqual([2, 1]);
 
     const removed = deleteColumn(right, paraOf(right, 'a'));
@@ -530,9 +631,7 @@ describe('changing the shape of a table', () => {
   });
 
   it('keeps cells merged down consistent when rows are added or removed', () => {
-    const merged = tbl(
-      tr(tc(p('top'), '<w:vMerge w:val="restart"/>') + tc(p('b1'))) + tr(tc(p(''), '<w:vMerge/>') + tc(p('b2'))) + tr(tc(p('a3')) + tc(p('b3'))),
-    );
+    const merged = tbl(tr(tc(p('top'), '<w:vMerge w:val="restart"/>') + tc(p('b1'))) + tr(tc(p(''), '<w:vMerge/>') + tc(p('b2'))) + tr(tc(p('a3')) + tc(p('b3'))));
     const doc = open(merged);
     const merges = (d: Doc) => d.tables![0].rows.map((row) => row.cells[0].merge);
     // A row added inside the merged run joins it; one added after it does not.
@@ -545,13 +644,14 @@ describe('changing the shape of a table', () => {
   it('writes a reshaped table with the properties its rows and cells had in the file', () => {
     const rowProps = '<w:trPr><w:cantSplit/></w:trPr>';
     const shade = '<w:shd w:val="clear" w:fill="EEEEEE"/>';
-    const body =
-      p('before') +
-      tbl(tr(tc(p('A1'), shade) + tc(p('B1')), rowProps) + tr(tc(p('A2')) + tc(p('B2'))), '<w:tblStyle w:val="TableGrid"/><w:tblLook w:val="04A0"/>') +
-      p('after');
+    const body = p('before') + tbl(tr(tc(p('A1'), shade) + tc(p('B1')), rowProps) + tr(tc(p('A2')) + tc(p('B2'))), '<w:tblStyle w:val="TableGrid"/><w:tblLook w:val="04A0"/>') + p('after');
     const doc = open(body);
     const reshaped = insertColumn(insertRow(doc, paraOf(doc, 'A1'), true), paraOf(doc, 'A1'), true);
-    expect(grid(reshaped)).toEqual([['A1', '', 'B1'], ['', '', ''], ['A2', '', 'B2']]);
+    expect(grid(reshaped)).toEqual([
+      ['A1', '', 'B1'],
+      ['', '', ''],
+      ['A2', '', 'B2'],
+    ]);
     const xml = xmlOf(reshaped);
     // The table's own properties are kept as they were, and the grid is rewritten.
     expect(xml).toContain('<w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblLook w:val="04A0"/></w:tblPr><w:tblGrid><w:gridCol w:w="1333"/><w:gridCol w:w="1333"/><w:gridCol w:w="1333"/></w:tblGrid>');
@@ -642,5 +742,66 @@ describe('changing the shape of a table', () => {
     expect(auto.tables![0].rows[1].height).toBe(0);
     expect(auto.tables![0].rows[1].exact).toBeUndefined();
     expect(setRowHeight(doc, 0, 30)).toBe(doc);
+  });
+
+  it('sets the text of a cell merged down, cut by the page, in the rows of it on the page: in the middle, or on its side', () => {
+    // A page with 80 for the text: 45 of lines, then a row of 25 that fits and one of 40 that goes on to the next page.
+    const before = p('a') + p('b') + p('c');
+    const merged = (tcPr: string) =>
+      tbl(
+        tr(tc(p('mitad'), `<w:vMerge w:val="restart"/>${tcPr}`) + tc(p('x')), '<w:trPr><w:trHeight w:val="500" w:hRule="exact"/></w:trPr>') +
+          tr(tc('<w:p/>', '<w:vMerge/>') + tc(p('y')), '<w:trPr><w:trHeight w:val="800" w:hRule="exact"/></w:trPr>'),
+      );
+    const centred = layoutDocument(open(before + merged('<w:vAlign w:val="center"/>')), measurer);
+    const row = centred.pages[0].cells.find((c) => c.row === 0 && c.cell === 1)!;
+    const text = centred.pages[0].lines.find((l) => l.fragments.some((f) => f.text === 'mitad'))!;
+    // Measured against Word: in the middle of the first row, which is all of the cell this page has; its line and the 5 Normal
+    // leaves below it are what is set in the middle.
+    expect(text.y - row.y).toBeCloseTo((row.height - text.height - 5) / 2, 1);
+    const turned = layoutDocument(open(before + merged('<w:textDirection w:val="btLr"/>')), measurer);
+    const side = turned.pages[0].lines.find((l) => l.turn)!;
+    expect(side.turn!.y).toBeLessThanOrEqual(row.y + row.height + 0.01);
+  });
+
+  it('lines a table up by the text of its cells in a file that says no version, as Word 2007 does and Word opens it', () => {
+    const body = tbl(tr(tc(p('A1')) + tc(p('B1'))));
+    const document = `<w:document ${W}><w:body>${body}<w:sectPr><w:pgSz w:w="6000" w:h="2000"/><w:pgMar w:top="200" w:right="200" w:bottom="200" w:left="200"/></w:sectPr></w:body></w:document>`;
+    const old = importDocx(zipSync({ 'word/document.xml': strToU8(document), 'word/styles.xml': strToU8(STYLES) }));
+    expect(old.compatMode).toBe(12);
+    const x = (doc: Doc) => layoutDocument(doc, measurer).lines[0].x;
+    // The margin of its cells, 5 points, hangs past the margin of the page; from Word 2013 on, the border is on it.
+    expect(x(open(body)) - x(old)).toBeCloseTo(5);
+  });
+
+  it('gives cells that stand apart each its own borders, and the table its own round them, as Word does', () => {
+    const borders = '<w:tblBorders>' + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map((side) => `<w:${side} w:val="single" w:sz="8"/>`).join('') + '</w:tblBorders>';
+    const rows = tr(tc(p('A1'))) + tr(tc(p('A2')));
+    const at = (spacing: string) => {
+      const layout = layoutDocument(open(p('before') + tbl(rows, `<w:tblStyle w:val="TableGrid"/>${spacing}${borders}`, [2000]) + p('after')), measurer);
+      return ['before', 'A1', 'A2', 'after'].map((text) => layout.lines.find((l) => l.fragments.some((f) => f.text === text))!.y);
+    };
+    // Each line is 10 pt with the 5 below it Normal asks for. Measured against Word: 3 pt of room either side of
+    // each cell, a border of 1 pt above and below each, and at the top and the bottom the table's own line as well.
+    const [before, a1, a2, after] = at('<w:tblCellSpacing w:w="60" w:type="dxa"/>');
+    expect(a2 - a1).toBeCloseTo(15 + 1 + 3 + 3 + 1);
+    expect(a1 - before).toBeCloseTo(15 + 1 + 6 + 1);
+    expect(after - a2).toBeCloseTo(15 + 1 + 6 + 1);
+    // Touching, the cells share one line between them.
+    const [, b1, b2] = at('');
+    expect(b2 - b1).toBeCloseTo(15 + 1);
+  });
+
+  it('draws the line of a table whose cells stand apart round them, as far out as they are apart', () => {
+    const borders = '<w:tblBorders>' + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map((side) => `<w:${side} w:val="single" w:sz="8" w:color="8EAADB"/>`).join('') + '</w:tblBorders>';
+    const layout = layoutDocument(open(tbl(tr(tc(p('A1')) + tc(p('B1'))), `<w:tblStyle w:val="TableGrid"/><w:tblCellSpacing w:w="60" w:type="dxa"/>${borders}`) + p('after')), measurer);
+    const [page] = layout.pages;
+    const [frame] = page.frames!;
+    const cells = page.cells.filter((c) => c.table === 0);
+    expect(frame.lines.top).toEqual({ style: 'single', width: 1, color: '8EAADB' });
+    expect(frame.x).toBeCloseTo(Math.min(...cells.map((c) => c.x)) - 3);
+    expect(frame.x + frame.width).toBeCloseTo(Math.max(...cells.map((c) => c.x + c.width)) + 3);
+    expect(frame.y + frame.height).toBeCloseTo(Math.max(...cells.map((c) => c.y + c.height)) + 3);
+    // Touching, a table has no line of its own apart from its cells'.
+    expect(layoutDocument(open(tbl(tr(tc(p('A1')) + tc(p('B1'))), `<w:tblStyle w:val="TableGrid"/>${borders}`)), measurer).pages[0].frames).toBeUndefined();
   });
 });

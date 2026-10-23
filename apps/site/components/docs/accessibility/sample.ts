@@ -51,7 +51,9 @@ export async function lease(): Promise<Doc> {
   const last = doc.paragraphs.length - 1;
   doc = {
     ...doc,
-    paragraphs: doc.paragraphs.map((p, i) => (i === last ? { ...p, runs: [...p.runs, { text: ' Late payments add 2% a month.', props: { revision: 'insert' as const, revisionAuthor: 'Luis', revisionDate: '2026-10-20T10:00:00Z' } }] } : p)),
+    paragraphs: doc.paragraphs.map((p, i) =>
+      i === last ? { ...p, runs: [...p.runs, { text: ' Late payments add 2% a month.', props: { revision: 'insert' as const, revisionAuthor: 'Luis', revisionDate: '2026-10-20T10:00:00Z' } }] } : p,
+    ),
   };
   doc = insertImage(doc, { para: 7, offset: 0 }, { bytes: await plan(), type: 'image/png', width: 180, height: 90 }).doc;
   doc = setAltText(doc, { para: 7, offset: 0 }, 'Plan of the flat: a living room on the left, two bedrooms on the right');

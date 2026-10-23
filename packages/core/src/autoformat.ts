@@ -4,7 +4,7 @@
 // after the character that completes it was typed, so undoing it leaves what
 // was typed.
 
-import { type Doc, type Paragraph, type Position } from './model';
+import type { Doc, Paragraph, Position } from './model';
 import { applyRunProps, deleteRange, listKindAt, toggleList } from './ops';
 import { cleanHref, linkAt, setLink } from './links';
 import { paragraphStyles, setParagraphStyle } from './styles';
@@ -42,11 +42,7 @@ function autolink(doc: Doc, pos: Position, before: string): { doc: Doc; pos: Pos
  * What typing `typed`, which is now just before `pos`, turns into. Undefined
  * when it is nothing but the character.
  */
-export function autoformat(
-  doc: Doc,
-  pos: Position,
-  typed: string,
-): { doc: Doc; pos: Position; mark?: 'bold' | 'italic' | 'strike' } | undefined {
+export function autoformat(doc: Doc, pos: Position, typed: string): { doc: Doc; pos: Position; mark?: 'bold' | 'italic' | 'strike' } | undefined {
   const p = doc.paragraphs[pos.para];
   const before = textBefore(p, pos.offset);
   const start = { para: pos.para, offset: 0 };

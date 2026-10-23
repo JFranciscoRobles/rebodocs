@@ -102,8 +102,8 @@ export async function PackagesPage() {
           </div>
         </div>
         <Callout title="Same version, all of them.">
-          Every package is published at the same version, and they expect each other at it: update them together. Rebodocs is 0.x and pre-release, so a new version may change an API; what is
-          done and what is coming is in{' '}
+          Every package is published at the same version, and they expect each other at it: update them together. Rebodocs is 0.x and pre-release, so a new version may change an API; what is done and
+          what is coming is in{' '}
           <a href="/docs/status/" className="font-medium text-brand hover:text-brand-hover">
             Status and roadmap
           </a>

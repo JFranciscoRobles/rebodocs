@@ -75,8 +75,8 @@ stop();`,
     <>
       <h1 className="m-0 mt-3 font-display text-[clamp(36px,4vw,48px)] font-extrabold leading-[1.08] tracking-[-0.03em]">Editor API</h1>
       <p className="m-0 mt-3.5 max-w-[680px] text-lg leading-[1.6] text-muted">
-        The <code className="rounded-[5px] bg-hover px-1.5 py-0.5 font-code text-[15px] text-ink">Editor</code> is what everything else talks to: the toolbar, the hooks, an assistant. Here it is, running, with{' '}
-        {members} of its members described below.
+        The <code className="rounded-[5px] bg-hover px-1.5 py-0.5 font-code text-[15px] text-ink">Editor</code> is what everything else talks to: the toolbar, the hooks, an assistant. Here it is,
+        running, with {members} of its members described below.
       </p>
       <div className="mt-4">
         <HandTip>tip: press ⌘K and type a method</HandTip>
@@ -106,12 +106,13 @@ stop();`,
 
       <section aria-labelledby="try" className="mt-24">
         <SectionHead id="try" badge="Live" color="green" title="Try it on a real editor">
-          The sample document in the editor itself, with no toolbar: each button runs the method it shows, and the values under it are read from the editor after each change. Click and type in the page too.
+          The sample document in the editor itself, with no toolbar: each button runs the method it shows, and the values under it are read from the editor after each change. Click and type in the
+          page too.
         </SectionHead>
         <LazyConsole />
         <p className={prose}>
-          Positions are <code className={mono}>{'{ para, offset }'}</code>: the index of a paragraph, and of a character in it. Click in the page and watch <code className={mono}>selection</code>: the anchor is
-          where the selection started, the focus where it ends, so dragging backwards puts the focus first; <code className={mono}>range</code> gives them in order.
+          Positions are <code className={mono}>{'{ para, offset }'}</code>: the index of a paragraph, and of a character in it. Click in the page and watch <code className={mono}>selection</code>: the
+          anchor is where the selection started, the focus where it ends, so dragging backwards puts the focus first; <code className={mono}>range</code> gives them in order.
         </p>
       </section>
 
@@ -150,7 +151,8 @@ stop();`,
 
       <section aria-labelledby="types" className="mt-24">
         <SectionHead id="types" badge="Reference" color="blue" title="Types">
-          What the methods take, as <code className={mono}>@rebodocs/core</code> defines them; <code className={mono}>@rebodocs/react</code> exports them as types too. A field whose name ends in ? may be left out.
+          What the methods take, as <code className={mono}>@rebodocs/core</code> defines them; <code className={mono}>@rebodocs/react</code> exports them as types too. A field whose name ends in ? may
+          be left out.
         </SectionHead>
         <div className="mt-7 grid grid-cols-[repeat(auto-fit,minmax(min(100%,460px),1fr))] gap-4">
           {TYPES.map((type) => (
@@ -186,7 +188,8 @@ stop();`,
         </SectionHead>
         <Points />
         <p className={prose}>
-          On screen at zoom 1, a point is 4/3 of a CSS pixel, so a picture put in from a file comes in at its size at 96 pixels to the inch: 800 pixels wide is 600 points, made smaller when it does not fit the page.
+          On screen at zoom 1, a point is 4/3 of a CSS pixel, so a picture put in from a file comes in at its size at 96 pixels to the inch: 800 pixels wide is 600 points, made smaller when it does
+          not fit the page.
         </p>
       </section>
     </>

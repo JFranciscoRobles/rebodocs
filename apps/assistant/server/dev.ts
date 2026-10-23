@@ -51,7 +51,7 @@ export function startCollab(backendUrl: string): CollabServer {
     port: collabPort,
     host: process.env.COLLAB_HOST,
     storage: backendStorage({ url: backendUrl, key: process.env.COLLAB_BACKEND_KEY }),
-    saveEvery: 10_000,
+    saveAfter: 2000,
     idle: 1500,
   }));
 }

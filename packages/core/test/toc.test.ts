@@ -1,6 +1,6 @@
 import { strFromU8, unzipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type Doc, type FontSpec, type Paragraph, createDoc, exportDocx, importDocx, insertToc, layoutDocument, plainText, setParagraphStyle, tocRange, tocTarget, updateToc } from '../src';
+import { type Doc, type FontSpec, type Paragraph, createDoc, exportDocx, importDocx, insertToc, layoutDocument, plainText, setParagraphStyle, tocRange, tocTarget, updateToc } from '../src/internal';
 
 /** Every character as wide as half its font size: enough to see where things land. */
 const measurer = {
@@ -13,7 +13,13 @@ const lines = (doc: Doc) => doc.paragraphs.map((para) => plainText(para.runs));
 /** An empty first paragraph, then headings of two levels with text under them. */
 function base(): Doc {
   let doc = createDoc([p(''), p('Objeto'), p('Texto del objeto.'), p('Precio'), p('Forma de pago'), p('Texto del pago.'), p('Vigencia')]);
-  for (const [para, style] of [[1, 'Heading1'], [3, 'Heading1'], [4, 'Heading2'], [6, 'Heading1']] as const) doc = setParagraphStyle(doc, para, para, style);
+  for (const [para, style] of [
+    [1, 'Heading1'],
+    [3, 'Heading1'],
+    [4, 'Heading2'],
+    [6, 'Heading1'],
+  ] as const)
+    doc = setParagraphStyle(doc, para, para, style);
   return doc;
 }
 const pages = (map: Record<string, number>) => (doc: Doc) => (para: number) => map[plainText(doc.paragraphs[para].runs)] ?? 0;
@@ -28,7 +34,12 @@ describe('table of contents', () => {
     expect(lines(made).slice(0, 6)).toEqual(['Índice', 'Objeto\t1', 'Precio\t2', 'Forma de pago\t2', 'Vigencia\t3', '']);
     expect(tocRange(made)).toEqual({ first: 1, last: 4 });
     expect(pos).toEqual({ para: 5, offset: 0 });
-    expect(made.paragraphs.slice(1, 5).map((para) => [para.props.indentLeft, para.props.leaderTab])).toEqual([[0, 468], [0, 468], [14, 468], [0, 468]]);
+    expect(made.paragraphs.slice(1, 5).map((para) => [para.props.indentLeft, para.props.leaderTab])).toEqual([
+      [0, 468],
+      [0, 468],
+      [14, 468],
+      [0, 468],
+    ]);
     // The title of the table is not a heading, so the table does not list itself; and a document has one table.
     expect(made.paragraphs[0].props.styleId).toBeUndefined();
     expect(insertToc(made, { para: 6, offset: 0 }, { pageOf: () => 1 }).doc).toBe(made);
@@ -69,7 +80,9 @@ describe('table of contents', () => {
   it('is the TOC field of Word in the file, and comes back as a table', () => {
     const { doc } = insertToc(base(), { para: 0, offset: 0 }, { title: 'Índice', pageOf: () => 3 });
     const xml = strFromU8(unzipSync(exportDocx(doc))['word/document.xml']);
-    expect(xml).toContain('<w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \\o "1-3" \\h \\z \\u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>');
+    expect(xml).toContain(
+      '<w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \\o "1-3" \\h \\z \\u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>',
+    );
     expect(xml).toContain('<w:tabs><w:tab w:val="right" w:leader="dot" w:pos="9360"/></w:tabs>');
     expect(xml.match(/w:fldCharType="end"/g)).toHaveLength(1);
     expect(xml).toMatch(/Objeto<\/w:t><w:tab\/><w:t[^>]*>3<\/w:t>/);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type FontSpec, type Paragraph, type Run, caretRect, createDoc, hitTest, insertTable, layoutDocument, layoutReflow, reflowDoc } from '../src';
+import { type FontSpec, type Paragraph, type Run, caretRect, createDoc, hitTest, insertTable, layoutDocument, layoutReflow, reflowDoc } from '../src/internal';
 
 /** Every character as wide as half its font size: enough to see where things land. */
 const measurer = {

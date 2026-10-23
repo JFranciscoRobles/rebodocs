@@ -17,17 +17,35 @@ import {
   setCellProps,
   splitCell,
   tableGeometry,
-} from '../src';
+} from '../src/internal';
 
 /** A 3 × 3 table after a first paragraph, each cell holding its name: A1, B1... */
 function grid(): Doc {
-  let { doc } = insertTable(createDoc([{ props: {}, runs: [{ text: 'Before', props: {} }] }, { props: {}, runs: [{ text: '', props: {} }] }]), { para: 1, offset: 0 }, 3, 3);
+  let { doc } = insertTable(
+    createDoc([
+      { props: {}, runs: [{ text: 'Before', props: {} }] },
+      { props: {}, runs: [{ text: '', props: {} }] },
+    ]),
+    { para: 1, offset: 0 },
+    3,
+    3,
+  );
   for (let i = 0; i < 9; i++) doc = insertText(doc, { para: 1 + i, offset: 0 }, `${'ABC'[i % 3]}${Math.floor(i / 3) + 1}`).doc;
   return doc;
 }
 const cellOf = (doc: Doc, name: string) => doc.paragraphs.findIndex((p) => p.runs.some((r) => r.text === name));
 const shape = (doc: Doc) => doc.tables![0].rows.map((row) => row.cells.map((c) => `${c.span}${c.merge ? c.merge[0] : ''}`).join(' '));
-const textIn = (doc: Doc) => doc.tables![0].rows.map((row) => row.cells.map((c) => doc.paragraphs.filter((p) => p.cell?.row === row.id && p.cell.cell === c.id).map((p) => p.runs.map((r) => r.text).join('')).join('+')).join(' | '));
+const textIn = (doc: Doc) =>
+  doc.tables![0].rows.map((row) =>
+    row.cells
+      .map((c) =>
+        doc.paragraphs
+          .filter((p) => p.cell?.row === row.id && p.cell.cell === c.id)
+          .map((p) => p.runs.map((r) => r.text).join(''))
+          .join('+'),
+      )
+      .join(' | '),
+  );
 
 describe('cells', () => {
   it('merges cells of a row, their text going into the first', () => {

@@ -1,5 +1,27 @@
 import { DEFAULT_COLLAB_PORT, type Session, createRoom, joinRoom, pingServer } from '@rebodocs/collab/browser';
-import { type VersionInfo, type Versions, Editor, addFont, addLocale, createBubble, createFindBar, createFocusMode, createPanel, createResponsive, createRuler, createSidebar, createStatusBar, createToolbar, createSpellChecker, applyTheme, getLocale, recallAuthor, setAuthor, setLocale, t } from '@rebodocs/editor';
+import {
+  type VersionInfo,
+  type Versions,
+  Editor,
+  addFont,
+  addLocale,
+  createBubble,
+  createFindBar,
+  createFocusMode,
+  createPanel,
+  createResponsive,
+  createRuler,
+  createSidebar,
+  createStatusBar,
+  createToolbar,
+  createSpellChecker,
+  applyTheme,
+  getLocale,
+  recallAuthor,
+  setAuthor,
+  setLocale,
+  t,
+} from '@rebodocs/editor';
 import { connectAssistant } from '@rebodocs/mcp/browser';
 import { sampleDoc } from './sample';
 

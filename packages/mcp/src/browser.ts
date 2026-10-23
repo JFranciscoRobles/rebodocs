@@ -3,7 +3,7 @@
 // that is open, as a step the person can undo, and says what came of it.
 // It runs the same tools the server runs on files.
 
-import type { Doc, Position } from '@rebodocs/core';
+import type { Doc, Layout, Position } from '@rebodocs/core/internal';
 import { ToolError, runTool } from './tools';
 
 /** What it needs of an editor: `Editor` of @rebodocs/editor is one. */
@@ -13,16 +13,17 @@ export interface AssistantHost {
   edit(change: (doc: Doc) => Doc, reveal?: Position): void;
   /** The page each paragraph of a document would start on, from 1, laid out as the editor lays it out. */
   pagesOf(doc: Doc): (para: number) => number;
+  /** The document laid out in pages as the editor lays it out: for read_pages. Without it, that tool says it cannot. */
+  layoutOf?(doc: Doc): Layout;
   exportDocx(): Uint8Array;
   /** Who the notes made here are by. */
   author?: string;
 }
 
-
 /** Runs a tool on the document open in the editor: what it changes is one step to undo. */
 export function runOnEditor(host: AssistantHost, tool: string, args: Record<string, unknown>): { ok: boolean; text: string } {
   try {
-    const result = runTool(host.doc, tool, args, { pageOf: (doc) => host.pagesOf(doc), author: host.author || undefined });
+    const result = runTool(host.doc, tool, args, { pageOf: (doc) => host.pagesOf(doc), layoutOf: host.layoutOf && ((doc) => host.layoutOf!(doc)), author: host.author || undefined });
     if (result.doc && result.doc !== host.doc) host.edit(() => result.doc!, result.reveal);
     return { ok: true, text: result.text };
   } catch (error) {
@@ -130,13 +131,17 @@ export function connectAssistant(host: AssistantHost, options: AssistantOptions 
           calls++;
           options.onChange?.(asked.tool);
         }
-        void fetch(`${url}/result?${query({})}`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ id: asked.id, name: options.name?.(), ...answer }) }).catch(() => undefined);
+        void fetch(`${url}/result?${query({})}`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ id: asked.id, name: options.name?.(), ...answer }) }).catch(
+          () => undefined,
+        );
       };
     },
     disconnect,
     renamed() {
       if (!source || editorId === undefined) return;
-      void fetch(`${url}/name?${query({})}`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ editor: editorId, name: options.name?.() ?? '' }) }).catch(() => undefined);
+      void fetch(`${url}/name?${query({})}`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ editor: editorId, name: options.name?.() ?? '' }) }).catch(
+        () => undefined,
+      );
     },
   };
 }

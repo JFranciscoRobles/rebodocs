@@ -160,8 +160,8 @@ try {
         <a href="https://www.npmjs.com/package/@rebodocs/core" className={LINK}>
           @rebodocs/core
         </a>{' '}
-        has no DOM and uses no API of Node. The code that lays a document out in the browser runs on your server, so a document made there breaks its lines and pages where the editor would, given the same
-        fonts.
+        has no DOM and uses no API of Node. The code that lays a document out in the browser runs on your server, so a document made there breaks its lines and pages where the editor would, given the
+        same fonts.
       </p>
       <div className="mt-5">
         <InstallCommand command="npm install @rebodocs/core" />
@@ -177,8 +177,8 @@ try {
         </SectionHead>
         <LazyRenderDemo />
         <p className={prose}>
-          Have the template ask for Arial, which the page does not give: <code className={mono}>missingFonts</code> says so, and the text is set in the font it has. Give the Arial of your
-          machine, and it is set in Arial. The fonts decide where lines and pages break, so the pages a server makes are those of the editor when both have the same ones.
+          Have the template ask for Arial, which the page does not give: <code className={mono}>missingFonts</code> says so, and the text is set in the font it has. Give the Arial of your machine, and
+          it is set in Arial. The fonts decide where lines and pages break, so the pages a server makes are those of the editor when both have the same ones.
         </p>
       </section>
 
@@ -203,8 +203,8 @@ try {
         <Code html={express} />
         <Code html={route} />
         <p className={prose}>
-          The data is the JSON your application already has: nested objects fill <code className={mono}>{'{{client.name}}'}</code>, a list repeats a block, true or false keeps one or takes it out.
-          How to write them is on the page{' '}
+          The data is the JSON your application already has: nested objects fill <code className={mono}>{'{{client.name}}'}</code>, a list repeats a block, true or false keeps one or takes it out. How
+          to write them is on the page{' '}
           <a href="/docs/templates/#blocks" className={LINK}>
             Templates and variables
           </a>
@@ -223,8 +223,8 @@ try {
           Finding where to edit
         </h3>
         <p className={prose}>
-          Positions are not typed by hand: they come from the text. <code className={mono}>findAll</code> gives the range of each place a text is, and <code className={mono}>paragraphText</code> the text
-          of a paragraph; a table’s paragraphs are among the others, each with the <code className={mono}>cell</code> it is in.
+          Positions are not typed by hand: they come from the text. <code className={mono}>findAll</code> gives the range of each place a text is, and <code className={mono}>paragraphText</code> the
+          text of a paragraph; a table’s paragraphs are among the others, each with the <code className={mono}>cell</code> it is in.
         </p>
         <Code html={find} />
       </section>
@@ -325,15 +325,15 @@ try {
           </table>
         </div>
         <p className={prose}>
-          It all runs on the thread that calls it: a long document holds that thread for as long as it takes. For many at once, or very long ones, make them in a worker or a queue. Reading the fonts takes
-          longer than a page: keep them read.
+          It all runs on the thread that calls it: a long document holds that thread for as long as it takes. For many at once, or very long ones, make them in a worker or a queue. Reading the fonts
+          takes longer than a page: keep them read.
         </p>
       </section>
 
       <section aria-labelledby="untrusted" className="mt-24">
         <SectionHead id="untrusted" badge="Safety" color="yellow" title="Documents sent by others">
-          A DOCX is a zip file, and one made to harm can say it unpacks to far more than it weighs. <code className={mono}>importDocx</code> adds up what each file of it says it takes before
-          unpacking any, and refuses one past <code className={mono}>maxSize</code>.
+          A DOCX is a zip file, and one made to harm can say it unpacks to far more than it weighs. <code className={mono}>importDocx</code> adds up what each file of it says it takes before unpacking
+          any, and refuses one past <code className={mono}>maxSize</code>.
         </SectionHead>
         <Code html={untrusted} />
         <ul className="m-0 mt-6 grid max-w-[760px] list-disc gap-2.5 pl-5 text-base leading-[1.6] text-ink-soft">
@@ -366,8 +366,8 @@ try {
         </SectionHead>
         <Code html={layout} />
         <p className={prose}>
-          <code className={mono}>layoutDocument</code> takes anything that can say the width of a text and the height of a font (<code className={mono}>TextMeasurer</code>), which is how the
-          browser and the server share it: the editor measures with the browser, <code className={mono}>FontMeasurer</code> with font files.
+          <code className={mono}>layoutDocument</code> takes anything that can say the width of a text and the height of a font (<code className={mono}>TextMeasurer</code>), which is how the browser
+          and the server share it: the editor measures with the browser, <code className={mono}>FontMeasurer</code> with font files.
         </p>
       </section>
 
@@ -379,8 +379,8 @@ try {
           {[
             <>Keep the templates as DOCX in your storage, and the fonts they use beside your code.</>,
             <>
-              To make one: <code className={mono}>importDocx</code> → <code className={mono}>fillVariables</code> → <code className={mono}>exportDocx</code>, or{' '}
-              <code className={mono}>renderPdf</code>, and store the result.
+              To make one: <code className={mono}>importDocx</code> → <code className={mono}>fillVariables</code> → <code className={mono}>exportDocx</code>, or <code className={mono}>renderPdf</code>
+              , and store the result.
             </>,
             <>
               To edit it: give the stored DOCX to the{' '}
@@ -401,7 +401,10 @@ try {
               .
             </>,
           ].map((step, i) => (
-            <li key={i} className="flex gap-4 rounded-2xl border border-border px-5 py-4 [counter-increment:step] before:font-display before:text-xl before:font-extrabold before:text-brand before:content-[counter(step)]">
+            <li
+              key={i}
+              className="flex gap-4 rounded-2xl border border-border px-5 py-4 [counter-increment:step] before:font-display before:text-xl before:font-extrabold before:text-brand before:content-[counter(step)]"
+            >
               <p className="m-0 text-[15px] leading-normal text-ink-soft">{step}</p>
             </li>
           ))}

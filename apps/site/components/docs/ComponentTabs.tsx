@@ -71,7 +71,9 @@ export function ComponentTabs({ examples }: { examples: Record<string, string> }
                   <button type="button" onClick={() => setChosen(1)} className="cursor-pointer border-0 bg-transparent p-0 font-medium text-brand hover:text-brand-hover">
                     DocsProvider
                   </button>{' '}
-                  prop except <code className="font-code text-[12.5px]">bubble</code>, <code className="font-code text-[12.5px]">onLinkKey</code> and <code className="font-code text-[12.5px]">onFindKey</code>: it answers those itself. Changing features, versions or whether there is an onSave makes it again with the document as it is, unsaved changes and all; another docx or room opens that one.{' '}
+                  prop except <code className="font-code text-[12.5px]">bubble</code>, <code className="font-code text-[12.5px]">onLinkKey</code> and{' '}
+                  <code className="font-code text-[12.5px]">onFindKey</code>: it answers those itself. Changing features, versions or whether there is an onSave makes it again with the document as it
+                  is, unsaved changes and all; another docx or room opens that one.{' '}
                   <a href="/docs/react/#features" className="font-medium text-brand hover:text-brand-hover">
                     What features switches
                   </a>

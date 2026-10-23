@@ -10,10 +10,18 @@ function PageSetup() {
   if (!page) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <button className={button} onClick={() => set({ width: page.height, height: page.width })}>Turn</button>
+      <button className={button} onClick={() => set({ width: page.height, height: page.width })}>
+        Turn
+      </button>
       <label className="text-sm text-neutral-600">
         Left margin, cm{' '}
-        <input type="number" step="0.1" className="w-16 rounded border border-neutral-300 px-1 py-0.5" value={(page.marginLeft / CM).toFixed(1)} onChange={(e) => set({ marginLeft: e.target.valueAsNumber * CM })} />
+        <input
+          type="number"
+          step="0.1"
+          className="w-16 rounded border border-neutral-300 px-1 py-0.5"
+          value={(page.marginLeft / CM).toFixed(1)}
+          onChange={(e) => set({ marginLeft: e.target.valueAsNumber * CM })}
+        />
       </label>
       <button className={button} aria-pressed={!!numbering} onClick={() => setNumbering(numbering ? undefined : { place: 'footer', align: 'center', format: 'pageOfTotal' })}>
         Page numbers

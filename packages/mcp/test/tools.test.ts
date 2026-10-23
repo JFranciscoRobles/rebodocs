@@ -1,13 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { zlibSync } from 'fflate';
-import { type Doc, type Paragraph, columnsAt, letterheadOf, createDoc, exportDocx, importDocx, insertTable, linkHref, plainText, setParagraphStyle, tocRange } from '@rebodocs/core';
+import { type Doc, type Paragraph, columnsAt, letterheadOf, createDoc, exportDocx, importDocx, insertTable, linkHref, plainText, setParagraphStyle, tocRange } from '@rebodocs/core/internal';
 import { TOOLS, ToolError, runTool } from '../src/tools';
 
 const p = (text: string): Paragraph => ({ props: {}, runs: [{ text, props: {} }] });
 
 function base(): Doc {
-  const doc = createDoc([p('Contrato de servicios'), p('Objeto'), p('El cliente {{cliente | mayúsculas}} contrata el servicio.'), p('Precio'), p('El precio es de {{importe | moneda}}, a pagar el {{fecha | fecha larga}}.'), p('El cliente acepta.')]);
-  return [[0, 'Title'], [1, 'Heading1'], [3, 'Heading1']].reduce((now, [para, style]) => setParagraphStyle(now, para as number, para as number, style as string), doc);
+  const doc = createDoc([
+    p('Contrato de servicios'),
+    p('Objeto'),
+    p('El cliente {{cliente | mayúsculas}} contrata el servicio.'),
+    p('Precio'),
+    p('El precio es de {{importe | moneda}}, a pagar el {{fecha | fecha larga}}.'),
+    p('El cliente acepta.'),
+  ]);
+  return [
+    [0, 'Title'],
+    [1, 'Heading1'],
+    [3, 'Heading1'],
+  ].reduce((now, [para, style]) => setParagraphStyle(now, para as number, para as number, style as string), doc);
 }
 const texts = (doc: Doc) => doc.paragraphs.map((para) => plainText(para.runs).replace(/⁠/g, ''));
 /** Runs a tool and gives the document after it, which must have changed. */
@@ -81,7 +92,10 @@ describe('tools for an assistant', () => {
   });
 
   it('writes paragraphs, with styles and lists, and deletes them', () => {
-    const doc = apply(base(), 'insert_paragraphs', { after_paragraph: 5, paragraphs: [{ text: 'Vigencia', style: 'heading 2' }, { text: 'Un año.' }, { text: 'Prorrogable', list: 'bullet' }, { text: 'Revisable', list: 'bullet' }] });
+    const doc = apply(base(), 'insert_paragraphs', {
+      after_paragraph: 5,
+      paragraphs: [{ text: 'Vigencia', style: 'heading 2' }, { text: 'Un año.' }, { text: 'Prorrogable', list: 'bullet' }, { text: 'Revisable', list: 'bullet' }],
+    });
     expect(runTool(doc, 'read_document', { from: 6, to: 10 }).text).toBe('[6] (Heading2) Vigencia\n[7] Un año.\n[8] • Prorrogable\n[9] • Revisable\n[10] El cliente acepta.');
     expect(texts(apply(doc, 'insert_paragraphs', { after_paragraph: 0, paragraphs: [{ text: 'Borrador' }] }))[0]).toBe('Borrador');
     expect(error(doc, 'insert_paragraphs', { after_paragraph: 5, paragraphs: [{ text: 'x', style: 'Rara' }] })).toContain('The styles of this document are: Normal');
@@ -119,17 +133,33 @@ describe('tools for an assistant', () => {
   });
 
   it('fills the blocks of a template with lists and yes or no, and lists them', () => {
-    const doc = createDoc(['Pedido', '{{#lineas}}', '{{lineas.cosa}}: {{lineas.precio | moneda}}', '{{/lineas}}', '{{^pagado}}Pendiente de pago.{{/pagado}}'].map((text) => ({ props: {}, runs: [{ text, props: {} }] })));
+    const doc = createDoc(
+      ['Pedido', '{{#lineas}}', '{{lineas.cosa}}: {{lineas.precio | moneda}}', '{{/lineas}}', '{{^pagado}}Pendiente de pago.{{/pagado}}'].map((text) => ({ props: {}, runs: [{ text, props: {} }] })),
+    );
     expect(runTool(doc, 'list_variables', {}).text).toBe(
       'lineas.cosa — used 1×\nlineas.precio — used 1×; formats: moneda\nBlocks:\n{{#lineas}} — paragraphs, repeated for each item of a list, or kept for true\n{{^pagado}} — some text, kept when the value is not there',
     );
-    const result = runTool(doc, 'fill_variables', { values: { lineas: [{ cosa: 'Mesa', precio: 250 }, { cosa: 'Silla', precio: 90 }], pagado: false } });
+    const result = runTool(doc, 'fill_variables', {
+      values: {
+        lineas: [
+          { cosa: 'Mesa', precio: 250 },
+          { cosa: 'Silla', precio: 90 },
+        ],
+        pagado: false,
+      },
+    });
     expect(texts(result.doc!)).toEqual(['Pedido', 'Mesa: $250.00', 'Silla: $90.00', 'Pendiente de pago.']);
     expect(result.text).toBe('Filled 2 of 2 variables.\nWrote out 2 of 2 blocks.');
   });
 
   it('puts in a table, signatures, a page break and a table of contents', () => {
-    let doc = apply(base(), 'insert_table', { after_paragraph: 5, rows: [['Concepto', 'Importe'], ['Servicio', '$1,500.00']] });
+    let doc = apply(base(), 'insert_table', {
+      after_paragraph: 5,
+      rows: [
+        ['Concepto', 'Importe'],
+        ['Servicio', '$1,500.00'],
+      ],
+    });
     expect(runTool(doc, 'read_document', { from: 6, to: 9 }).text).toBe(
       '[6] (table 1, row 1, cell 1) Concepto\n[7] (table 1, row 1, cell 2) Importe\n[8] (table 1, row 2, cell 1) Servicio\n[9] (table 1, row 2, cell 2) $1,500.00',
     );
@@ -182,8 +212,18 @@ describe('tools for an assistant', () => {
   });
 
   it('changes the shape of a table', () => {
-    const table = (doc: Doc) => runTool(doc, 'read_document', { from: 7 }).text.split('\n').filter((row) => row.includes('table 1')).map((row) => row.replace(/^\[\d+\] \(table 1, row (\d+), cell (\d+)\) ?/, '$1.$2 '));
-    let doc = apply(base(), 'insert_table', { after_paragraph: 6, rows: [['a', 'b'], ['c', 'd']] });
+    const table = (doc: Doc) =>
+      runTool(doc, 'read_document', { from: 7 })
+        .text.split('\n')
+        .filter((row) => row.includes('table 1'))
+        .map((row) => row.replace(/^\[\d+\] \(table 1, row (\d+), cell (\d+)\) ?/, '$1.$2 '));
+    let doc = apply(base(), 'insert_table', {
+      after_paragraph: 6,
+      rows: [
+        ['a', 'b'],
+        ['c', 'd'],
+      ],
+    });
     expect(table(doc)).toEqual(['1.1 a', '1.2 b', '2.1 c', '2.2 d']);
     doc = apply(doc, 'edit_table', { paragraph: 9, action: 'insert_row_below' });
     expect(table(doc)).toEqual(['1.1 a', '1.2 b', '2.1 c', '2.2 d', '3.1 ', '3.2 ']);
@@ -250,7 +290,10 @@ describe('tools for an assistant', () => {
       const out = new Uint8Array(12 + body.length);
       const view = new DataView(out.buffer);
       view.setUint32(0, body.length);
-      out.set([...name].map((c) => c.charCodeAt(0)), 4);
+      out.set(
+        [...name].map((c) => c.charCodeAt(0)),
+        4,
+      );
       out.set(body, 8);
       view.setUint32(8 + body.length, crc(out.subarray(4, 8 + body.length)));
       return out;
@@ -379,7 +422,10 @@ describe('tools for an assistant', () => {
     const added = apply(doc, 'insert_paragraphs', { after_paragraph: 2, like_paragraph: 2, paragraphs: [{ text: 'Also this.' }, { segments: [{ text: 'And ' }, { text: 'this', italic: true }] }] });
     expect(added.paragraphs[2].props).toMatchObject({ align: 'justify', indentLeft: 36 });
     expect(added.paragraphs[2].runs[0].props).toMatchObject({ fontFamily: 'Georgia', fontSize: 12 });
-    expect(added.paragraphs[3].runs.map((run) => [run.text, !!run.props.italic])).toEqual([['And ', false], ['this', true]]);
+    expect(added.paragraphs[3].runs.map((run) => [run.text, !!run.props.italic])).toEqual([
+      ['And ', false],
+      ['this', true],
+    ]);
   });
 
   it('changes the font and size of a text, and how paragraphs sit', () => {
@@ -395,7 +441,10 @@ describe('tools for an assistant', () => {
     expect(error(doc, 'format_paragraphs', { from: 3 })).toContain('Say what to change');
 
     const tabbed = apply(doc, 'format_paragraphs', { from: 3, tab_stops: [{ at_cm: 10, align: 'right', leader: 'dot' }, { at_cm: 2.54 }] });
-    expect(tabbed.paragraphs[2].props.tabs).toEqual([{ pos: 72, align: 'left' }, { pos: 283.46, align: 'right', leader: 'dot' }]);
+    expect(tabbed.paragraphs[2].props.tabs).toEqual([
+      { pos: 72, align: 'left' },
+      { pos: 283.46, align: 'right', leader: 'dot' },
+    ]);
     expect(runTool(tabbed, 'read_formatting', { from: 3, to: 3 }).text).toContain('tab stops left at 2.54 cm, right with dots at 10 cm');
     expect(error(doc, 'format_paragraphs', { from: 3, tab_stops: [{ at_cm: 2, align: 'middle' }] })).toContain('"align" must be');
   });

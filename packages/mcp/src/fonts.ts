@@ -4,7 +4,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, extname, join } from 'node:path';
-import { type Doc, type FontFile, readFonts, resolveRun } from '@rebodocs/core';
+import { type Doc, type FontFile, readFonts, resolveRun } from '@rebodocs/core/internal';
 
 export const SYSTEM_FONTS = [
   // Its Supplemental folder is inside: Arial and the others; the collections (.ttc) of Helvetica and its kin are here.

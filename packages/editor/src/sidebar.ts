@@ -6,7 +6,7 @@
 // application, which says what they do; exporting is done here, and so is the
 // setup of the page, in a dialog of its own, through the public methods of the editor.
 
-import { type PageSetup, docText, imageExtension } from '@rebodocs/core';
+import { type PageSetup, docText, imageExtension } from '@rebodocs/core/internal';
 import { arrowsThrough, holdFocus, tabbables } from './a11y';
 import type { Editor } from './editor';
 import { type MessageKey, getLocale, locales, plural, speaks, t } from './i18n';
@@ -373,7 +373,9 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
     format('export-pdf', 'PDF', 'dx-pdf', 'PDF', '.pdf', t('menu.pdfNote'), () => {
       void editor.exportPdf(baseName()).then((bytes) => give({ name: `${baseName()}.pdf`, blob: new Blob([bytes as BlobPart], { type: 'application/pdf' }) }));
     });
-    format('export-md', 'M↓', 'dx-md', 'Markdown', '.md', t('menu.mdNote'), () => give({ name: `${baseName()}.md`, blob: new Blob([editor.exportMarkdown()], { type: 'text/markdown;charset=utf-8' }) }));
+    format('export-md', 'M↓', 'dx-md', 'Markdown', '.md', t('menu.mdNote'), () =>
+      give({ name: `${baseName()}.md`, blob: new Blob([editor.exportMarkdown()], { type: 'text/markdown;charset=utf-8' }) }),
+    );
     if (withPrint) format('print', svg(PATHS.print, 20), 'dx-print', t('menu.print').replace('…', ''), MOD + 'P', t('menu.printNote'), () => editor.print());
     return node;
   };
@@ -579,7 +581,14 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
     node.append(text, ...controls);
     return node;
   };
-  const pageRow = () => row('page-setup', PATHS.page, openPageSetup, () => ({ title: pageWords().paper, note: pageWords().rest }), () => t('pageSetup.title'));
+  const pageRow = () =>
+    row(
+      'page-setup',
+      PATHS.page,
+      openPageSetup,
+      () => ({ title: pageWords().paper, note: pageWords().rest }),
+      () => t('pageSetup.title'),
+    );
 
   const select = (id: string, labels: string[], onChange: (index: number) => void, current: () => number) => {
     const node = el('select', '');
@@ -658,8 +667,26 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
   // Any other size is typed in: the least is what the margins need.
   const sizes = el('div', 'dx-side-pair');
   sizes.append(
-    field(t('pageSetup.width'), length('width', () => page().width, (width) => setPage({ width }), () => [page().marginLeft + page().marginRight + MIN_TEXT, 3600]), unit()),
-    field(t('pageSetup.height'), length('height', () => page().height, (height) => setPage({ height }), () => [page().marginTop + page().marginBottom + MIN_TEXT, 3600]), unit()),
+    field(
+      t('pageSetup.width'),
+      length(
+        'width',
+        () => page().width,
+        (width) => setPage({ width }),
+        () => [page().marginLeft + page().marginRight + MIN_TEXT, 3600],
+      ),
+      unit(),
+    ),
+    field(
+      t('pageSetup.height'),
+      length(
+        'height',
+        () => page().height,
+        (height) => setPage({ height }),
+        () => [page().marginTop + page().marginBottom + MIN_TEXT, 3600],
+      ),
+      unit(),
+    ),
   );
   form.appendChild(sizes);
 
@@ -706,7 +733,16 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
     const other: keyof PageSetup = { marginTop: 'marginBottom', marginBottom: 'marginTop', marginLeft: 'marginRight', marginRight: 'marginLeft' }[key] as keyof PageSetup;
     // A margin goes as far as leaves room for the text against the one across.
     const limits = (): [number, number] => [0, (vertical ? page().height : page().width) - (page()[other] ?? 0) - MIN_TEXT];
-    return field(label, length(key, () => page()[key], (value) => setPage({ [key]: value }), limits), unit());
+    return field(
+      label,
+      length(
+        key,
+        () => page()[key],
+        (value) => setPage({ [key]: value }),
+        limits,
+      ),
+      unit(),
+    );
   };
   const margins = el('div', 'dx-side-pair');
   margins.append(margin(t('pageSetup.top'), 'marginTop'), margin(t('pageSetup.bottom'), 'marginBottom'), margin(t('pageSetup.left'), 'marginLeft'), margin(t('pageSetup.right'), 'marginRight'));
@@ -714,7 +750,6 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
   const note = el('div', 'dx-side-note');
   note.textContent = t('pageSetup.note');
   form.appendChild(note);
-
 
   // --- The card --------------------------------------------------------------------------------
 

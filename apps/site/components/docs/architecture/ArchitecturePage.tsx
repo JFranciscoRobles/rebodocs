@@ -44,7 +44,7 @@ const COSTS: Cost[] = [
   {
     what: 'Copy and paste',
     state: 'partly',
-    text: 'Copying gives plain text, HTML and the editor’s own format. Pasting from Word, Google Docs or a page keeps the formatting, links, lists and headings, but not pictures, and a table comes as lines with tabs.',
+    text: 'Copying gives plain text, HTML and the editor’s own format. Pasting from Word, Google Docs or a page keeps the formatting, links, lists, headings and tables, with their merged cells, colours, borders and row heights, but not pictures; a table inside a cell comes as lines with tabs.',
     link: ['Status', '/docs/status/'],
   },
   {
@@ -113,7 +113,9 @@ next.paragraphs[0] === doc.paragraphs[0];   // true: untouched, so the very same
   return (
     <>
       <h1 className="m-0 mt-3 font-display text-[clamp(36px,4vw,48px)] font-extrabold leading-[1.08] tracking-[-0.03em]">How it works</h1>
-      <p className="m-0 mt-3.5 max-w-[680px] text-lg leading-[1.6] text-muted">Four decisions explain most of the code, and a fifth explains how several people work on one document. Each has a small demo, made the way the engine is.</p>
+      <p className="m-0 mt-3.5 max-w-[680px] text-lg leading-[1.6] text-muted">
+        Four decisions explain most of the code, and a fifth explains how several people work on one document. Each has a small demo, made the way the engine is.
+      </p>
       <div className="mt-4">
         <HandTip>tip: follow one keystroke first</HandTip>
       </div>
@@ -155,30 +157,28 @@ next.paragraphs[0] === doc.paragraphs[0];   // true: untouched, so the very same
         <p className="m-0 mt-8 font-display text-lg font-bold tracking-[-0.01em]">What the engine works out</p>
         <Checks
           items={[
-            'Lines, with justification, tab stops, and Word’s rule for how far spaces may shrink to take one more word.',
+            'Lines, with justification, tab stops, kerning from the font’s own table of pairs, and Word’s rule for how far spaces may shrink to take one more word.',
             'Pages: widow and orphan control, keep-with-next, keep-lines-together, page breaks.',
             'Sections, each with its own page size, margins, columns, header and footer.',
             'Tables, with rows that split across pages, tables inside cells, and text on its side.',
             'Headers and footers that take room from the text when they are tall.',
-            'Footnotes at the foot of the page that refers to them.',
+            'Footnotes at the foot of the page that refers to them, and endnotes at the end of the document or of each section, numbered as each section says, again on each page if it asks.',
             'Floating pictures and text boxes, and the text that goes round them.',
             'Lengths in points throughout, as in Word.',
           ]}
         />
         <p className={prose}>Lines then go into pages, by Word’s rules for where a page may end.</p>
         <PagesDemo />
-        <p className={prose}>
-          And because the only thing asked from outside is a width, the same code runs in Node with font files in place of a browser: that is how PDFs are made on a server.
-        </p>
+        <p className={prose}>And because the only thing asked from outside is a width, the same code runs in Node with font files in place of a browser: that is how PDFs are made on a server.</p>
       </section>
 
       <section aria-labelledby="painting" className="mt-24">
         <SectionHead id="painting" badge="Decision 3" color="yellow" title="Painting is placing" />
         <p className={prose}>
-          The editor does not hand text to the browser to lay out. Each piece of text is a <code className={mono}>span</code> placed at the coordinates the layout gave; the browser never wraps a line, so
-          what is on screen is exactly what was computed, and what will be printed. There is no <code className={mono}>contenteditable</code>: a hidden <code className={mono}>textarea</code> follows the
-          caret and has the focus; what is typed arrives there and becomes an operation. Movement keys and shortcuts are taken in <code className={mono}>keydown</code>, and the caret and the selection
-          are drawn by the editor.
+          The editor does not hand text to the browser to lay out. Each piece of text is a <code className={mono}>span</code> placed at the coordinates the layout gave; the browser never wraps a line,
+          so what is on screen is exactly what was computed, and what will be printed. There is no <code className={mono}>contenteditable</code>: a hidden <code className={mono}>textarea</code>{' '}
+          follows the caret and has the focus; what is typed arrives there and becomes an operation. Movement keys and shortcuts are taken in <code className={mono}>keydown</code>, and the caret and
+          the selection are drawn by the editor.
         </p>
         <PaintDemo />
       </section>
@@ -236,7 +236,11 @@ next.paragraphs[0] === doc.paragraphs[0];   // true: untouched, so the very same
           ))}
         </div>
         <p className={prose}>
-          What is announced was read in Chrome, not yet listened to with VoiceOver, NVDA or JAWS. The <a href="/docs/status/" className={LINK}>status page</a> keeps the list of what is missing.
+          What is announced was read in Chrome, not yet listened to with VoiceOver, NVDA or JAWS. The{' '}
+          <a href="/docs/status/" className={LINK}>
+            status page
+          </a>{' '}
+          keeps the list of what is missing.
         </p>
       </section>
 

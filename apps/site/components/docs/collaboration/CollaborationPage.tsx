@@ -21,9 +21,17 @@ const DEMO_FILES: [path: string, what: string][] = [
 /** Who holds what: the parts, left to right. */
 function Parts() {
   const box = 'rounded-xl border border-border bg-white px-4 py-3';
-  const arrow = <span className="self-center px-1 font-code text-lg text-muted" aria-hidden="true">⇄</span>;
+  const arrow = (
+    <span className="self-center px-1 font-code text-lg text-muted" aria-hidden="true">
+      ⇄
+    </span>
+  );
   return (
-    <div className="mt-8 flex flex-wrap items-stretch gap-2 rounded-[18px] border border-border bg-surface p-5" role="figure" aria-label="The browsers talk to the collaboration server, which talks to your backend">
+    <div
+      className="mt-8 flex flex-wrap items-stretch gap-2 rounded-[18px] border border-border bg-surface p-5"
+      role="figure"
+      aria-label="The browsers talk to the collaboration server, which talks to your backend"
+    >
       <div className="flex min-w-[150px] flex-[1_1_150px] flex-col gap-2">
         <p className={CAPTION}>The people</p>
         {['Ana’s browser', 'Luis’s browser', 'Eva’s browser'].map((name) => (
@@ -143,8 +151,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         </SectionHead>
         <LazyRoom />
         <p className={prose}>
-          Hold the network, type in both at the same place, then let one through first and the other after: the log shows the server moving the second change over the first, and the badge checks
-          that all three documents are the same, with the digest the real server sends.
+          Hold the network, type in both at the same place, then let one through first and the other after: the log shows the server moving the second change over the first, and the badge checks that
+          all three documents are the same, with the digest the real server sends.
         </p>
       </section>
 
@@ -161,7 +169,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         </p>
         <Callout title="Whatever the rules get wrong lasts seconds.">
           A moment after the changes stop, the server tells the room a digest of its document. An editor whose document differs loads the room again, keeping what the person had typed and not sent;
-          what they can undo starts over. See <a href="#inside" className={LINK}>how it works inside</a>.
+          what they can undo starts over. See{' '}
+          <a href="#inside" className={LINK}>
+            how it works inside
+          </a>
+          .
         </Callout>
       </section>
 
@@ -253,7 +265,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         <dl className="m-0 mt-6 max-w-[860px] rounded-2xl border border-border px-5">
           {[
             ['X-Rebodocs-Session-End: 1', 'This is the document as the session of work leaves it: everybody has gone.'],
-            ['X-Rebodocs-Authors', 'Who changed it in the session, as /access named them, each URL-encoded, separated by commas, in the order they first changed it. Someone who only looked is not there.'],
+            [
+              'X-Rebodocs-Authors',
+              'Who changed it in the session, as /access named them, each URL-encoded, separated by commas, in the order they first changed it. Someone who only looked is not there.',
+            ],
           ].map(([header, text]) => (
             <div key={header} className="flex flex-wrap gap-x-5 gap-y-1 border-t border-[#f0eee9] py-3 first:border-t-0">
               <dt className="w-[230px] flex-none font-code text-[13.5px] font-semibold text-ink">{header}</dt>
@@ -263,9 +278,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         </dl>
         <div className={`mt-5 max-w-[860px] ${CODE}`} dangerouslySetInnerHTML={{ __html: versionCode }} />
         <p className={prose}>
-          Give the editor those versions (<code className={mono}>versions</code> of <code className={mono}>DocsEditor</code>) and everybody in the room can see them, compare the document with one,
-          and go back to one: going back is one more change, sent to the others. A session ends when the room is let go of, <code className={mono}>idle</code> after the last person left (30 s by
-          default); someone who comes back before that is in the same session. A server that stops while people are in it gives the document back without the headers. See{' '}
+          Give the editor those versions (<code className={mono}>versions</code> of <code className={mono}>DocsEditor</code>) and everybody in the room can see them, compare the document with one, and
+          go back to one: going back is one more change, sent to the others. A session ends when the room is let go of, <code className={mono}>idle</code> after the last person left (30 s by default);
+          someone who comes back before that is in the same session. A server that stops while people are in it gives the document back without the headers. See{' '}
           <a href="/docs/versions/" className={LINK}>
             versions
           </a>
@@ -306,15 +321,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       <section aria-labelledby="know" className="mt-24">
         <SectionHead id="know" badge="Limits" color="yellow" title="What to know">
-          Collaboration has run with two tabs, and two browsers on a local network; the demo’s backend has automated tests with two people typing through it, over a folder. It has not run between
-          different networks, behind an HTTPS proxy, or with two browsers over a real bucket.
+          Collaboration has run with two tabs, two browsers on a local network and between different networks behind an HTTPS proxy, over a real bucket; the demo’s backend has automated tests with two
+          people typing through it, over a folder.
         </SectionHead>
         <ul className="m-0 mt-5 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] gap-x-8 gap-y-3 p-0">
           {[
             'A room is named with letters, digits, - and _, from 8 to 64 of them. The id of a document in your system will do; the demo, which has file names, uses a digest of the name.',
             'One process holds a room. Do not run several behind a load balancer without routing each room to one of them.',
-            'The ticket is checked on joining only: someone whose access you revoke stays until they disconnect.',
-            'A hard crash loses up to --save-every seconds of changes.',
+            'The ticket is checked on joining, and again only with --recheck-every or server.recheck(): without them, someone whose access you revoke stays until they disconnect.',
+            'A hard crash loses the changes since the last save: up to --save-after seconds (5) after people stop typing, up to --save-every (30) while they go on.',
             'The server keeps no versions: your application does, and the editor compares and restores them. Who changed what travels with tracked changes.',
             'Clients of different versions in one room can end with different formatting: update the editors and the server together.',
           ].map((item) => (

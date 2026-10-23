@@ -49,12 +49,7 @@ export function DocsTopBar({ index }: { index: SearchEntry[] }) {
         </nav>
       </div>
 
-      <dialog
-        ref={sheet}
-        aria-label="Pages of the documentation"
-        className="sheet m-0 h-dvh w-[min(320px,86vw)]"
-        onClick={(event) => event.target === sheet.current && close()}
-      >
+      <dialog ref={sheet} aria-label="Pages of the documentation" className="sheet m-0 h-dvh w-[min(320px,86vw)]" onClick={(event) => event.target === sheet.current && close()}>
         <div className="flex h-full flex-col overflow-y-auto bg-white px-4 py-5 shadow-menu">
           <div className="mb-5 flex items-center justify-between px-2.5">
             <span className="font-display text-lg font-extrabold tracking-[-0.03em]">Docs</span>

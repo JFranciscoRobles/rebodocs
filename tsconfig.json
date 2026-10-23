@@ -10,9 +10,10 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "isolatedModules": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["packages/*/src", "packages/*/test", "apps/*/src"],
+  "include": ["packages/*/src", "packages/*/test", "apps/*/src", "tools/*.ts", "tools/assistant-eval/*.ts"],
   "exclude": ["apps/demo", "apps/storage", "apps/realtime", "apps/assistant", "apps/crm"]
 }

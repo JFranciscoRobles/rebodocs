@@ -114,12 +114,7 @@ export default function ReviewDemo() {
               </button>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <select
-                aria-label="Whose changes"
-                value={whose}
-                onChange={(e) => setWhose(e.target.value)}
-                className="rounded-lg border border-border bg-white px-2 py-1 text-[13px] text-ink"
-              >
+              <select aria-label="Whose changes" value={whose} onChange={(e) => setWhose(e.target.value)} className="rounded-lg border border-border bg-white px-2 py-1 text-[13px] text-ink">
                 <option value="">everyone&apos;s</option>
                 {seen?.authors.map((name) => (
                   <option key={name} value={name}>

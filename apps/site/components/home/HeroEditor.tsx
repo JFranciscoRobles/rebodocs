@@ -99,7 +99,10 @@ export function HeroEditor() {
                   {BAR.map((item, i) => (
                     <span key={item.label} className={`${i > 5 ? 'hidden sm:flex' : 'flex'} items-center`}>
                       {i === 4 || i === 5 ? <i className="mx-1 h-5 w-px bg-border" /> : null}
-                      <span className={`animate-menu-hover whitespace-nowrap rounded-md px-2 py-1 text-ink ${item.css ?? ''}`} style={item.delay ? { animationDelay: item.delay } : { animation: 'none' }}>
+                      <span
+                        className={`animate-menu-hover whitespace-nowrap rounded-md px-2 py-1 text-ink ${item.css ?? ''}`}
+                        style={item.delay ? { animationDelay: item.delay } : { animation: 'none' }}
+                      >
                         {item.label}
                       </span>
                     </span>
@@ -114,7 +117,11 @@ export function HeroEditor() {
                 Page 1 of 1<span className="hidden sm:inline"> · 42 words</span>
               </span>
               <span className="flex items-center gap-2 rounded-full border border-[#e6e3dc] bg-white px-3 py-1.5 shadow-[0_2px_8px_rgba(47,46,43,0.08)]">
-                −<i className="relative hidden h-1 w-16 rounded-full bg-[#e6e3dc] sm:block"><i className="absolute inset-y-0 left-0 w-1/2 rounded-full bg-[#0b57d0]" /></i>+<span>100 %</span>
+                −
+                <i className="relative hidden h-1 w-16 rounded-full bg-[#e6e3dc] sm:block">
+                  <i className="absolute inset-y-0 left-0 w-1/2 rounded-full bg-[#0b57d0]" />
+                </i>
+                +<span>100 %</span>
               </span>
             </div>
           </div>
@@ -128,7 +135,12 @@ export function HeroEditor() {
             </div>
             {[
               ['client', <Rolling key="r" className="text-[12px]" />],
-              ['amount', <span key="a" className="text-[#2f2e2b]">$2,500.00</span>],
+              [
+                'amount',
+                <span key="a" className="text-[#2f2e2b]">
+                  $2,500.00
+                </span>,
+              ],
             ].map(([name, value]) => (
               <div key={name as string} className="rounded-[10px] border border-[#e6e3dc] px-2.5 py-2">
                 <div className="font-code text-[11px] text-[#5f5d58]">{name}</div>

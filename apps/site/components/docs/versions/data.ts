@@ -60,9 +60,18 @@ export const CURRENT: Doc = (() => {
 
 /** What the application gives the editor, as packages/editor/src/versions.ts declares it. */
 export const MEMBERS: { sig: string; text: string }[] = [
-  { sig: 'list() → Promise<VersionInfo[]>', text: 'The versions there are, in any order: the tab shows the newest first, those without a date last. Asked for each time the tab is opened, after a version is saved, and after each save of the document.' },
-  { sig: 'load(id) → Promise<Uint8Array | ArrayBuffer>', text: 'One version, as the bytes of its DOCX. A version does not change, so each one is read once; one that could not be read is asked for again the next time.' },
-  { sig: 'save?(docx, { label?, author? }) → Promise', text: 'Optional. Keeps the document as it is now, with the name typed for it and the editor’s author. With it the tab has Save version; without it, versions are kept when your application keeps them.' },
+  {
+    sig: 'list() → Promise<VersionInfo[]>',
+    text: 'The versions there are, in any order: the tab shows the newest first, those without a date last. Asked for each time the tab is opened, after a version is saved, and after each save of the document.',
+  },
+  {
+    sig: 'load(id) → Promise<Uint8Array | ArrayBuffer>',
+    text: 'One version, as the bytes of its DOCX. A version does not change, so each one is read once; one that could not be read is asked for again the next time.',
+  },
+  {
+    sig: 'save?(docx, { label?, author? }) → Promise',
+    text: 'Optional. Keeps the document as it is now, with the name typed for it and the editor’s author. With it the tab has Save version; without it, versions are kept when your application keeps them.',
+  },
 ];
 
 /** VersionInfo. */
@@ -80,15 +89,29 @@ export const COMPARISON: { name: string; type: string; text: string }[] = [
     type: 'Change[]',
     text: 'One for each paragraph put in (added), taken out (removed), changed (changed), or with the same text and another look (formatted). Each has before and after, its index in each version, and part when it is in a header, a footer, a note at the foot of the page or a text box.',
   },
-  { name: 'notes', type: 'NoteChange[]', text: 'The notes on the text written (added), taken out (removed) or whose text changed (changed), each by author and date, which Word keeps when it saves, though not the id. Listed, not marked in doc.' },
-  { name: 'doc', type: 'Doc', text: 'The later version with the changes marked, as the editor shows it. It lays out, prints and exports to PDF like any document; it is for reading, not for editing or keeping.' },
+  {
+    name: 'notes',
+    type: 'NoteChange[]',
+    text: 'The notes on the text written (added), taken out (removed) or whose text changed (changed), each by author and date, which Word keeps when it saves, though not the id. Listed, not marked in doc.',
+  },
+  {
+    name: 'doc',
+    type: 'Doc',
+    text: 'The later version with the changes marked, as the editor shows it. It lays out, prints and exports to PDF like any document; it is for reading, not for editing or keeping.',
+  },
   { name: 'marks', type: '{ part?, pos }[]', text: 'Where each change starts in doc, for going from one to the next.' },
 ];
 
 /** The functions, of core and of the editor. */
 export const FUNCTIONS: { sig: string; text: string }[] = [
-  { sig: 'compareDocs(before, after) → Comparison', text: 'What changed from one version to another: paragraph by paragraph and, inside one that changed, word by word, in the text, its headers, footers, notes at the foot of the page and text boxes; and the notes on the text. Tracked changes are taken as accepted, as Word compares.' },
-  { sig: 'describeChange(change, context = 40) → string', text: 'A change, of a paragraph or of a note, as plain text: [-taken out-], {+put in+}, a picture as [image], and up to context letters of what is around it.' },
+  {
+    sig: 'compareDocs(before, after) → Comparison',
+    text: 'What changed from one version to another: paragraph by paragraph and, inside one that changed, word by word, in the text, its headers, footers, notes at the foot of the page and text boxes; and the notes on the text. Tracked changes are taken as accepted, as Word compares.',
+  },
+  {
+    sig: 'describeChange(change, context = 40) → string',
+    text: 'A change, of a paragraph or of a note, as plain text: [-taken out-], {+put in+}, a picture as [image], and up to context letters of what is around it.',
+  },
   { sig: 'restoreVersion(current, version) → Doc', text: 'The document to put in place of current: the version, with the current paragraphs wherever they are the same.' },
   { sig: 'editor.restoreVersion(doc)', text: 'The same, on the editor, as one step to undo.' },
   { sig: 'loadVersion(versions, id) → Promise<Doc>', text: 'A version, read once. From @rebodocs/editor and @rebodocs/react.' },

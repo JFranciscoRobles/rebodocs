@@ -57,24 +57,33 @@ makes undo, layout caching and change detection cheap.
 | Area | What it does |
 | --- | --- |
 | **DOCX** | `importDocx`, `exportDocx`. The original XML is kept: an untouched paragraph is written back as it was, a changed one keeps the properties the model does not know. |
-| **Layout** | `layoutDocument`: lines and pages by Word's rules (justification, widow control, keep-with-next, sections, columns, tables across pages, floating objects, footnotes). `layoutReflow` sets text to the width of a screen. |
-| **Editing** | Pure functions `(doc, …) => doc`: text, formatting, styles, lists, tables, pictures, links, comments, footnotes, text boxes, table of contents, page numbers, letterheads. |
+| **Layout** | `layoutDocument`: lines and pages by Word's rules (justification, kerning, widow control, keep-with-next, sections, columns, tables across pages, floating objects, footnotes, endnotes at the end of the document or of each section, numbered as each section says). `layoutReflow` sets text to the width of a screen. |
+| **Editing** | Pure functions `(doc, …) => doc`: text, formatting, styles, lists, tables, pictures, links, comments, footnotes, endnotes, text boxes, table of contents, page numbers, letterheads. |
 | **Templates** | `fillVariables`, `findVariables`, `templateBlocks`: variables with formats (case, dates, numbers, amounts) and blocks that repeat or are kept only when a value is there. |
 | **Tracked changes** | `trackEdit` turns any edit into Word's tracked changes; accept, reject, list. |
 | **Versions** | `compareDocs`: two versions compared paragraph by paragraph and word by word. `restoreVersion`: an earlier one as a change to the current document. |
 | **Output** | `renderPdf` (tagged, with TrueType fonts subsetted and OpenType embedded), `exportMarkdown`. |
-| **Clipboard** | A piece of a document with its formatting, as HTML for other programs, and written back at a position. |
+| **Clipboard** | A piece of a document with its formatting and its tables (merged cells, widths, colours, borders, row heights), as HTML for Word and other programs, and written back at a position. |
+
+## The API
+
+What `@rebodocs/core` exports is chosen: [`API.md`](API.md) lists every name
+with its declaration, and a test checks that the two agree, so that a change
+to the API shows in a diff. The rest of the engine is in
+`@rebodocs/core/internal`, for the editor, the collaboration server and the
+MCP server, with no promise: it changes between versions without notice.
 
 ## Fidelity
 
-Layout is measured line by line against the PDF Word exports: across 16
-documents, 96.5% of Word's lines are where Word puts them. `npm run
-word-compare` in the repository measures any file. Details and known limits
+Layout is measured line by line against the PDF Word exports, with
+documents made up for it and kept in `test-documents/` with Word's PDF of
+each: `npm run word-check` in the repository runs them all, and `npm run
+word-compare` measures any file. Details and known limits
 are on the [status page](https://rebodocs.com/docs/status/).
 
 ## Status
 
-0.9: ready to try in production; the API may change before 1.0. See the
+0.10: ready to try in production; the API may change before 1.0. See the
 [changelog](https://github.com/JFranciscoRobles/rebodocs/blob/main/CHANGELOG.md).
 
 ## License

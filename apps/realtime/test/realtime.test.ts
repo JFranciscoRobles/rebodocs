@@ -127,7 +127,8 @@ describe('the versions', () => {
     // As `apps/storage/server/bucket.ts` lists: every key under the prefix, documents and PDFs only.
     const files = new Map<string, Uint8Array>();
     const bucket: Store = {
-      list: async (prefix = '') => [...files.keys()].filter((key) => key.startsWith(prefix) && /\.(docx|pdf)$/i.test(key)).map((key) => ({ key, size: files.get(key)!.length, modified: new Date().toISOString() })),
+      list: async (prefix = '') =>
+        [...files.keys()].filter((key) => key.startsWith(prefix) && /\.(docx|pdf)$/i.test(key)).map((key) => ({ key, size: files.get(key)!.length, modified: new Date().toISOString() })),
       get: async (key) => files.get(key),
       put: async (key, body) => void files.set(key, body),
     };

@@ -121,10 +121,7 @@ export function insertText(doc: Doc, pos: Position, text: string, props?: RunPro
   const p = doc.paragraphs[pos.para];
   const runProps = props ?? propsAt(doc, pos);
   const len = paragraphLength(p);
-  const runs = normalizeRuns(
-    [...sliceRuns(p.runs, 0, pos.offset), { text, props: runProps }, ...sliceRuns(p.runs, pos.offset, len)],
-    runProps,
-  );
+  const runs = normalizeRuns([...sliceRuns(p.runs, 0, pos.offset), { text, props: runProps }, ...sliceRuns(p.runs, pos.offset, len)], runProps);
   return {
     doc: replaceParagraphs(doc, pos.para, 1, [{ ...p, runs }]),
     pos: { para: pos.para, offset: pos.offset + text.length },
@@ -138,7 +135,11 @@ export function splitParagraph(doc: Doc, pos: Position): { doc: Doc; pos: Positi
   // The mark that ends a section is the one at the end of the paragraph, which goes with the second half.
   const { section: _, ...head } = p;
   // So is the mark that was put in or taken out: the first half ends with a new one.
-  const left: Paragraph = { ...head, props: p.props.markRevision ? defined({ ...p.props, markRevision: undefined, markAuthor: undefined, markDate: undefined }) : p.props, runs: normalizeRuns(sliceRuns(p.runs, 0, pos.offset), fallback) };
+  const left: Paragraph = {
+    ...head,
+    props: p.props.markRevision ? defined({ ...p.props, markRevision: undefined, markAuthor: undefined, markDate: undefined }) : p.props,
+    runs: normalizeRuns(sliceRuns(p.runs, 0, pos.offset), fallback),
+  };
   const right: Paragraph = {
     ...p,
     props: defined({ ...p.props, pageBreakBefore: undefined }),
@@ -185,10 +186,7 @@ function deleteWithin(doc: Doc, range: Range): Doc {
   const first = doc.paragraphs[from.para];
   const last = doc.paragraphs[to.para];
   const fallback = propsAt(doc, from);
-  const runs = normalizeRuns(
-    [...sliceRuns(first.runs, 0, from.offset), ...sliceRuns(last.runs, to.offset, paragraphLength(last))],
-    fallback,
-  );
+  const runs = normalizeRuns([...sliceRuns(first.runs, 0, from.offset), ...sliceRuns(last.runs, to.offset, paragraphLength(last))], fallback);
   // What is left ends with the mark of the last paragraph, and so with the section that one ended, if any.
   const { section: _, ...head } = first;
   return replaceParagraphs(doc, from.para, to.para - from.para + 1, [defined<Paragraph>({ ...head, runs, section: last.section })]);

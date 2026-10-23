@@ -27,7 +27,7 @@ import {
   listStyleAt,
   restartNumbering,
   continueNumbering,
-} from '../src';
+} from '../src/internal';
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 
@@ -50,11 +50,7 @@ function numberingOf(levels: ListLevel[]): Numbering {
 
 describe('list counters', () => {
   it('counts each level and restarts the deeper ones', () => {
-    const numbering = numberingOf([
-      level({}),
-      level({ format: 'lowerLetter', text: '%2)' }),
-      level({ format: 'lowerRoman', text: '%3.' }),
-    ]);
+    const numbering = numberingOf([level({}), level({ format: 'lowerLetter', text: '%2)' }), level({ format: 'lowerRoman', text: '%3.' })]);
     const counters = new ListCounters();
     const next = (lv: number) => counters.next(numbering, 1, lv)?.text;
     expect([next(0), next(0), next(1), next(1), next(2), next(0), next(1)]).toEqual(['1.', '2.', 'a)', 'b)', 'i.', '3.', 'a)']);
@@ -62,11 +58,7 @@ describe('list counters', () => {
   });
 
   it('builds multi-level labels, in digits for legal numbering', () => {
-    const numbering = numberingOf([
-      level({ format: 'upperRoman', text: '%1.' }),
-      level({ text: '%1.%2.' }),
-      level({ text: '%1.%2.%3', legal: true }),
-    ]);
+    const numbering = numberingOf([level({ format: 'upperRoman', text: '%1.' }), level({ text: '%1.%2.' }), level({ text: '%1.%2.%3', legal: true })]);
     const counters = new ListCounters();
     const next = (lv: number) => counters.next(numbering, 1, lv)?.text;
     expect([next(0), next(0), next(1), next(2)]).toEqual(['I.', 'II.', 'II.1.', '2.1.1']);
@@ -75,11 +67,7 @@ describe('list counters', () => {
   });
 
   it('honours restart rules, start values and start overrides', () => {
-    const numbering = numberingOf([
-      level({}),
-      level({ text: '%1.%2.', restart: false }),
-      level({ text: '(%3)', restartAfter: 1, start: 5 }),
-    ]);
+    const numbering = numberingOf([level({}), level({ text: '%1.%2.', restart: false }), level({ text: '(%3)', restartAfter: 1, start: 5 })]);
     numbering.lists.set(2, { abstractId: 0, starts: new Map([[0, 7]]), levels: new Map([[1, level({ format: 'none' })]]) });
     const counters = new ListCounters();
     const next = (lv: number, id = 1) => counters.next(numbering, id, lv)?.text;
@@ -135,10 +123,7 @@ const STYLES =
   '</w:styles>';
 
 function item(text: string, numId: number, lvl: number, extra = ''): string {
-  return (
-    `<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="${lvl}"/><w:numId w:val="${numId}"/></w:numPr>${extra}</w:pPr>` +
-    `<w:r><w:t>${text}</w:t></w:r></w:p>`
-  );
+  return `<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="${lvl}"/><w:numId w:val="${numId}"/></w:numPr>${extra}</w:pPr>` + `<w:r><w:t>${text}</w:t></w:r></w:p>`;
 }
 
 function styled(text: string, style: string): string {
@@ -147,9 +132,7 @@ function styled(text: string, style: string): string {
 
 function open(body: string): Doc {
   const document =
-    `<w:document ${W}><w:body>${body}` +
-    '<w:sectPr><w:pgSz w:w="6000" w:h="8000"/><w:pgMar w:top="200" w:right="200" w:bottom="200" w:left="200"/></w:sectPr>' +
-    '</w:body></w:document>';
+    `<w:document ${W}><w:body>${body}` + '<w:sectPr><w:pgSz w:w="6000" w:h="8000"/><w:pgMar w:top="200" w:right="200" w:bottom="200" w:left="200"/></w:sectPr>' + '</w:body></w:document>';
   return importDocx(
     zipSync({
       'word/document.xml': strToU8(document),
@@ -173,7 +156,13 @@ describe('lists in a document', () => {
   it('reads list membership and labels every item', () => {
     const doc = open(LIST);
     expect(doc.paragraphs.map((p) => [p.props.numId, p.props.listLevel])).toEqual([
-      [1, 0], [1, 0], [1, 1], [1, 0], [2, 0], [undefined, undefined], [3, 0],
+      [1, 0],
+      [1, 0],
+      [1, 1],
+      [1, 0],
+      [2, 0],
+      [undefined, undefined],
+      [3, 0],
     ]);
     expect(listLabels(doc).map((l) => l?.text)).toEqual(['1.', '2.', 'a)', '3.', '', undefined, '1.']);
   });
@@ -222,7 +211,11 @@ describe('lists in a document', () => {
   it('keeps an item in its list when it is edited or split', () => {
     const doc = open(LIST);
     const split = splitParagraph(insertText(doc, { para: 1, offset: 3 }, '!').doc, { para: 1, offset: 2 }).doc;
-    expect(listLabels(split).map((l) => l?.text).slice(0, 5)).toEqual(['1.', '2.', '3.', 'a)', '4.']);
+    expect(
+      listLabels(split)
+        .map((l) => l?.text)
+        .slice(0, 5),
+    ).toEqual(['1.', '2.', '3.', 'a)', '4.']);
     const xml = strFromU8(unzipSync(exportDocx(split))['word/document.xml']);
     const numbered = xml.match(/<w:numId w:val="1"\/>/g);
     expect(numbered).toHaveLength(5);
@@ -406,14 +399,17 @@ describe('editing lists', () => {
     const pkg = {
       '[Content_Types].xml': '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>',
       'word/document.xml': w,
-      'word/_rels/document.xml.rels': '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="x/styles" Target="styles.xml"/></Relationships>',
+      'word/_rels/document.xml.rels':
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="x/styles" Target="styles.xml"/></Relationships>',
     };
     const doc = importDocx(zipSync(Object.fromEntries(Object.entries(pkg).map(([k, v]) => [k, strToU8(v)]))));
     const files = parts(toggleList(doc, 0, 0, 'bullet'));
     expect(files['word/numbering.xml']).toContain('<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>');
     expect(files['[Content_Types].xml']).toContain('<Override PartName="/word/numbering.xml"');
     expect(files['[Content_Types].xml'].endsWith('</Types>')).toBe(true);
-    expect(files['word/_rels/document.xml.rels']).toContain('<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>');
+    expect(files['word/_rels/document.xml.rels']).toContain(
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>',
+    );
     // Untouched, the package is written back as it was.
     expect(parts(doc)).toEqual(pkg);
   });
@@ -430,5 +426,18 @@ describe('editing lists', () => {
 
     const deeper = parts(shiftListLevel(open(LIST), 1, 1, 1))['word/document.xml'];
     expect(deeper).toContain('<w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr><w:ind w:left="1440"/></w:pPr><w:r><w:t xml:space="preserve">two</w:t>');
+  });
+
+  it('makes a line with a bullet of Symbol as tall as Word does, though it draws it in the font of the text', () => {
+    const bullet = (font: string) => {
+      const numbering = numberingOf([level({ format: 'bullet', text: '\uf0b7', run: { fontFamily: font } })]);
+      const doc = { ...createDoc([{ props: { numId: 1, listLevel: 0, lineHeight: 1, spacingAfter: 0 }, runs: [{ text: 'item', props: { fontSize: 10 } }] }]), numbering };
+      return layoutDocument(doc, measurer).lines[0];
+    };
+    // Symbol reaches 1.005 of its size above the baseline, with no line gap: 10.05 at 10 over the 2 of the text below it,
+    // where the text alone is 10. (With Arial, 12.17, which Word's lines of 12.24 and 12.0 come to.)
+    expect(bullet('Symbol').height).toBeCloseTo(12.05, 2);
+    expect(bullet('Symbol').fragments.some((f) => f.text === '•')).toBe(false);
+    expect(bullet('Arial').height).toBeCloseTo(10);
   });
 });

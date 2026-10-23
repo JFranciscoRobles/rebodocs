@@ -26,6 +26,7 @@ import {
   type ResolvedRunProps,
   type Run,
   type RunProps,
+  type NoteNumbering,
   type Section,
   type SectionStart,
   DEFAULT_BORDER,
@@ -41,7 +42,7 @@ import { imageExtension, mediaKey } from '../images';
 import { noteKey, noteMark, pruneNotes } from '../notes';
 import { isFieldMark } from '../toc';
 import { isColumnBreak } from '../layout';
-import { footnoteReferenceId, footnoteReferences, isFootnoteMark } from '../footnotes';
+import { type NoteKind, endnoteReferenceId, footnoteReferenceId, isEndnoteMark, isFootnoteMark, noteReferences } from '../footnotes';
 import { textBoxId, textBoxOf } from '../textboxes';
 import { CUSTOM_PROPERTIES_PATH, HIGHLIGHTS, NOTE_COLORS_PROPERTY, mergeTabs, parseRunProps, resolveStyle, val } from './import';
 import { type DocxSource, type EmbeddedFont, type SourceSlot, type StorySource, relationships } from './source';
@@ -111,10 +112,7 @@ function levelXml(level: ListLevel, index: number): string {
   const first = level.indentFirstLine ?? 0;
   const firstLine = first < 0 ? ` w:hanging="${twips(-first)}"` : ` w:firstLine="${twips(first)}"`;
   const font = level.run.fontFamily === undefined ? '' : escapeXml(level.run.fontFamily);
-  const rPr =
-    (font ? `<w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}" w:hint="default"/>` : '') +
-    (level.run.bold ? '<w:b/>' : '') +
-    (level.run.italic ? '<w:i/>' : '');
+  const rPr = (font ? `<w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}" w:hint="default"/>` : '') + (level.run.bold ? '<w:b/>' : '') + (level.run.italic ? '<w:i/>' : '');
   return (
     `<w:lvl w:ilvl="${index}">` +
     `<w:start w:val="${level.start}"/>` +
@@ -147,11 +145,7 @@ function numberingXml(numbering: Numbering, known?: Numbering): { abstracts: str
       const start = list.starts.get(i);
       const level = list.levels.get(i);
       if (start === undefined && !level) continue;
-      overrides +=
-        `<w:lvlOverride w:ilvl="${i}">` +
-        (start === undefined ? '' : `<w:startOverride w:val="${start}"/>`) +
-        (level ? levelXml(level, i) : '') +
-        '</w:lvlOverride>';
+      overrides += `<w:lvlOverride w:ilvl="${i}">` + (start === undefined ? '' : `<w:startOverride w:val="${start}"/>`) + (level ? levelXml(level, i) : '') + '</w:lvlOverride>';
     }
     lists += `<w:num w:numId="${id}"><w:abstractNumId w:val="${list.abstractId}"/>${overrides}</w:num>`;
   }
@@ -301,7 +295,14 @@ function writeFonts(files: Record<string, Uint8Array>, mainPath: string, fonts: 
   const dir = mainPath.slice(0, slash);
   const tablePath = `${dir}fontTable.xml`;
   if (!files[tablePath]) {
-    addPart(files, mainPath, 'fontTable.xml', `${R_NS}/fontTable`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml', `${XML_HEADER}<w:fonts xmlns:w="${W_NS}" xmlns:r="${R_NS}"/>`);
+    addPart(
+      files,
+      mainPath,
+      'fontTable.xml',
+      `${R_NS}/fontTable`,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml',
+      `${XML_HEADER}<w:fonts xmlns:w="${W_NS}" xmlns:r="${R_NS}"/>`,
+    );
   }
   const table = parseElement(strFromU8(files[tablePath]));
   if (!table) return;
@@ -348,7 +349,14 @@ function writeFonts(files: Record<string, Uint8Array>, mainPath: string, fonts: 
   const settingsPath = `${dir}settings.xml`;
   const say = ['w:embedTrueTypeFonts', ...(cut ? ['w:saveSubsetFonts'] : [])];
   if (!files[settingsPath]) {
-    addPart(files, mainPath, 'settings.xml', `${R_NS}/settings`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml', `${XML_HEADER}<w:settings xmlns:w="${W_NS}">${say.map((name) => `<${name}/>`).join('')}</w:settings>`);
+    addPart(
+      files,
+      mainPath,
+      'settings.xml',
+      `${R_NS}/settings`,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml',
+      `${XML_HEADER}<w:settings xmlns:w="${W_NS}">${say.map((name) => `<${name}/>`).join('')}</w:settings>`,
+    );
   } else {
     const settings = parseElement(strFromU8(files[settingsPath]));
     const missing = say.filter((name) => settings && !child(settings, name));
@@ -367,7 +375,14 @@ function writeTracking(doc: Doc, files: Record<string, Uint8Array>, mainPath: st
   const settingsPath = `${dir}settings.xml`;
   if (!files[settingsPath]) {
     if (!on) return;
-    addPart(files, mainPath, 'settings.xml', `${R_NS}/settings`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml', `${XML_HEADER}<w:settings xmlns:w="${W_NS}"><w:trackRevisions/></w:settings>`);
+    addPart(
+      files,
+      mainPath,
+      'settings.xml',
+      `${R_NS}/settings`,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml',
+      `${XML_HEADER}<w:settings xmlns:w="${W_NS}"><w:trackRevisions/></w:settings>`,
+    );
     return;
   }
   const settings = parseElement(strFromU8(files[settingsPath]));
@@ -377,14 +392,137 @@ function writeTracking(doc: Doc, files: Record<string, Uint8Array>, mainPath: st
   files[settingsPath] = strToU8(XML_HEADER + serializeXml(settings));
 }
 
-/** The first children of the settings, in the order they go in, up to the one that says fonts are embedded. */
+/** Says in the settings where the notes at the end go, when that is not what the file said: at the end of each section, or of the document. */
+function writeEndnotePlacement(doc: Doc, files: Record<string, Uint8Array>, mainPath: string): void {
+  const dir = mainPath.slice(0, mainPath.lastIndexOf('/') + 1);
+  const settingsPath = `${dir}settings.xml`;
+  const pos = '<w:endnotePr><w:pos w:val="sectEnd"/></w:endnotePr>';
+  const want = doc.endnotesAt === 'sections';
+  if (!files[settingsPath]) {
+    if (want)
+      addPart(
+        files,
+        mainPath,
+        'settings.xml',
+        `${R_NS}/settings`,
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml',
+        `${XML_HEADER}<w:settings xmlns:w="${W_NS}">${pos}</w:settings>`,
+      );
+    return;
+  }
+  const settings = parseElement(strFromU8(files[settingsPath]));
+  if (!settings) return;
+  const props = child(settings, 'w:endnotePr');
+  const said = val(child(props, 'w:pos')) === 'sectEnd';
+  if (said === want) return;
+  if (props) {
+    // Its numbering stays as it was; only where they go changes. The position comes first in it.
+    props.children = props.children.filter((c) => c.name !== 'w:pos');
+    if (want) props.children.unshift(createNode('w:pos', { 'w:val': 'sectEnd' }));
+  } else insertOrdered(settings, SETTINGS_ORDER, parseElement(pos)!);
+  files[settingsPath] = strToU8(XML_HEADER + serializeXml(settings));
+}
+
+/** The children of the settings, in the order the schema gives them. */
 const SETTINGS_ORDER = [
-  'w:writeProtection', 'w:view', 'w:zoom', 'w:removePersonalInformation', 'w:removeDateAndTime', 'w:doNotDisplayPageBoundaries',
-  'w:displayBackgroundShape', 'w:printPostScriptOverText', 'w:printFractionalCharacterWidth', 'w:printFormsData', 'w:embedTrueTypeFonts',
-  'w:embedSystemFonts', 'w:saveSubsetFonts', 'w:saveFormsData', 'w:mirrorMargins', 'w:alignBordersAndEdges', 'w:bordersDoNotSurroundHeader',
-  'w:bordersDoNotSurroundFooter', 'w:gutterAtTop', 'w:hideSpellingErrors', 'w:hideGrammaticalErrors', 'w:activeWritingStyle', 'w:proofState',
-  'w:formsDesign', 'w:attachedTemplate', 'w:linkStyles', 'w:stylePaneFormatFilter', 'w:stylePaneSortMethod', 'w:documentType', 'w:mailMerge',
-  'w:revisionView', 'w:trackRevisions',
+  'w:writeProtection',
+  'w:view',
+  'w:zoom',
+  'w:removePersonalInformation',
+  'w:removeDateAndTime',
+  'w:doNotDisplayPageBoundaries',
+  'w:displayBackgroundShape',
+  'w:printPostScriptOverText',
+  'w:printFractionalCharacterWidth',
+  'w:printFormsData',
+  'w:embedTrueTypeFonts',
+  'w:embedSystemFonts',
+  'w:saveSubsetFonts',
+  'w:saveFormsData',
+  'w:mirrorMargins',
+  'w:alignBordersAndEdges',
+  'w:bordersDoNotSurroundHeader',
+  'w:bordersDoNotSurroundFooter',
+  'w:gutterAtTop',
+  'w:hideSpellingErrors',
+  'w:hideGrammaticalErrors',
+  'w:activeWritingStyle',
+  'w:proofState',
+  'w:formsDesign',
+  'w:attachedTemplate',
+  'w:linkStyles',
+  'w:stylePaneFormatFilter',
+  'w:stylePaneSortMethod',
+  'w:documentType',
+  'w:mailMerge',
+  'w:revisionView',
+  'w:trackRevisions',
+  'w:doNotTrackMoves',
+  'w:doNotTrackFormatting',
+  'w:documentProtection',
+  'w:autoFormatOverride',
+  'w:styleLockTheme',
+  'w:styleLockQFSet',
+  'w:defaultTabStop',
+  'w:autoHyphenation',
+  'w:consecutiveHyphenLimit',
+  'w:hyphenationZone',
+  'w:doNotHyphenateCaps',
+  'w:showEnvelope',
+  'w:summaryLength',
+  'w:clickAndTypeStyle',
+  'w:defaultTableStyle',
+  'w:evenAndOddHeaders',
+  'w:bookFoldRevPrinting',
+  'w:bookFoldPrinting',
+  'w:bookFoldPrintingSheets',
+  'w:drawingGridHorizontalSpacing',
+  'w:drawingGridVerticalSpacing',
+  'w:displayHorizontalDrawingGridEvery',
+  'w:displayVerticalDrawingGridEvery',
+  'w:doNotUseMarginsForDrawingGridOrigin',
+  'w:drawingGridHorizontalOrigin',
+  'w:drawingGridVerticalOrigin',
+  'w:doNotShadeFormData',
+  'w:noPunctuationKerning',
+  'w:characterSpacingControl',
+  'w:printTwoOnOne',
+  'w:strictFirstAndLastChars',
+  'w:noLineBreaksAfter',
+  'w:noLineBreaksBefore',
+  'w:savePreviewPicture',
+  'w:doNotValidateAgainstSchema',
+  'w:saveInvalidXml',
+  'w:ignoreMixedContent',
+  'w:alwaysShowPlaceholderText',
+  'w:doNotDemarcateInvalidXml',
+  'w:saveXmlDataOnly',
+  'w:useXSLTWhenSaving',
+  'w:saveThroughXslt',
+  'w:showXMLTags',
+  'w:alwaysMergeEmptyNamespace',
+  'w:updateFields',
+  'w:hdrShapeDefaults',
+  'w:footnotePr',
+  'w:endnotePr',
+  'w:compat',
+  'w:docVars',
+  'w:rsids',
+  'm:mathPr',
+  'w:attachedSchema',
+  'w:themeFontLang',
+  'w:clrSchemeMapping',
+  'w:doNotIncludeSubdocsInStats',
+  'w:doNotAutoCompressPictures',
+  'w:forceUpgrade',
+  'w:captions',
+  'w:readModeInkLockDown',
+  'w:smartTagType',
+  'sl:schemaLibrary',
+  'w:shapeDefaults',
+  'w:doNotEmbedSmartTags',
+  'w:decimalSymbol',
+  'w:listSeparator',
 ];
 
 /** A note as a comment of the comments part. */
@@ -462,7 +600,9 @@ function writeNoteColors(notes: Note[], files: Record<string, Uint8Array>): void
   if (had !== undefined) return;
   // A new part: the package says what it is and where it hangs from.
   const types = strFromU8(files['[Content_Types].xml']);
-  files['[Content_Types].xml'] = strToU8(appendToRoot(types, 'Types', `<Override PartName="/${CUSTOM_PROPERTIES_PATH}" ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml"/>`));
+  files['[Content_Types].xml'] = strToU8(
+    appendToRoot(types, 'Types', `<Override PartName="/${CUSTOM_PROPERTIES_PATH}" ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml"/>`),
+  );
   const rels = files['_rels/.rels'] ? strFromU8(files['_rels/.rels']) : `${XML_HEADER}<Relationships xmlns="${RELS_NS}"/>`;
   let n = 1;
   while (rels.includes(`"rId${n}"`)) n++;
@@ -533,7 +673,10 @@ function writeStyles(doc: Doc, files: Record<string, Uint8Array>, mainPath: stri
   // A package without styles gets the default one too, for the others to build on.
   const normal = existing ? source?.sheet.defaultParagraphStyle : styles[0].id;
   if (!existing) used.add(styles[0].id);
-  const added = styles.filter((style) => used.has(style.id)).map((style) => styleXml(style, normal)).join('');
+  const added = styles
+    .filter((style) => used.has(style.id))
+    .map((style) => styleXml(style, normal))
+    .join('');
   if (!added) return;
   if (existing) files[path] = strToU8(appendToRoot(strFromU8(existing), 'w:styles', added));
   else addPart(files, mainPath, 'styles.xml', STYLES_REL, STYLES_TYPE, `${XML_HEADER}<w:styles xmlns:w="${W_NS}">${added}</w:styles>`);
@@ -549,7 +692,14 @@ function writeLanguage(files: Record<string, Uint8Array>, mainPath: string, lang
   const path = `${mainPath.slice(0, mainPath.lastIndexOf('/') + 1)}styles.xml`;
   const lang = `<w:lang w:val="${escapeXml(language)}"/>`;
   if (!files[path]) {
-    addPart(files, mainPath, 'styles.xml', STYLES_REL, STYLES_TYPE, `${XML_HEADER}<w:styles xmlns:w="${W_NS}"><w:docDefaults><w:rPrDefault><w:rPr>${lang}</w:rPr></w:rPrDefault></w:docDefaults></w:styles>`);
+    addPart(
+      files,
+      mainPath,
+      'styles.xml',
+      STYLES_REL,
+      STYLES_TYPE,
+      `${XML_HEADER}<w:styles xmlns:w="${W_NS}"><w:docDefaults><w:rPrDefault><w:rPr>${lang}</w:rPr></w:rPrDefault></w:docDefaults></w:styles>`,
+    );
     return;
   }
   const styles = parseElement(strFromU8(files[path]));
@@ -727,37 +877,37 @@ function writeStories(doc: Doc, files: Record<string, Uint8Array>, mainPath: str
   return refs;
 }
 
-const FOOTNOTES_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml';
-const FOOTNOTES_REL = `${R_NS}/footnotes`;
 /** The line above the notes of a page, and the one above the rest of a note that goes on from the page before, as Word writes them. */
-const SEPARATORS =
-  '<w:footnote w:type="separator" w:id="-1"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:separator/></w:r></w:p></w:footnote>' +
-  '<w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>';
+const separators = (tag: string) =>
+  `<w:${tag} w:type="separator" w:id="-1"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:separator/></w:r></w:p></w:${tag}>` +
+  `<w:${tag} w:type="continuationSeparator" w:id="0"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:continuationSeparator/></w:r></w:p></w:${tag}>`;
 
 /**
- * Writes the notes at the foot of the pages into their part: those of the
- * file as they were when untouched, those that changed written again in their
- * place, the new ones after them. A note no reference names any more goes.
+ * Writes the notes of a kind into their part, footnotes.xml or endnotes.xml:
+ * those of the file as they were when untouched, those that changed written
+ * again in their place, the new ones after them. A note no reference names
+ * any more goes.
  */
-function writeFootnotes(doc: Doc, files: Record<string, Uint8Array>, mainPath: string, source: DocxSource | undefined): void {
-  const named = new Set(footnoteReferences(doc).map((ref) => ref.id));
-  const notes = (doc.footnotes ?? []).filter((note) => named.has(note.id));
-  const sources = source?.footnoteSources;
-  const path = source?.footnotesPath;
+function writeReferencedNotes(doc: Doc, files: Record<string, Uint8Array>, mainPath: string, source: DocxSource | undefined, kind: NoteKind): void {
+  const tag = kind;
+  const named = new Set(noteReferences(doc, kind).map((ref) => ref.id));
+  const notes = ((kind === 'footnote' ? doc.footnotes : doc.endnotes) ?? []).filter((note) => named.has(note.id));
+  const sources = kind === 'footnote' ? source?.footnoteSources : source?.endnoteSources;
+  const path = kind === 'footnote' ? source?.footnotesPath : source?.endnotesPath;
   const finish = (at: string, xml: string) => writeLinks(files, at, writeMedia(doc, files, at, xml));
-  const fresh = (note: Footnote) => `<w:footnote w:id="${escapeXml(note.id)}">${blocksXml(storyView(doc, note)) || '<w:p/>'}</w:footnote>`;
+  const fresh = (note: Footnote) => `<w:${tag} w:id="${escapeXml(note.id)}">${blocksXml(storyView(doc, note)) || '<w:p/>'}</w:${tag}>`;
   if (path && sources && files[path]) {
     const all = [...sources.values()];
     const same = all.length === notes.length && notes.every((note) => sources.get(note.id)?.story === note);
     if (same) return;
     const xml = all[0]?.xml ?? strFromU8(files[path]);
-    const root = child(parseXml(xml), 'w:footnotes');
+    const root = child(parseXml(xml), `w:${tag}s`);
     if (!root) return;
     const byId = new Map(notes.map((note) => [note.id, note]));
     let inner = '';
     let cursor = root.openEnd;
     for (const node of root.children) {
-      if (node.name !== 'w:footnote') continue;
+      if (node.name !== `w:${tag}`) continue;
       const id = node.attrs['w:id'] ?? '';
       const from = sources.get(id);
       if (!from) continue;
@@ -778,8 +928,9 @@ function writeFootnotes(doc: Doc, files: Record<string, Uint8Array>, mainPath: s
   }
   if (!notes.length) return;
   const dir = mainPath.slice(0, mainPath.lastIndexOf('/') + 1);
-  const xml = `${XML_HEADER}<w:footnotes xmlns:w="${W_NS}" xmlns:r="${R_NS}">${SEPARATORS}${notes.map(fresh).join('')}</w:footnotes>`;
-  addPart(files, mainPath, 'footnotes.xml', FOOTNOTES_REL, FOOTNOTES_TYPE, finish(`${dir}footnotes.xml`, xml));
+  const xml = `${XML_HEADER}<w:${tag}s xmlns:w="${W_NS}" xmlns:r="${R_NS}">${separators(tag)}${notes.map(fresh).join('')}</w:${tag}s>`;
+  const type = `application/vnd.openxmlformats-officedocument.wordprocessingml.${tag}s+xml`;
+  addPart(files, mainPath, `${tag}s.xml`, `${R_NS}/${tag}s`, type, finish(`${dir}${tag}s.xml`, xml));
 }
 
 function textXml(text: string, deleted = false): string {
@@ -902,6 +1053,8 @@ function runPropsXml(props: RunProps): string {
     (p.italic ? '<w:i/>' : '') +
     (p.strike ? '<w:strike/>' : '') +
     `<w:color w:val="${escapeXml(p.color)}"/>` +
+    // Kerning when the run says so itself; what a document without styles does, Word does without being told.
+    (props.kern ? `<w:kern w:val="${Math.round(props.kern * 2)}"/>` : '') +
     `<w:sz w:val="${size}"/><w:szCs w:val="${size}"/>` +
     (highlightName(p.highlight) === 'none' ? '' : `<w:highlight w:val="${highlightName(p.highlight)}"/>`) +
     (p.underline ? '<w:u w:val="single"/>' : '') +
@@ -932,6 +1085,8 @@ function runXml(run: Run): string {
       isColumnBreak(run.props.object) ||
       footnoteReferenceId(run.props.object) !== undefined ||
       isFootnoteMark(run.props.object) ||
+      endnoteReferenceId(run.props.object) !== undefined ||
+      isEndnoteMark(run.props.object) ||
       textBoxId(run.props.object) !== undefined;
     return ours ? freshBoxXml(run.props.object).repeat(run.text.length) : '';
   }
@@ -943,11 +1098,7 @@ function runXml(run: Run): string {
   const mark = (type: string) => `<w:r>${rPr}<w:fldChar w:fldCharType="${type}"/></w:r>`;
   const instr = deleted ? 'w:delInstrText' : 'w:instrText';
   return (
-    mark('begin') +
-    `<w:r>${rPr}<${instr} xml:space="preserve"> ${escapeXml(run.props.field)} </${instr}></w:r>` +
-    mark('separate') +
-    `<w:r>${rPr}${textXml(run.text, deleted)}</w:r>` +
-    mark('end')
+    mark('begin') + `<w:r>${rPr}<${instr} xml:space="preserve"> ${escapeXml(run.props.field)} </${instr}></w:r>` + mark('separate') + `<w:r>${rPr}${textXml(run.text, deleted)}</w:r>` + mark('end')
   );
 }
 
@@ -974,10 +1125,7 @@ function tabsXml(leaderTab: number, tabs: TabStop[], style: TabStop[] = []): str
 
 /** The formatting of a paragraph, as the first children of its `w:pPr`. */
 function paragraphFormatXml(p: ResolvedParagraphProps): string {
-  const firstLine =
-    p.indentFirstLine < 0
-      ? ` w:hanging="${twips(-p.indentFirstLine)}"`
-      : ` w:firstLine="${twips(p.indentFirstLine)}"`;
+  const firstLine = p.indentFirstLine < 0 ? ` w:hanging="${twips(-p.indentFirstLine)}"` : ` w:firstLine="${twips(p.indentFirstLine)}"`;
   const jc = p.align === 'justify' ? 'both' : p.align;
   return (
     (p.styleId ? `<w:pStyle w:val="${escapeXml(p.styleId)}"/>` : '') +
@@ -1032,14 +1180,24 @@ function wrappedRunsXml(runs: Run[]): string {
 
 // --- Tables written from the model ---------------------------------------------
 
-const TCPR_ORDER = [
-  'w:cnfStyle', 'w:tcW', 'w:gridSpan', 'w:hMerge', 'w:vMerge', 'w:tcBorders', 'w:shd', 'w:noWrap', 'w:tcMar',
-  'w:textDirection', 'w:tcFitText', 'w:vAlign', 'w:hideMark',
-];
+const TCPR_ORDER = ['w:cnfStyle', 'w:tcW', 'w:gridSpan', 'w:hMerge', 'w:vMerge', 'w:tcBorders', 'w:shd', 'w:noWrap', 'w:tcMar', 'w:textDirection', 'w:tcFitText', 'w:vAlign', 'w:hideMark'];
 
 const TBLPR_ORDER = [
-  'w:tblStyle', 'w:tblpPr', 'w:tblOverlap', 'w:bidiVisual', 'w:tblStyleRowBandSize', 'w:tblStyleColBandSize', 'w:tblW',
-  'w:jc', 'w:tblCellSpacing', 'w:tblInd', 'w:tblBorders', 'w:shd', 'w:tblLayout', 'w:tblCellMar', 'w:tblLook',
+  'w:tblStyle',
+  'w:tblpPr',
+  'w:tblOverlap',
+  'w:bidiVisual',
+  'w:tblStyleRowBandSize',
+  'w:tblStyleColBandSize',
+  'w:tblW',
+  'w:jc',
+  'w:tblCellSpacing',
+  'w:tblInd',
+  'w:tblBorders',
+  'w:shd',
+  'w:tblLayout',
+  'w:tblCellMar',
+  'w:tblLook',
 ];
 
 const cellKey = (table: number, row: number, cell: number) => `${table}:${row}:${cell}`;
@@ -1097,7 +1255,23 @@ function patchRow(trPr: XmlNode, row: TableRow): void {
   if (row.header) insertOrdered(trPr, TRPR_ORDER, createNode('w:tblHeader'));
 }
 
-const TRPR_ORDER = ['w:cnfStyle', 'w:divId', 'w:gridBefore', 'w:gridAfter', 'w:wBefore', 'w:wAfter', 'w:cantSplit', 'w:trHeight', 'w:tblHeader', 'w:tblCellSpacing', 'w:jc', 'w:hidden', 'w:ins', 'w:del', 'w:trPrChange'];
+const TRPR_ORDER = [
+  'w:cnfStyle',
+  'w:divId',
+  'w:gridBefore',
+  'w:gridAfter',
+  'w:wBefore',
+  'w:wAfter',
+  'w:cantSplit',
+  'w:trHeight',
+  'w:tblHeader',
+  'w:tblCellSpacing',
+  'w:jc',
+  'w:hidden',
+  'w:ins',
+  'w:del',
+  'w:trPrChange',
+];
 
 /**
  * A table written from the model. When it was read from a file (`from`), the
@@ -1105,12 +1279,7 @@ const TRPR_ORDER = ['w:cnfStyle', 'w:divId', 'w:gridBefore', 'w:gridAfter', 'w:w
  * taken from there, so what the model does not interpret survives; rows and
  * cells added since take theirs from the nearest one that has them.
  */
-function tableXml(
-  doc: Doc,
-  tableIndex: number,
-  cellContent: (row: TableRow, cell: TableCell) => string,
-  from?: { xml: string; node: XmlNode; original?: Table },
-): string {
+function tableXml(doc: Doc, tableIndex: number, cellContent: (row: TableRow, cell: TableCell) => string, from?: { xml: string; node: XmlNode; original?: Table }): string {
   const table = doc.tables![tableIndex];
   const slice = (node: XmlNode) => from!.xml.slice(node.start, node.end);
   const rowNodes = from ? childrenOf(from.node, 'w:tr') : [];
@@ -1152,7 +1321,10 @@ function tableXml(
     const wasRow = from?.original?.rows.find((r) => r.id === row.id);
     const rowKey = (r: TableRow) => `${r.height}:${!!r.exact}:${!!r.cantSplit}:${!!r.header}:${JSON.stringify(r.revision ?? null)}`;
     if (model) {
-      out += model.children.filter((c) => c.name === 'w:tblPrEx').map(slice).join('');
+      out += model.children
+        .filter((c) => c.name === 'w:tblPrEx')
+        .map(slice)
+        .join('');
       const kept = child(model, 'w:trPr');
       // The row's properties as the file had them, unless the ones the model has changed.
       if (own && wasRow && rowKey(wasRow) === rowKey(row)) out += kept ? slice(kept) : '';
@@ -1210,9 +1382,28 @@ function tableXml(
 
 // Child order the schema requires inside w:sectPr.
 const SECTPR_ORDER = [
-  'w:headerReference', 'w:footerReference', 'w:footnotePr', 'w:endnotePr', 'w:type', 'w:pgSz', 'w:pgMar', 'w:paperSrc',
-  'w:pgBorders', 'w:lnNumType', 'w:pgNumType', 'w:cols', 'w:formProt', 'w:vAlign', 'w:noEndnote', 'w:titlePg',
-  'w:textDirection', 'w:bidi', 'w:rtlGutter', 'w:docGrid', 'w:printerSettings', 'w:sectPrChange',
+  'w:headerReference',
+  'w:footerReference',
+  'w:footnotePr',
+  'w:endnotePr',
+  'w:type',
+  'w:pgSz',
+  'w:pgMar',
+  'w:paperSrc',
+  'w:pgBorders',
+  'w:lnNumType',
+  'w:pgNumType',
+  'w:cols',
+  'w:formProt',
+  'w:vAlign',
+  'w:noEndnote',
+  'w:titlePg',
+  'w:textDirection',
+  'w:bidi',
+  'w:rtlGutter',
+  'w:docGrid',
+  'w:printerSettings',
+  'w:sectPrChange',
 ];
 
 /**
@@ -1226,7 +1417,7 @@ function pageSectPr(
   refs: StoryRefs = {},
   declare = false,
   ownFirst?: boolean,
-  layout?: { columns?: Columns; start?: SectionStart },
+  layout?: { columns?: Columns; start?: SectionStart; noEndnotes?: boolean; endnoteNumbering?: NoteNumbering; footnoteNumbering?: NoteNumbering },
 ): string {
   const sectPr = (original ? parseElement(original) : undefined) ?? createNode('w:sectPr');
   if (layout) {
@@ -1234,6 +1425,10 @@ function pageSectPr(
     sectPr.children = sectPr.children.filter((c) => c.name !== 'w:type' && c.name !== 'w:cols');
     if (layout.start && layout.start !== 'nextPage') insertOrdered(sectPr, SECTPR_ORDER, createNode('w:type', { 'w:val': layout.start }));
     insertOrdered(sectPr, SECTPR_ORDER, parseElement(colsXml(layout.columns))!);
+    sectPr.children = sectPr.children.filter((c) => c.name !== 'w:noEndnote');
+    if (layout.noEndnotes) insertOrdered(sectPr, SECTPR_ORDER, createNode('w:noEndnote'));
+    writeNoteNumbering(sectPr, 'w:footnotePr', layout.footnoteNumbering);
+    writeNoteNumbering(sectPr, 'w:endnotePr', layout.endnoteNumbering);
   }
   // Whether the first page has a header and a footer of its own is said by the section, parts or no parts.
   if (ownFirst !== undefined) {
@@ -1273,6 +1468,19 @@ function pageSectPr(
   return serializeXml(sectPr);
 }
 
+/** The numbering of a section's notes in its `w:footnotePr` or `w:endnotePr`, in place of what it said of it; whatever else it says stays. */
+function writeNoteNumbering(sectPr: XmlNode, name: 'w:footnotePr' | 'w:endnotePr', numbering: NoteNumbering | undefined): void {
+  let props = child(sectPr, name);
+  if (!props && !numbering) return;
+  if (!props) insertOrdered(sectPr, SECTPR_ORDER, (props = createNode(name)));
+  const order = ['w:pos', 'w:numFmt', 'w:numStart', 'w:numRestart', 'w:footnote', 'w:endnote'];
+  props.children = props.children.filter((c) => !['w:numFmt', 'w:numStart', 'w:numRestart'].includes(c.name));
+  if (numbering?.format) insertOrdered(props, order, createNode('w:numFmt', { 'w:val': numbering.format }));
+  if (numbering?.start) insertOrdered(props, order, createNode('w:numStart', { 'w:val': String(numbering.start) }));
+  if (numbering?.restart) insertOrdered(props, order, createNode('w:numRestart', { 'w:val': numbering.restart === 'page' ? 'eachPage' : 'eachSect' }));
+  if (!props.children.some((c) => c.name !== '#text')) sectPr.children = sectPr.children.filter((c) => c !== props);
+}
+
 function newDocumentXml(doc: Doc, refs: StoryRefs = {}, lastSection: (sectPr: string) => string = (x) => x): string {
   const pg = doc.page;
   const blocks = blocksXml(doc);
@@ -1280,7 +1488,14 @@ function newDocumentXml(doc: Doc, refs: StoryRefs = {}, lastSection: (sectPr: st
     XML_HEADER +
     `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}"><w:body>` +
     blocks +
-    lastSection(pageSectPr(pg, undefined, refs, false, doc.firstPage ? true : undefined, { columns: doc.columns, start: doc.sectionStart })) +
+    lastSection(
+      pageSectPr(pg, undefined, refs, false, doc.firstPage ? true : undefined, {
+        columns: doc.columns,
+        start: doc.sectionStart,
+        endnoteNumbering: doc.endnoteNumbering,
+        footnoteNumbering: doc.footnoteNumbering,
+      }),
+    ) +
     '</w:body></w:document>'
   );
 }
@@ -1296,7 +1511,16 @@ function colsXml(columns: Columns | undefined): string {
 
 /** The properties of a section that is not the last: what it had in the file, with what the model says of its page, its columns and its start. */
 function sectionXml(section: Section): string {
-  return sectionProps?.get(section) ?? pageSectPr(section.page, section.xml, {}, false, undefined, { columns: section.columns, start: section.start });
+  return (
+    sectionProps?.get(section) ??
+    pageSectPr(section.page, section.xml, {}, false, undefined, {
+      columns: section.columns,
+      start: section.start,
+      noEndnotes: section.noEndnotes,
+      endnoteNumbering: section.endnoteNumbering,
+      footnoteNumbering: section.footnoteNumbering,
+    })
+  );
 }
 
 /**
@@ -1337,10 +1561,12 @@ function writeSections(doc: Doc, files: Record<string, Uint8Array>, mainPath: st
   if (!ends.length) return undefined;
   if (source) {
     const read = source.slots.filter((slot) => slot.paragraph.section && !slot.paragraph.cell).length;
-    const same = read === ends.length && ends.every((i) => {
-      const p = doc.paragraphs[i];
-      return p.origin !== undefined && source.slots[p.origin]?.paragraph.section === p.section;
-    });
+    const same =
+      read === ends.length &&
+      ends.every((i) => {
+        const p = doc.paragraphs[i];
+        return p.origin !== undefined && source.slots[p.origin]?.paragraph.section === p.section;
+      });
     if (same) return undefined;
   }
   const dir = mainPath.slice(0, mainPath.lastIndexOf('/') + 1);
@@ -1422,7 +1648,13 @@ function writeSections(doc: Doc, files: Record<string, Uint8Array>, mainPath: st
   sectionProps = new Map();
   for (const i of ends) {
     const section = doc.paragraphs[i].section!;
-    const base = pageSectPr(section.page, section.xml, {}, false, undefined, { columns: section.columns, start: section.start });
+    const base = pageSectPr(section.page, section.xml, {}, false, undefined, {
+      columns: section.columns,
+      start: section.start,
+      noEndnotes: section.noEndnotes,
+      endnoteNumbering: section.endnoteNumbering,
+      footnoteNumbering: section.footnoteNumbering,
+    });
     sectionProps.set(section, withRefs(base, namesOf(section, false), !!section.firstPage, declare));
   }
   const last = namesOf(doc, true);
@@ -1441,19 +1673,84 @@ function sameSection(a: Section, b: Section): boolean {
 
 // Child order the schema requires inside w:pPr and w:rPr.
 const PPR_ORDER = [
-  'w:pStyle', 'w:keepNext', 'w:keepLines', 'w:pageBreakBefore', 'w:framePr', 'w:widowControl', 'w:numPr',
-  'w:suppressLineNumbers', 'w:pBdr', 'w:shd', 'w:tabs', 'w:suppressAutoHyphens', 'w:kinsoku', 'w:wordWrap',
-  'w:overflowPunct', 'w:topLinePunct', 'w:autoSpaceDE', 'w:autoSpaceDN', 'w:bidi', 'w:adjustRightInd',
-  'w:snapToGrid', 'w:spacing', 'w:ind', 'w:contextualSpacing', 'w:mirrorIndents', 'w:suppressOverlap', 'w:jc',
-  'w:textDirection', 'w:textAlignment', 'w:textboxTightWrap', 'w:outlineLvl', 'w:divId', 'w:cnfStyle', 'w:rPr',
-  'w:sectPr', 'w:pPrChange',
+  'w:pStyle',
+  'w:keepNext',
+  'w:keepLines',
+  'w:pageBreakBefore',
+  'w:framePr',
+  'w:widowControl',
+  'w:numPr',
+  'w:suppressLineNumbers',
+  'w:pBdr',
+  'w:shd',
+  'w:tabs',
+  'w:suppressAutoHyphens',
+  'w:kinsoku',
+  'w:wordWrap',
+  'w:overflowPunct',
+  'w:topLinePunct',
+  'w:autoSpaceDE',
+  'w:autoSpaceDN',
+  'w:bidi',
+  'w:adjustRightInd',
+  'w:snapToGrid',
+  'w:spacing',
+  'w:ind',
+  'w:contextualSpacing',
+  'w:mirrorIndents',
+  'w:suppressOverlap',
+  'w:jc',
+  'w:textDirection',
+  'w:textAlignment',
+  'w:textboxTightWrap',
+  'w:outlineLvl',
+  'w:divId',
+  'w:cnfStyle',
+  'w:rPr',
+  'w:sectPr',
+  'w:pPrChange',
 ];
 const RPR_ORDER = [
-  'w:rStyle', 'w:rFonts', 'w:b', 'w:bCs', 'w:i', 'w:iCs', 'w:caps', 'w:smallCaps', 'w:strike', 'w:dstrike',
-  'w:outline', 'w:shadow', 'w:emboss', 'w:imprint', 'w:noProof', 'w:snapToGrid', 'w:vanish', 'w:webHidden',
-  'w:color', 'w:spacing', 'w:w', 'w:kern', 'w:position', 'w:sz', 'w:szCs', 'w:highlight', 'w:u', 'w:effect',
-  'w:bdr', 'w:shd', 'w:fitText', 'w:vertAlign', 'w:rtl', 'w:cs', 'w:em', 'w:lang', 'w:eastAsianLayout',
-  'w:specVanish', 'w:oMath', 'w:rPrChange',
+  'w:rStyle',
+  'w:rFonts',
+  'w:b',
+  'w:bCs',
+  'w:i',
+  'w:iCs',
+  'w:caps',
+  'w:smallCaps',
+  'w:strike',
+  'w:dstrike',
+  'w:outline',
+  'w:shadow',
+  'w:emboss',
+  'w:imprint',
+  'w:noProof',
+  'w:snapToGrid',
+  'w:vanish',
+  'w:webHidden',
+  'w:color',
+  'w:spacing',
+  'w:w',
+  'w:kern',
+  'w:position',
+  'w:sz',
+  'w:szCs',
+  'w:highlight',
+  'w:u',
+  'w:effect',
+  'w:bdr',
+  'w:shd',
+  'w:fitText',
+  'w:vertAlign',
+  'w:rtl',
+  'w:cs',
+  'w:em',
+  'w:lang',
+  'w:eastAsianLayout',
+  'w:specVanish',
+  'w:oMath',
+  'w:rPrChange',
 ];
 // Tracked-change marks that are valid on a paragraph mark but not on a run.
 const MARK_ONLY = new Set(['w:ins', 'w:del', 'w:moveFrom', 'w:moveTo']);
@@ -1470,13 +1767,7 @@ function insertOrdered(parent: XmlNode, order: string[], node: XmlNode): void {
 }
 
 /** Sets attributes on a child element, creating it at its schema position if missing. */
-function patchChild(
-  parent: XmlNode,
-  order: string[],
-  name: string,
-  set: Record<string, string>,
-  remove: string[] = [],
-): void {
+function patchChild(parent: XmlNode, order: string[], name: string, set: Record<string, string>, remove: string[] = []): void {
   let node = child(parent, name);
   if (!node) {
     node = createNode(name);
@@ -1520,17 +1811,17 @@ function patchedRunProps(source: DocxSource, base: RunProps, props: RunProps, fo
     patchChild(rPr, RPR_ORDER, 'w:sz', { 'w:val': size });
     patchChild(rPr, RPR_ORDER, 'w:szCs', { 'w:val': size });
   }
+  if (now.kern !== before.kern) {
+    if (now.kern) patchChild(rPr, RPR_ORDER, 'w:kern', { 'w:val': String(Math.round(now.kern * 2)) });
+    else rPr.children = rPr.children.filter((c) => c.name !== 'w:kern');
+  }
   if (now.highlight !== before.highlight) patchChild(rPr, RPR_ORDER, 'w:highlight', { 'w:val': highlightName(now.highlight) });
   if (now.color !== before.color) {
     patchChild(rPr, RPR_ORDER, 'w:color', { 'w:val': now.color }, ['w:themeColor', 'w:themeTint', 'w:themeShade']);
   }
   if (now.fontFamily !== before.fontFamily) {
     const font = now.fontFamily;
-    patchChild(rPr, RPR_ORDER, 'w:rFonts', { 'w:ascii': font, 'w:hAnsi': font, 'w:cs': font }, [
-      'w:asciiTheme',
-      'w:hAnsiTheme',
-      'w:cstheme',
-    ]);
+    patchChild(rPr, RPR_ORDER, 'w:rFonts', { 'w:ascii': font, 'w:hAnsi': font, 'w:cs': font }, ['w:asciiTheme', 'w:hAnsiTheme', 'w:cstheme']);
   }
   // The change of formatting as the model has it now: kept, decided, or made here.
   rPr.children = rPr.children.filter((c) => c.name !== 'w:rPrChange');
@@ -1539,12 +1830,7 @@ function patchedRunProps(source: DocxSource, base: RunProps, props: RunProps, fo
   return rPr;
 }
 
-function patchedParagraphProps(
-  source: DocxSource,
-  slot: SourceSlot,
-  para: Paragraph,
-  keepSection: boolean,
-): XmlNode {
+function patchedParagraphProps(source: DocxSource, slot: SourceSlot, para: Paragraph, keepSection: boolean): XmlNode {
   const original = child(slot.node, 'w:pPr');
   const pPr = (original && parseElement(source.xml.slice(original.start, original.end))) ?? createNode('w:pPr');
   const before = resolveParagraph(slot.paragraph.props);
@@ -1598,10 +1884,7 @@ function patchedParagraphProps(
     patchChild(pPr, PPR_ORDER, 'w:ind', set, ['w:end', 'w:rightChars', 'w:endChars']);
   }
   if (changed('indentFirstLine')) {
-    const set: Record<string, string> =
-      now.indentFirstLine < 0
-        ? { 'w:hanging': String(twips(-now.indentFirstLine)) }
-        : { 'w:firstLine': String(twips(now.indentFirstLine)) };
+    const set: Record<string, string> = now.indentFirstLine < 0 ? { 'w:hanging': String(twips(-now.indentFirstLine)) } : { 'w:firstLine': String(twips(now.indentFirstLine)) };
     patchChild(pPr, PPR_ORDER, 'w:ind', set, ['w:firstLine', 'w:hanging', 'w:firstLineChars', 'w:hangingChars']);
   }
   if (changed('align')) {
@@ -1674,13 +1957,7 @@ function runsXml(source: DocxSource, slot: SourceSlot, runs: Run[]): string {
 }
 
 /** Rebuilds an edited paragraph on top of the source paragraph it descends from. */
-function editedParagraphXml(
-  source: DocxSource,
-  slot: SourceSlot,
-  para: Paragraph,
-  first: boolean,
-  last: boolean,
-): string {
+function editedParagraphXml(source: DocxSource, slot: SourceSlot, para: Paragraph, first: boolean, last: boolean): string {
   const { node } = slot;
   let open = node.openEnd === node.end ? '<w:p>' : source.xml.slice(node.start, node.openEnd);
   // Paragraph ids must stay unique, so only the first descendant keeps them.
@@ -1702,14 +1979,18 @@ function sourcedDocumentXml(doc: Doc, source: DocxSource, refs: StoryRefs = {}, 
   const was = source.page;
   // Said again only when it is not what the file says.
   const ownFirst = !!doc.firstPage === !!source.titlePage ? undefined : !!doc.firstPage;
-  const layoutChanged = !sameColumns(doc.columns, source.columns) || (doc.sectionStart ?? 'nextPage') !== (source.sectionStart ?? 'nextPage');
+  const layoutChanged =
+    !sameColumns(doc.columns, source.columns) ||
+    (doc.sectionStart ?? 'nextPage') !== (source.sectionStart ?? 'nextPage') ||
+    JSON.stringify(doc.endnoteNumbering ?? {}) !== JSON.stringify(source.endnoteNumbering ?? {}) ||
+    JSON.stringify(doc.footnoteNumbering ?? {}) !== JSON.stringify(source.footnoteNumbering ?? {});
   const pageChanged =
     !!lastSection ||
     layoutChanged ||
     Object.keys(refs).length > 0 ||
     ownFirst !== undefined ||
     (!!was && (Object.keys({ ...was, ...doc.page }) as (keyof Doc['page'])[]).some((key) => was[key] !== doc.page[key]));
-  const lastLayout = layoutChanged ? { columns: doc.columns, start: doc.sectionStart } : undefined;
+  const lastLayout = layoutChanged ? { columns: doc.columns, start: doc.sectionStart, endnoteNumbering: doc.endnoteNumbering, footnoteNumbering: doc.footnoteNumbering } : undefined;
   // The ids of the references need their namespace, which nearly every document declares at the top.
   const declare = !/\sxmlns:r=/.test(xml.slice(0, source.body.start));
   let sectionWritten = false;
@@ -1799,8 +2080,7 @@ function sourcedDocumentXml(doc: Doc, source: DocxSource, refs: StoryRefs = {}, 
   const cellXml = (table: number, row: TableRow, cell: TableCell): string =>
     emitList(cells.get(cellKey(table, row.id, cell.id)) ?? [], (para) => (para.origin === undefined ? undefined : slots[para.origin]), true, table).xml;
 
-  const emitSlot = (index: number) =>
-    emitList(groups.get(index) ?? [], (para) => (para.origin === undefined ? undefined : slots[index]), false);
+  const emitSlot = (index: number) => emitList(groups.get(index) ?? [], (para) => (para.origin === undefined ? undefined : slots[index]), false);
 
   /** Inner XML of a block container, with its paragraphs replaced by their current state. */
   const emitBlocks = (container: XmlNode): { xml: string; count: number } => {
@@ -1963,14 +2243,13 @@ export function exportDocx(whole: Doc, options: DocxOptions = {}): Uint8Array {
   boxesOf = doc;
   const { source } = doc;
   const mainPath = source?.mainPath ?? 'word/document.xml';
-  const files: Record<string, Uint8Array> = source
-    ? { ...source.files }
-    : { '[Content_Types].xml': strToU8(CONTENT_TYPES), '_rels/.rels': strToU8(ROOT_RELS) };
+  const files: Record<string, Uint8Array> = source ? { ...source.files } : { '[Content_Types].xml': strToU8(CONTENT_TYPES), '_rels/.rels': strToU8(ROOT_RELS) };
   writeStyles(doc, files, mainPath, source);
   if (options.language) writeLanguage(files, mainPath, options.language, options.replaceLanguage);
   writeNumbering(doc, files, mainPath, source);
   writeNotes(doc, files, mainPath, source);
-  writeFootnotes(doc, files, mainPath, source);
+  writeReferencedNotes(doc, files, mainPath, source, 'footnote');
+  writeReferencedNotes(doc, files, mainPath, source, 'endnote');
   const refs = writeStories(doc, files, mainPath, source);
   let xml: string;
   const boxes = changedBoxes(doc, source);
@@ -1988,6 +2267,7 @@ export function exportDocx(whole: Doc, options: DocxOptions = {}): Uint8Array {
   files[mainPath] = strToU8(writeLinks(files, mainPath, writeMedia(doc, files, mainPath, xml)));
   if (options.fonts?.length) writeFonts(files, mainPath, options.fonts, options.subsetFonts ? textByFamily(doc) : undefined);
   writeTracking(doc, files, mainPath, source);
+  writeEndnotePlacement(doc, files, mainPath);
   dropUnusedPictures(files);
   return zipSync(files);
 }

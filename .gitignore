@@ -6,7 +6,10 @@ dist
 # Documentos reales de prueba: pueden ser confidenciales.
 /*.docx
 /fixtures/
+# Our own PDFs of the documents measured against Word: made again by npm run float-cases.
+/test-documents/*.ours.pdf
 /salas/
+/rooms/
 *.tgz
 
 # El sitio: lo que Next genera, y el documento de muestra, que se hace al construir.
@@ -27,3 +30,5 @@ apps/desktop/src-tauri/gen
 
 # Copied from the root when @rebodocs/react is built, to be published with it.
 /packages/react/THIRD_PARTY_NOTICES.md
+# What the tests in a browser leave behind: a picture of each one that failed.
+/.vitest/

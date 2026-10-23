@@ -10,12 +10,13 @@ import {
   type ListKind,
   type ListStyle,
   type PageNumberFormat,
+  type NoteNumbering,
   type PageNumbering,
   type ParagraphProps,
   HIGHLIGHT_COLORS,
   formatNumber,
   isVariableName,
-} from '@rebodocs/core';
+} from '@rebodocs/core/internal';
 import type { Editor, MarkKey } from './editor';
 import { getLocale, plural, styleName, t } from './i18n';
 import { fontFamilies } from './fonts';
@@ -68,10 +69,7 @@ export interface Toolbar {
 const FONTS = ['Arial', 'Calibri', 'Cambria', 'Courier New', 'Georgia', 'Helvetica', 'Times New Roman', 'Verdana'];
 const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48];
 const SPACINGS = [1, 1.15, 1.5, 2];
-const TEXT_COLORS = [
-  '000000', '434343', '666666', '999999', 'C00000', 'FF0000', 'FFC000', 'FFFF00',
-  '92D050', '00B050', '00B0F0', '0070C0', '002060', '7030A0', 'C55A11', 'FFFFFF',
-];
+const TEXT_COLORS = ['000000', '434343', '666666', '999999', 'C00000', 'FF0000', 'FFC000', 'FFFF00', '92D050', '00B050', '00B0F0', '0070C0', '002060', '7030A0', 'C55A11', 'FFFFFF'];
 /** How far one press of the indent buttons moves a paragraph, and the space the spacing toggles add. */
 const INDENT_STEP = 36;
 const SPACE_BEFORE = 12;
@@ -96,10 +94,7 @@ const BULLETS = ['•', '◦', '▪', '–', '✓', '➢'];
 /** The label of the nth item of a list in a style: "c)", "iii.", "•". */
 const listLabel = (style: ListStyle, n: number) => (style.format === 'bullet' ? style.text : style.text.replace('#', formatNumber(style.format, n)));
 
-const CELL_SHADES = [
-  'F2F2F2', 'D9D9D9', 'BFBFBF', 'FFF2CC', 'FFE699', 'FCE4D6', 'F8CBAD', 'E2EFDA',
-  'C6E0B4', 'DDEBF7', 'BDD7EE', 'D9E1F2', 'B4C6E7', 'EAD1DC', 'D9D2E9', 'FFFFFF',
-];
+const CELL_SHADES = ['F2F2F2', 'D9D9D9', 'BFBFBF', 'FFF2CC', 'FFE699', 'FCE4D6', 'F8CBAD', 'E2EFDA', 'C6E0B4', 'DDEBF7', 'BDD7EE', 'D9E1F2', 'B4C6E7', 'EAD1DC', 'D9D2E9', 'FFFFFF'];
 const GRID_COLUMNS = 8;
 /** The grids of a menu, which the arrows go through by rows and columns. */
 const GRIDS = '.dx-tb-grid, .dx-tb-colors';
@@ -204,7 +199,9 @@ const digit = (y: number, n: number) => `<text x="1.8" y="${y}" font-size="5.5" 
 
 const ICONS = {
   find: svg('<circle cx="8" cy="8" r="4.5"/><path d="m11.5 11.5 3.5 3.5"/>'),
-  more: svg('<circle cx="4" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="14" cy="9" r="1.2" fill="currentColor" stroke="none"/>'),
+  more: svg(
+    '<circle cx="4" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="14" cy="9" r="1.2" fill="currentColor" stroke="none"/>',
+  ),
   image: svg('<rect x="2.5" y="3.5" width="13" height="11" rx="1"/><circle cx="6.5" cy="7.5" r="1.2"/><path d="m2.5 12.5 3.5-3 3 2.5 2.5-2 4 3.5"/>'),
   panel: svg('<rect x="2.5" y="3.5" width="13" height="11" rx="1"/><path d="M7 3.5v11M4.3 6.5h1M4.3 9h1"/>'),
   menu: svg('<path d="M3 5h12M3 9h12M3 13h12"/>'),
@@ -234,6 +231,8 @@ const ICONS = {
   textBox: svg('<rect x="2.5" y="3.5" width="13" height="11" rx="1"/><path d="M5.5 7h7M9 7v5"/>'),
   review: svg('<path d="M3 13.5V15h1.5l7.4-7.4-1.5-1.5L3 13.5zM12.6 4.4l1.5 1.5 1.2-1.2a1 1 0 0 0 0-1.4l-.1-.1a1 1 0 0 0-1.4 0l-1.2 1.2zM9 15h6"/>'),
   footnote: svg('<path d="M2.5 15.5h13M2.5 12.5h7M3 4l4.5 5M7.5 4L3 9M11 3.5l1.5-1v4"/>'),
+  // The text, and at its end a line over the note, with its "i".
+  endnote: svg('<path d="M2.5 3.5h13M2.5 6.5h13M2.5 9.5h9M2.5 12.5h4M2.5 15.5h8M13.5 12v3.5M13.5 10v.2"/>'),
   pageBreak: svg('<path d="M4.5 2.5v4h9v-4M4.5 15.5v-4h9v4M2.5 9h2M6.5 9h2M10.5 9h2M14.5 9h1"/>'),
   sectionBreak: svg('<path d="M4.5 2.5v3.5h9V2.5M4.5 15.5V12h9v3.5M2.5 8h13M2.5 10h13"/>'),
   columns: svg('<path d="M2.5 4h5.5M2.5 7h5.5M2.5 10h5.5M2.5 13h4M10 4h5.5M10 7h5.5M10 10h5.5M10 13h3"/>'),
@@ -266,7 +265,6 @@ function injectStyle(): void {
 
 /** Points in a centimetre. */
 const PT_PER_CM = 72 / 2.54;
-
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, html = ''): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -471,15 +469,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   };
 
   /** A button that opens a palette; the bar under its icon shows the colour in use. */
-  const colorButton = (
-    name: string,
-    label: string,
-    html: string,
-    colors: string[],
-    current: () => string,
-    apply: (color: string) => void,
-    none?: string,
-  ) => {
+  const colorButton = (name: string, label: string, html: string, colors: string[], current: () => string, apply: (color: string) => void, none?: string) => {
     const swatch = el('span', 'dx-tb-swatch');
     const node = menuButton(name, label, `${html}`, () => {
       const panel = el('div', '');
@@ -492,11 +482,18 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
         choice.setAttribute('aria-label', colorName(color));
         if (color === current()) choice.setAttribute('aria-current', 'true');
         choice.style.background = `#${color}`;
-        choice.addEventListener('click', run(() => apply(color)));
+        choice.addEventListener(
+          'click',
+          run(() => apply(color)),
+        );
         grid.appendChild(choice);
       }
       panel.appendChild(grid);
-      if (none) panel.append(el('div', 'dx-tb-rule'), item(none, () => apply('')));
+      if (none)
+        panel.append(
+          el('div', 'dx-tb-rule'),
+          item(none, () => apply('')),
+        );
       openPopover(node, panel);
     });
     node.appendChild(swatch);
@@ -534,8 +531,20 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   if (file.length) group(...file);
 
   group(
-    button('undo', `${t('toolbar.undo')} (${MOD}Z)`, ICONS.undo, run(() => editor.undo()), () => ({ disabled: !editor.canUndo })),
-    button('redo', `${t('toolbar.redo')} (${MOD}Y)`, ICONS.redo, run(() => editor.redo()), () => ({ disabled: !editor.canRedo })),
+    button(
+      'undo',
+      `${t('toolbar.undo')} (${MOD}Z)`,
+      ICONS.undo,
+      run(() => editor.undo()),
+      () => ({ disabled: !editor.canUndo }),
+    ),
+    button(
+      'redo',
+      `${t('toolbar.redo')} (${MOD}Y)`,
+      ICONS.redo,
+      run(() => editor.redo()),
+      () => ({ disabled: !editor.canRedo }),
+    ),
   );
 
   // --- Characters ---------------------------------------------------------------
@@ -563,9 +572,19 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
 
   group(
     style,
-    select('font', t('toolbar.font'), [...new Set([...fontFamilies(), ...(options.fonts ?? FONTS)])], (fontFamily) => editor.setRunProps({ fontFamily }), () => editor.activeRunProps().fontFamily),
-    select('size', t('toolbar.fontSize'), (options.sizes ?? SIZES).map(String), (size) => editor.setRunProps({ fontSize: Number(size) }), () =>
-      String(editor.activeRunProps().fontSize),
+    select(
+      'font',
+      t('toolbar.font'),
+      [...new Set([...fontFamilies(), ...(options.fonts ?? FONTS)])],
+      (fontFamily) => editor.setRunProps({ fontFamily }),
+      () => editor.activeRunProps().fontFamily,
+    ),
+    select(
+      'size',
+      t('toolbar.fontSize'),
+      (options.sizes ?? SIZES).map(String),
+      (size) => editor.setRunProps({ fontSize: Number(size) }),
+      () => String(editor.activeRunProps().fontSize),
     ),
   );
 
@@ -577,9 +596,22 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     ['strike', t('mark.strike'), `<span class="dx-tb-mark" style="text-decoration:line-through">${t('mark.strike.letter')}</span>`],
   ];
   group(
-    ...marks.map(([key, label, html]) => button(key, label, html, run(() => editor.toggleMark(key)), () => ({ on: editor.activeRunProps()[key] }))),
-    colorButton('color', t('toolbar.color'), '<span class="dx-tb-mark" style="margin-top:-4px">A</span>', TEXT_COLORS, () => editor.activeRunProps().color, (color) =>
-      editor.setRunProps({ color }),
+    ...marks.map(([key, label, html]) =>
+      button(
+        key,
+        label,
+        html,
+        run(() => editor.toggleMark(key)),
+        () => ({ on: editor.activeRunProps()[key] }),
+      ),
+    ),
+    colorButton(
+      'color',
+      t('toolbar.color'),
+      '<span class="dx-tb-mark" style="margin-top:-4px">A</span>',
+      TEXT_COLORS,
+      () => editor.activeRunProps().color,
+      (color) => editor.setRunProps({ color }),
     ),
     colorButton(
       'highlight',
@@ -670,7 +702,10 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
           const line = sample.appendChild(el('span', ''));
           line.append(el('b', '', listLabel(style, n)), el('i', ''));
         }
-        sample.addEventListener('click', run(() => editor.setListStyle(style)));
+        sample.addEventListener(
+          'click',
+          run(() => editor.setListStyle(style)),
+        );
         grid.appendChild(sample);
       }
       panel.append(grid, el('div', 'dx-tb-rule'));
@@ -695,7 +730,13 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   };
   group(
     ...lists.flatMap(([kind, label]) => [
-      button(kind, label, ICONS[kind], run(() => editor.toggleList(kind)), () => ({ on: editor.activeListKind() === kind })),
+      button(
+        kind,
+        label,
+        ICONS[kind],
+        run(() => editor.toggleList(kind)),
+        () => ({ on: editor.activeListKind() === kind }),
+      ),
       listStyles(kind, t(kind === 'bullet' ? 'list.bulletStyles' : 'list.numberStyles')),
     ]),
     // In a list these change the level of the item; anywhere else, the indent of the paragraph.
@@ -732,75 +773,90 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     const text = window.prompt(prompt)?.trim();
     if (text) use(text);
   };
-  const insert = menuButton(
-    'insert',
-    t('toolbar.insertTools'),
-    `${ICONS.plus}<span>${t('insert')}</span>${ICONS.caret}`,
-    () => {
-      const panel = el('div', '');
-      const body = editor.area === 'body';
-      const outside = !editor.inTable && editor.canEditTables;
-      if (outside) {
-        // A grid to pick the size of a new table from; a table cannot go inside another.
-        const grid = el('div', 'dx-tb-grid');
-        const hint = el('div', 'dx-tb-hint');
-        hint.textContent = t('table.insert');
-        const cells: HTMLElement[] = [];
-        const mark = (rows: number, columns: number) => {
-          cells.forEach((cell, i) => cell.classList.toggle('dx-on', Math.floor(i / GRID_COLUMNS) < rows && i % GRID_COLUMNS < columns));
-          hint.textContent = rows ? `${columns} × ${rows}` : t('table.insert');
-        };
-        for (let i = 0; i < GRID_ROWS * GRID_COLUMNS; i++) {
-          const rows = Math.floor(i / GRID_COLUMNS) + 1;
-          const columns = (i % GRID_COLUMNS) + 1;
-          const cell = el('button', 'dx-tb-cell');
-          cell.type = 'button';
-          // Each number in its own plural: "1 column by 2 rows", in the order the language puts them.
-          cell.setAttribute('aria-label', t('table.cells', { columns: plural('table.columns', columns, { n: columns }), rows: plural('table.rows', rows, { n: rows }) }));
-          cell.addEventListener('mouseenter', () => mark(rows, columns));
-          cell.addEventListener('focus', () => mark(rows, columns));
-          cell.addEventListener('click', run(() => editor.insertTable(rows, columns)));
-          cells.push(cell);
-          grid.appendChild(cell);
-        }
-        grid.addEventListener('mouseleave', () => mark(0, 0));
-        panel.append(grid, hint, el('div', 'dx-tb-rule'));
-      }
-      const entry = (name: string, ...rest: Parameters<typeof item>) => {
-        const node = item(...rest);
-        node.dataset.name = `insert-${name}`;
-        return node;
+  const insert = menuButton('insert', t('toolbar.insertTools'), `${ICONS.plus}<span>${t('insert')}</span>${ICONS.caret}`, () => {
+    const panel = el('div', '');
+    const body = editor.area === 'body';
+    const outside = !editor.inTable && editor.canEditTables;
+    if (outside) {
+      // A grid to pick the size of a new table from; a table cannot go inside another.
+      const grid = el('div', 'dx-tb-grid');
+      const hint = el('div', 'dx-tb-hint');
+      hint.textContent = t('table.insert');
+      const cells: HTMLElement[] = [];
+      const mark = (rows: number, columns: number) => {
+        cells.forEach((cell, i) => cell.classList.toggle('dx-on', Math.floor(i / GRID_COLUMNS) < rows && i % GRID_COLUMNS < columns));
+        hint.textContent = rows ? `${columns} × ${rows}` : t('table.insert');
       };
-      panel.append(
-        entry('image', t('insert.image'), () => picker.click(), false, undefined, undefined, ICONS.image),
-        entry('signatures', t('bubble.signatures'), () => editor.insertSignatures(), !outside, undefined, undefined, ICONS.sign),
-        entry(
-          'variable',
-          t('insert.variable'),
-          ask(options.onInsertVariable, t('bubble.name'), (name) => isVariableName(name) && editor.insertVariable(name)),
-          false,
-          undefined,
-          undefined,
-          ICONS.variable,
-        ),
-        entry('link', t('insert.link'), ask(options.onInsertLink, t('link.address'), (address) => editor.setLink(address)), false, undefined, `${MOD}K`, ICONS.link),
-        entry('footnote', t('insert.footnote'), () => editor.insertFootnote(), !body, undefined, IS_MAC ? '⌘⌥F' : 'Ctrl+Alt+F', ICONS.footnote),
-        entry('text-box', t('insert.textBox'), () => editor.insertTextBox(), !body, undefined, undefined, ICONS.textBox),
-        entry('note', t('insert.note'), ask(options.onInsertNote, t('bubble.notePlaceholder'), (text) => editor.addNote(text)), !body, undefined, undefined, ICONS.note),
-        // A document has one: once it is there, this brings it up to date.
-        editor.hasToc
-          ? entry('toc', t('toc.update'), () => editor.updateToc(), false, undefined, undefined, ICONS.toc)
-          : entry('toc', t('toc.insert'), () => editor.insertToc(), !outside || !body, undefined, undefined, ICONS.toc),
-        el('div', 'dx-tb-rule'),
-        entry('page-break', t('bubble.pageBreak'), () => editor.insertPageBreak(), !body || editor.inTable, undefined, `${MOD}↵`, ICONS.pageBreak),
-        // A part of its own: another orientation, other margins, another header from there on.
-        entry('section-break', t('insert.sectionNextPage'), () => editor.insertSectionBreak('nextPage'), !body || editor.inTable, undefined, undefined, ICONS.sectionBreak),
-        entry('section-continuous', t('insert.sectionContinuous'), () => editor.insertSectionBreak('continuous'), !body || editor.inTable, undefined, undefined, ICONS.sectionBreak),
-        entry('page-number', t('insert.pageNumber'), () => openPopover(page, pagePanel()), false, undefined, undefined, ICONS.numbers),
-      );
-      openPopover(insert, panel);
-    },
-  );
+      for (let i = 0; i < GRID_ROWS * GRID_COLUMNS; i++) {
+        const rows = Math.floor(i / GRID_COLUMNS) + 1;
+        const columns = (i % GRID_COLUMNS) + 1;
+        const cell = el('button', 'dx-tb-cell');
+        cell.type = 'button';
+        // Each number in its own plural: "1 column by 2 rows", in the order the language puts them.
+        cell.setAttribute('aria-label', t('table.cells', { columns: plural('table.columns', columns, { n: columns }), rows: plural('table.rows', rows, { n: rows }) }));
+        cell.addEventListener('mouseenter', () => mark(rows, columns));
+        cell.addEventListener('focus', () => mark(rows, columns));
+        cell.addEventListener(
+          'click',
+          run(() => editor.insertTable(rows, columns)),
+        );
+        cells.push(cell);
+        grid.appendChild(cell);
+      }
+      grid.addEventListener('mouseleave', () => mark(0, 0));
+      panel.append(grid, hint, el('div', 'dx-tb-rule'));
+    }
+    const entry = (name: string, ...rest: Parameters<typeof item>) => {
+      const node = item(...rest);
+      node.dataset.name = `insert-${name}`;
+      return node;
+    };
+    panel.append(
+      entry('image', t('insert.image'), () => picker.click(), false, undefined, undefined, ICONS.image),
+      entry('signatures', t('bubble.signatures'), () => editor.insertSignatures(), !outside, undefined, undefined, ICONS.sign),
+      entry(
+        'variable',
+        t('insert.variable'),
+        ask(options.onInsertVariable, t('bubble.name'), (name) => isVariableName(name) && editor.insertVariable(name)),
+        false,
+        undefined,
+        undefined,
+        ICONS.variable,
+      ),
+      entry(
+        'link',
+        t('insert.link'),
+        ask(options.onInsertLink, t('link.address'), (address) => editor.setLink(address)),
+        false,
+        undefined,
+        `${MOD}K`,
+        ICONS.link,
+      ),
+      entry('footnote', t('insert.footnote'), () => editor.insertFootnote(), !body, undefined, IS_MAC ? '⌘⌥F' : 'Ctrl+Alt+F', ICONS.footnote),
+      entry('endnote', t('insert.endnote'), () => editor.insertEndnote(), !body, undefined, IS_MAC ? '⌘⌥D' : 'Ctrl+Alt+D', ICONS.endnote),
+      entry('text-box', t('insert.textBox'), () => editor.insertTextBox(), !body, undefined, undefined, ICONS.textBox),
+      entry(
+        'note',
+        t('insert.note'),
+        ask(options.onInsertNote, t('bubble.notePlaceholder'), (text) => editor.addNote(text)),
+        !body,
+        undefined,
+        undefined,
+        ICONS.note,
+      ),
+      // A document has one: once it is there, this brings it up to date.
+      editor.hasToc
+        ? entry('toc', t('toc.update'), () => editor.updateToc(), false, undefined, undefined, ICONS.toc)
+        : entry('toc', t('toc.insert'), () => editor.insertToc(), !outside || !body, undefined, undefined, ICONS.toc),
+      el('div', 'dx-tb-rule'),
+      entry('page-break', t('bubble.pageBreak'), () => editor.insertPageBreak(), !body || editor.inTable, undefined, `${MOD}↵`, ICONS.pageBreak),
+      // A part of its own: another orientation, other margins, another header from there on.
+      entry('section-break', t('insert.sectionNextPage'), () => editor.insertSectionBreak('nextPage'), !body || editor.inTable, undefined, undefined, ICONS.sectionBreak),
+      entry('section-continuous', t('insert.sectionContinuous'), () => editor.insertSectionBreak('continuous'), !body || editor.inTable, undefined, undefined, ICONS.sectionBreak),
+      entry('page-number', t('insert.pageNumber'), () => openPopover(page, pagePanel()), false, undefined, undefined, ICONS.numbers),
+    );
+    openPopover(insert, panel);
+  });
   insert.classList.add('dx-tb-text');
   // In tabs there is room for what is put in most, each a button with its name; the menu keeps the rest.
   const labeled = (name: string, label: string, icon: string, action: () => void, state?: () => { disabled?: boolean }) => {
@@ -813,11 +869,34 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     layout === 'tabs'
       ? [
           labeled('image', t('insert.image'), ICONS.image, () => picker.click()),
-          labeled('link', t('insert.link'), ICONS.link, ask(options.onInsertLink, t('link.address'), (address) => editor.setLink(address))),
-          labeled('note', t('insert.note'), ICONS.note, ask(options.onInsertNote, t('bubble.notePlaceholder'), (text) => editor.addNote(text)), inBody),
-          labeled('variable', t('insert.variable'), ICONS.variable, ask(options.onInsertVariable, t('bubble.name'), (name) => isVariableName(name) && editor.insertVariable(name))),
+          labeled(
+            'link',
+            t('insert.link'),
+            ICONS.link,
+            ask(options.onInsertLink, t('link.address'), (address) => editor.setLink(address)),
+          ),
+          labeled(
+            'note',
+            t('insert.note'),
+            ICONS.note,
+            ask(options.onInsertNote, t('bubble.notePlaceholder'), (text) => editor.addNote(text)),
+            inBody,
+          ),
+          labeled(
+            'variable',
+            t('insert.variable'),
+            ICONS.variable,
+            ask(options.onInsertVariable, t('bubble.name'), (name) => isVariableName(name) && editor.insertVariable(name)),
+          ),
           labeled('footnote', t('insert.footnote'), ICONS.footnote, () => editor.insertFootnote(), inBody),
-          labeled('page-break', t('bubble.pageBreak'), ICONS.pageBreak, () => editor.insertPageBreak(), () => ({ disabled: editor.area !== 'body' || editor.inTable })),
+          labeled('endnote', t('insert.endnote'), ICONS.endnote, () => editor.insertEndnote(), inBody),
+          labeled(
+            'page-break',
+            t('bubble.pageBreak'),
+            ICONS.pageBreak,
+            () => editor.insertPageBreak(),
+            () => ({ disabled: editor.area !== 'body' || editor.inTable }),
+          ),
         ]
       : [];
 
@@ -894,7 +973,10 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
           choice.dataset.tip = `#${color}`;
           choice.setAttribute('aria-label', `#${color}`);
           choice.style.background = `#${color}`;
-          choice.addEventListener('click', run(() => editor.setTableCellProps({ shade: color })));
+          choice.addEventListener(
+            'click',
+            run(() => editor.setTableCellProps({ shade: color })),
+          );
           shades.appendChild(choice);
         }
         /** One of a row of choices for the cells, of which one is on. */
@@ -932,7 +1014,11 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
           });
           const unit = el('span', 'dx-tb-unit');
           unit.textContent = 'cm';
-          node.append(input, unit, item(t('table.rowExact'), () => set(!now.exact), !now.height, now.exact));
+          node.append(
+            input,
+            unit,
+            item(t('table.rowExact'), () => set(!now.exact), !now.height, now.exact),
+          );
           return node;
         };
         // The line of the borders of the cells, all round: as thick as the one they have, black unless it has a colour.
@@ -1008,10 +1094,15 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     panel.append(edit(t('toolbar.editHeader'), 'header'), edit(t('toolbar.editFooter'), 'footer'), first);
     // A section before the last may show the document's header and footer, or have its own.
     if (editor.sectionIndex < editor.sectionCount - 1) {
-      const own = item(t('page.ownHeaders'), () => {
-        editor.setOwnHeaders(!editor.ownHeaders);
-        popover?.replaceChildren(pagePanel());
-      }, false, editor.ownHeaders);
+      const own = item(
+        t('page.ownHeaders'),
+        () => {
+          editor.setOwnHeaders(!editor.ownHeaders);
+          popover?.replaceChildren(pagePanel());
+        },
+        false,
+        editor.ownHeaders,
+      );
       own.dataset.name = 'own-headers';
       panel.append(own);
     }
@@ -1066,7 +1157,54 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
       node.addEventListener('click', apply({ ...base, format }));
       panel.appendChild(node);
     }
+    if (editor.endnotes.length) panel.append(el('div', 'dx-tb-rule'), ...endnotesPart());
     return panel;
+  };
+  /** Where the notes at the end go, and how the section the caret is in numbers them: there only when the document has some. */
+  const endnotesPart = (): HTMLElement[] => {
+    const numbering = editor.noteNumbering('endnote');
+    const set = (next: NoteNumbering) => () => {
+      editor.setNoteNumbering('endnote', next);
+      popover?.replaceChildren(pagePanel());
+    };
+    const several = editor.sectionCount > 1;
+    const out: HTMLElement[] = [head(t('endnotes.title'))];
+    if (several) {
+      const sections = editor.endnotesAt === 'sections';
+      out.push(
+        item(
+          t('endnotes.inSections'),
+          () => {
+            editor.setEndnotesAt(sections ? 'document' : 'sections');
+            popover?.replaceChildren(pagePanel());
+          },
+          false,
+          sections,
+        ),
+      );
+    }
+    const formats: [NoteNumbering['format'], string][] = [
+      [undefined, 'i, ii, iii'],
+      ['decimal', '1, 2, 3'],
+      ['lowerLetter', 'a, b, c'],
+      ['upperLetter', 'A, B, C'],
+      ['upperRoman', 'I, II, III'],
+    ];
+    const row = el('div', 'dx-tb-seg');
+    for (const [format, example] of formats) {
+      const on = numbering?.format === format;
+      const node = el('button', `dx-tb-btn${on ? ' dx-on' : ''}`);
+      node.type = 'button';
+      node.textContent = example.split(',')[0];
+      node.dataset.tip = t('endnotes.format', { example });
+      node.setAttribute('aria-label', t('endnotes.format', { example }));
+      node.setAttribute('aria-pressed', String(on));
+      node.addEventListener('click', set({ ...numbering, format }));
+      row.appendChild(node);
+    }
+    out.push(row);
+    if (several) out.push(item(t('endnotes.restart'), set({ ...numbering, restart: numbering?.restart ? undefined : 'section' }), false, !!numbering?.restart));
+    return out;
   };
 
   // --- Columns --------------------------------------------------------------------
@@ -1092,11 +1230,45 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
       ['one', ICONS.colOne, t('columns.one'), { count: 1, space }],
       ['two', ICONS.colTwo, t('columns.two'), { count: 2, space }],
       ['three', ICONS.colThree, t('columns.three'), { count: 3, space }],
-      ['left', ICONS.colLeft, t('columns.left'), { count: 2, space, widths: [{ width: narrow, space }, { width: room - narrow, space: 0 }] }],
-      ['right', ICONS.colRight, t('columns.right'), { count: 2, space, widths: [{ width: room - narrow, space }, { width: narrow, space: 0 }] }],
+      [
+        'left',
+        ICONS.colLeft,
+        t('columns.left'),
+        {
+          count: 2,
+          space,
+          widths: [
+            { width: narrow, space },
+            { width: room - narrow, space: 0 },
+          ],
+        },
+      ],
+      [
+        'right',
+        ICONS.colRight,
+        t('columns.right'),
+        {
+          count: 2,
+          space,
+          widths: [
+            { width: room - narrow, space },
+            { width: narrow, space: 0 },
+          ],
+        },
+      ],
     ];
     const kind = (c: Columns) =>
-      c.count < 2 ? 'one' : c.widths?.length === 2 && Math.abs(c.widths[0].width - c.widths[1].width) > 1 ? (c.widths[0].width < c.widths[1].width ? 'left' : 'right') : c.count === 2 ? 'two' : c.count === 3 ? 'three' : '';
+      c.count < 2
+        ? 'one'
+        : c.widths?.length === 2 && Math.abs(c.widths[0].width - c.widths[1].width) > 1
+          ? c.widths[0].width < c.widths[1].width
+            ? 'left'
+            : 'right'
+          : c.count === 2
+            ? 'two'
+            : c.count === 3
+              ? 'three'
+              : '';
     const apply = (next: Columns) => () => {
       editor.setColumns(next);
       editor.focus();
@@ -1170,7 +1342,11 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     const list = el('div', 'dx-tb-tablist');
     list.setAttribute('role', 'group');
     list.setAttribute('aria-label', t('toolbar.tabs'));
-    for (const [tab, label] of [['format', t('toolbar.tabFormat')], ['insert', t('toolbar.tabInsert')], ['page', t('toolbar.tabPage')]] as const) {
+    for (const [tab, label] of [
+      ['format', t('toolbar.tabFormat')],
+      ['insert', t('toolbar.tabInsert')],
+      ['page', t('toolbar.tabPage')],
+    ] as const) {
       const button = el('button', '');
       button.type = 'button';
       button.dataset.tab = tab;
@@ -1205,7 +1381,8 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
       // The far end is pushed there by a margin that takes whatever room is left: it asks for none.
       return node.offsetWidth + (node === end ? 0 : parseFloat(margins.marginLeft) + parseFloat(margins.marginRight));
     };
-    const needed = () => groups.reduce((sum, { sep, node }) => sum + (node.parentElement === row ? width(node) + (sep ? width(sep) : 0) : 0), width(more) + (end.parentElement === row ? width(end) : 0));
+    const needed = () =>
+      groups.reduce((sum, { sep, node }) => sum + (node.parentElement === row ? width(node) + (sep ? width(sep) : 0) : 0), width(more) + (end.parentElement === row ? width(end) : 0));
     for (let i = groups.length - 1; i >= 0 && needed() > room; i--) {
       const { sep, node, keep } = groups[i];
       if (keep || node.hidden) continue;
@@ -1250,9 +1427,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
 
   /** What takes the keyboard in `root`, in order: what is hidden or disabled is passed over. */
   function focusables(root: HTMLElement): HTMLElement[] {
-    return [...root.querySelectorAll<HTMLElement>('button, select, input, [tabindex="0"]')].filter(
-      (node) => !(node as HTMLButtonElement).disabled && node.getClientRects().length > 0,
-    );
+    return [...root.querySelectorAll<HTMLElement>('button, select, input, [tabindex="0"]')].filter((node) => !(node as HTMLButtonElement).disabled && node.getClientRects().length > 0);
   }
   /** The controls of the bar in the order the arrows take: what is under the button of the rest comes after it. */
   const controls = () => {
@@ -1316,8 +1491,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
       target.click();
       e.preventDefault();
       return;
-    }
-    else if (e.key === 'Escape' && !popover && !tray.classList.contains('dx-open')) {
+    } else if (e.key === 'Escape' && !popover && !tray.classList.contains('dx-open')) {
       editor.focus();
       e.preventDefault();
       return;

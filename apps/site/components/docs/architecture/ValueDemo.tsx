@@ -88,7 +88,8 @@ export function ValueDemo() {
             ]}
           />
           <p className="m-0 text-[15px] leading-[1.6] text-ink-soft">
-            Green is the very same object in both documents: nothing to copy, nothing to lay out again, nothing to send. Yellow is the one paragraph made again — the only one the layout below breaks into lines again, and the only one the change sent to the others is about.
+            Green is the very same object in both documents: nothing to copy, nothing to lay out again, nothing to send. Yellow is the one paragraph made again — the only one the layout below breaks
+            into lines again, and the only one the change sent to the others is about.
           </p>
         </>
       }

@@ -1,5 +1,9 @@
 :root {
-  font: 14px/1.45 system-ui, 'Segoe UI', Roboto, sans-serif;
+  font:
+    14px / 1.45 system-ui,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   color: #1f2328;
   background: #fff;
 }
@@ -34,7 +38,11 @@ button.primary {
   color: #fff;
 }
 code {
-  font: 0.92em ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    0.92em ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
 }
 .quiet {
   color: #656d76;

@@ -7,15 +7,7 @@
 
 import type { Doc, RunProps } from './model';
 
-export type NumFormat =
-  | 'decimal'
-  | 'decimalZero'
-  | 'lowerLetter'
-  | 'upperLetter'
-  | 'lowerRoman'
-  | 'upperRoman'
-  | 'bullet'
-  | 'none';
+export type NumFormat = 'decimal' | 'decimalZero' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'bullet' | 'none';
 
 export interface ListLevel {
   start: number;
@@ -74,8 +66,19 @@ export function listLevelOfStyle(numbering: Numbering, numId: number, styleId: s
 
 function roman(n: number): string {
   const table: [number, string][] = [
-    [1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'], [50, 'l'],
-    [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i'],
+    [1000, 'm'],
+    [900, 'cm'],
+    [500, 'd'],
+    [400, 'cd'],
+    [100, 'c'],
+    [90, 'xc'],
+    [50, 'l'],
+    [40, 'xl'],
+    [10, 'x'],
+    [9, 'ix'],
+    [5, 'v'],
+    [4, 'iv'],
+    [1, 'i'],
   ];
   let out = '';
   n = Math.min(n, 50_000);
@@ -173,9 +176,7 @@ export function listLabels(doc: Doc): (ListLabel | undefined)[] {
   const { numbering } = doc;
   if (!numbering) return [];
   const counters = new ListCounters();
-  return doc.paragraphs.map((p) =>
-    p.props.numId ? counters.next(numbering, p.props.numId, p.props.listLevel ?? 0) : undefined,
-  );
+  return doc.paragraphs.map((p) => (p.props.numId ? counters.next(numbering, p.props.numId, p.props.listLevel ?? 0) : undefined));
 }
 
 // Bullets Word writes as codes of its symbol fonts (as U+F0xx, or as the plain
@@ -186,8 +187,20 @@ export function listLabels(doc: Doc): (ListLabel | undefined)[] {
 const SYMBOL_BULLETS: Record<string, Record<number, string>> = {
   symbol: { 0xb7: '•', 0xa8: '♦', 0xae: '→', 0xde: '⇒' },
   wingdings: {
-    0x6c: '●', 0x6e: '■', 0x6f: '□', 0x71: '❑', 0x75: '◆', 0x76: '❖', 0x9f: '•', 0xa7: '▪', 0xa8: '□',
-    0xd8: '➢', 0xe0: '→', 0xe8: '➔', 0xf0: '⇨', 0xfc: '✓',
+    0x6c: '●',
+    0x6e: '■',
+    0x6f: '□',
+    0x71: '❑',
+    0x75: '◆',
+    0x76: '❖',
+    0x9f: '•',
+    0xa7: '▪',
+    0xa8: '□',
+    0xd8: '➢',
+    0xe0: '→',
+    0xe8: '➔',
+    0xf0: '⇨',
+    0xfc: '✓',
   },
 };
 
@@ -249,11 +262,7 @@ function newListLevels(kind: ListKind): ListLevel[] {
  * Adds a new list and returns its id. `usedNumId` is the highest list id the
  * document's paragraphs refer to, which may not be defined in `numbering`.
  */
-export function addList(
-  numbering: Numbering | undefined,
-  kind: ListKind,
-  usedNumId = 0,
-): { numbering: Numbering; numId: number } {
+export function addList(numbering: Numbering | undefined, kind: ListKind, usedNumId = 0): { numbering: Numbering; numId: number } {
   const abstracts = new Map(numbering?.abstracts);
   const lists = new Map(numbering?.lists);
   const abstractId = Math.max(-1, ...abstracts.keys()) + 1;

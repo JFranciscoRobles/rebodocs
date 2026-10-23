@@ -17,7 +17,9 @@ function FontSize() {
   const { state, commands } = useDocs();
   return (
     <select aria-label="Font size" className={button} value={state.fontSize} onChange={(e) => commands.setRunProps({ fontSize: Number(e.target.value) })}>
-      {[10, 11, 12, 14, 18, 24, 26].map((size) => <option key={size}>{size}</option>)}
+      {[10, 11, 12, 14, 18, 24, 26].map((size) => (
+        <option key={size}>{size}</option>
+      ))}
     </select>
   );
 }
@@ -26,8 +28,12 @@ function Save() {
   const { state, docs } = useDocs();
   return (
     <>
-      <button className={button} disabled={!state.dirty} onClick={() => docs?.save()}>Save</button>
-      <button className={button} disabled={!docs} onClick={() => docs?.download()}>Word</button>
+      <button className={button} disabled={!state.dirty} onClick={() => docs?.save()}>
+        Save
+      </button>
+      <button className={button} disabled={!docs} onClick={() => docs?.download()}>
+        Word
+      </button>
     </>
   );
 }

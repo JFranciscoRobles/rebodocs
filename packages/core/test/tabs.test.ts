@@ -1,6 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type Doc, type TextMeasurer, exportDocx, importDocx, layoutDocument, setParagraphProps } from '../src';
+import { type Doc, type TextMeasurer, exportDocx, importDocx, layoutDocument, setParagraphProps } from '../src/internal';
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 
@@ -29,9 +29,7 @@ const p = (text: string, tabs: string[] = [], pPr = '') =>
 // 300pt wide page with 10pt margins: a 280pt text area. Default tab stops every 40pt.
 function open(body: string): Doc {
   const document =
-    `<w:document ${W}><w:body>${body}` +
-    '<w:sectPr><w:pgSz w:w="6000" w:h="8000"/><w:pgMar w:top="200" w:right="200" w:bottom="200" w:left="200"/></w:sectPr>' +
-    '</w:body></w:document>';
+    `<w:document ${W}><w:body>${body}` + '<w:sectPr><w:pgSz w:w="6000" w:h="8000"/><w:pgMar w:top="200" w:right="200" w:bottom="200" w:left="200"/></w:sectPr>' + '</w:body></w:document>';
   const settings = `<w:settings ${W}><w:defaultTabStop w:val="800"/></w:settings>`;
   return importDocx(zipSync({ 'word/document.xml': strToU8(document), 'word/styles.xml': strToU8(STYLES), 'word/settings.xml': strToU8(settings) }));
 }
@@ -46,7 +44,10 @@ describe('tab stops', () => {
   it('reads the stops of a paragraph over those of its style, and the default ones of the document', () => {
     const doc = open(p('a', [tab('right', 3000, 'hyphen'), tab('decimal', 4000)]) + p('b', [tab('clear', 1000)], '<w:pStyle w:val="Tabbed"/>') + p('c'));
     expect(doc.defaultTabStop).toBe(40);
-    expect(doc.paragraphs[0].props.tabs).toEqual([{ pos: 150, align: 'right', leader: 'hyphen' }, { pos: 200, align: 'decimal' }]);
+    expect(doc.paragraphs[0].props.tabs).toEqual([
+      { pos: 150, align: 'right', leader: 'hyphen' },
+      { pos: 200, align: 'decimal' },
+    ]);
     // The style's stop at 50pt is taken away; the other stays.
     expect(doc.paragraphs[1].props.tabs).toEqual([{ pos: 100, align: 'left' }]);
     expect(doc.paragraphs[2].props.tabs).toBeUndefined();
@@ -54,24 +55,43 @@ describe('tab stops', () => {
 
   it('sets the text after a tab at, ending at, centred on, or with its decimal point on its stop', () => {
     const doc = open(
-      p('a\tb', [tab('left', 1200)]) +
-        p('a\tbcde', [tab('right', 2000)]) +
-        p('a\tbcde', [tab('center', 2000)]) +
-        p('a\t12.5', [tab('decimal', 2000)]) +
-        p('a\t125', [tab('decimal', 2000)]),
+      p('a\tb', [tab('left', 1200)]) + p('a\tbcde', [tab('right', 2000)]) + p('a\tbcde', [tab('center', 2000)]) + p('a\t12.5', [tab('decimal', 2000)]) + p('a\t125', [tab('decimal', 2000)]),
     );
-    expect(starts(doc, 0)).toEqual([['a', 0], ['b', 60]]);
-    expect(starts(doc, 1)).toEqual([['a', 0], ['bcde', 80]]);
-    expect(starts(doc, 2)).toEqual([['a', 0], ['bcde', 90]]);
-    expect(starts(doc, 3)).toEqual([['a', 0], ['12.5', 90]]);
+    expect(starts(doc, 0)).toEqual([
+      ['a', 0],
+      ['b', 60],
+    ]);
+    expect(starts(doc, 1)).toEqual([
+      ['a', 0],
+      ['bcde', 80],
+    ]);
+    expect(starts(doc, 2)).toEqual([
+      ['a', 0],
+      ['bcde', 90],
+    ]);
+    expect(starts(doc, 3)).toEqual([
+      ['a', 0],
+      ['12.5', 90],
+    ]);
     // No point: it ends at the stop.
-    expect(starts(doc, 4)).toEqual([['a', 0], ['125', 85]]);
+    expect(starts(doc, 4)).toEqual([
+      ['a', 0],
+      ['125', 85],
+    ]);
   });
 
   it('goes on to the default stops past the last of its own, and to the hanging indent on the first line', () => {
     const doc = open(p('a\tb\tc\td', [tab('left', 1000)]) + p('a\tb', [], '<w:ind w:left="1200" w:hanging="600"/>'));
-    expect(starts(doc, 0)).toEqual([['a', 0], ['b', 50], ['c', 80], ['d', 120]]);
-    expect(starts(doc, 1)).toEqual([['a', 30], ['b', 60]]);
+    expect(starts(doc, 0)).toEqual([
+      ['a', 0],
+      ['b', 50],
+      ['c', 80],
+      ['d', 120],
+    ]);
+    expect(starts(doc, 1)).toEqual([
+      ['a', 30],
+      ['b', 60],
+    ]);
   });
 
   it('fills the gap of a tab with its leader, the characters on a grid from the edge of the page', () => {
@@ -87,12 +107,20 @@ describe('tab stops', () => {
     const doc = open(p('a\tbeyond the edge', [tab('right', 6400)]));
     const lines = layoutDocument(doc, measurer).lines;
     expect(lines).toHaveLength(1);
-    expect(starts(doc, 0)).toEqual([['a', 0], ['beyond the edge', 245]]);
+    expect(starts(doc, 0)).toEqual([
+      ['a', 0],
+      ['beyond the edge', 245],
+    ]);
   });
 
   it('writes the stops back over those of the style, clearing the ones taken away', () => {
     const doc = open(p('a\tb', [], '<w:pStyle w:val="Tabbed"/>') + p('c'));
-    const changed = setParagraphProps(doc, 0, 1, { tabs: [{ pos: 50, align: 'left' }, { pos: 120, align: 'center', leader: 'dot' }] });
+    const changed = setParagraphProps(doc, 0, 1, {
+      tabs: [
+        { pos: 50, align: 'left' },
+        { pos: 120, align: 'center', leader: 'dot' },
+      ],
+    });
     const xml = strFromU8(unzipSync(exportDocx(changed))['word/document.xml']);
     expect(xml).toContain('<w:tabs><w:tab w:val="clear" w:pos="2000"/><w:tab w:val="center" w:leader="dot" w:pos="2400"/></w:tabs>');
     expect(xml).toContain('<w:tabs><w:tab w:val="left" w:pos="1000"/><w:tab w:val="center" w:leader="dot" w:pos="2400"/></w:tabs>');

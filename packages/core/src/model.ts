@@ -10,6 +10,13 @@ export interface RunProps {
   strike?: boolean;
   fontSize?: number;
   fontFamily?: string;
+  /**
+   * Kerning: the pairs of letters the font sets closer, such as "AV", are set
+   * so from this size up, in points (`w:kern`); 0 for none. Word kerns from
+   * 1 point in a document without styles of its own, and not at all in one
+   * whose styles do not ask for it.
+   */
+  kern?: number;
   /** Hex RGB without '#'. */
   color?: string;
   /** Highlight behind the text, as hex RGB without '#'. Word only has the colours of `HIGHLIGHT_COLORS`. */
@@ -69,10 +76,7 @@ export const RUN_FORMAT = ['bold', 'italic', 'underline', 'strike', 'fontSize', 
 export type RunFormat = Pick<RunProps, (typeof RUN_FORMAT)[number]>;
 
 /** The highlight colours Word offers, in the order of its palette. */
-export const HIGHLIGHT_COLORS = [
-  'FFFF00', '00FF00', '00FFFF', 'FF00FF', '0000FF', 'FF0000', '000080', '008080',
-  '008000', '800080', '800000', '808000', '808080', 'C0C0C0', '000000',
-];
+export const HIGHLIGHT_COLORS = ['FFFF00', '00FF00', '00FFFF', 'FF00FF', '0000FF', 'FF0000', '000080', '008080', '008000', '800080', '800000', '808000', '808080', 'C0C0C0', '000000'];
 
 export const WRAP_SEPARATOR = '\u0001';
 /** Character that stands for a visible object. */
@@ -354,6 +358,13 @@ export interface Paragraph {
    * ends the section; the last section's own are the document's.
    */
   section?: Section;
+  /**
+   * The formatting of the mark that ends the paragraph, as the file has it
+   * (its own, its style's, the document's), for a paragraph in a list: its
+   * label is set in it, as in Word, not in that of its text. The text's when
+   * not said.
+   */
+  mark?: RunProps;
 }
 
 /** How the text of a section is set in columns, as in a newspaper: down one, then down the next. */
@@ -392,8 +403,29 @@ export interface Section {
   footer?: Story;
   /** Set when the first page of the section has a header and a footer to itself, as `Doc.firstPage` for the last section. */
   firstPage?: { header?: Story; footer?: Story };
+  /** How it numbers the notes at the end its text refers to, and those at the foot of the page. */
+  endnoteNumbering?: NoteNumbering;
+  footnoteNumbering?: NoteNumbering;
+  /** Set when the notes at the end of its text go at the end of the next section instead (`w:noEndnote`), with `Doc.endnotesAt`. */
+  noEndnotes?: boolean;
   /** The section's own properties as the file had them, which export writes back with what changed. */
   xml?: string;
+}
+
+/**
+ * How a section numbers the notes its text refers to, at the foot of the
+ * page or at the end, as its properties say (`w:footnotePr`, `w:endnotePr`).
+ * Measured against Word: what a section does not say it does not take from
+ * the one before, and what the settings of the document say of it Word does
+ * not read.
+ */
+export interface NoteNumbering {
+  /** 1, 2, 3 at the foot of the page and i, ii, iii at the end when not said. */
+  format?: 'decimal' | 'lowerRoman' | 'upperRoman' | 'lowerLetter' | 'upperLetter';
+  /** The number the count starts at, 1 when not said. Without `restart`, the count goes on through the document and every number of the section is moved on by as much: from 3, the third note of the document shows 5. */
+  start?: number;
+  /** Where the count starts again: in the section (`w:numRestart="eachSect"`), or on each page, for notes at the foot of the page (`"eachPage"`). */
+  restart?: 'section' | 'page';
 }
 
 /** The columns of a section whose text runs the whole width. */
@@ -418,9 +450,11 @@ export interface Story {
 }
 
 /**
- * A note at the foot of the page its reference is on. The reference is a run
- * of the text holding the `w:footnoteReference` that names it by `id`; the
- * note's own text starts with a `w:footnoteRef`, which shows its number.
+ * A note at the foot of the page its reference is on, or at the end of the
+ * document. The reference is a run of the text holding the
+ * `w:footnoteReference` (`w:endnoteReference`) that names it by `id`; the
+ * note's own text starts with a `w:footnoteRef` (`w:endnoteRef`), which shows
+ * its number.
  */
 /**
  * The text of a text box: a shape drawn on the page, floating or in a line,
@@ -470,8 +504,10 @@ export interface Doc {
   /** The tables the paragraphs' `cell` refer to. */
   tables?: Table[];
   /**
-   * The version of Word whose layout rules the file asks for (`compatibilityMode`).
-   * From 15 on, justified lines may shrink their spaces to take one more word.
+   * The version of Word whose layout rules the file asks for (`compatibilityMode`):
+   * 12, Word 2007's, for a file read that says none, as Word opens it. From 15 on,
+   * justified lines may shrink their spaces to take one more word, and tables
+   * line up with the margins by their borders, not by their text.
    */
   compatMode?: number;
   /** Points between the default tab stops, which tabs go to past a paragraph's own; half an inch when not said. */
@@ -491,6 +527,21 @@ export interface Doc {
   textBoxes?: TextBox[];
   /** The paragraph the line above the notes of a page is drawn in, as the file has it; one of the document's look when not said. */
   footnoteSeparator?: Paragraph;
+  /** The notes at the end of the document, by their id, as `footnotes` are; shown after its last paragraph, numbered i, ii, iii unless `endnoteNumbering` says otherwise. */
+  endnotes?: Footnote[];
+  /** The paragraph the line above the notes at the end is drawn in, as the file has it. */
+  endnoteSeparator?: Paragraph;
+  /** How the last section numbers the notes at the end its text refers to; each section before says its own, in `Section.endnoteNumbering`. */
+  endnoteNumbering?: NoteNumbering;
+  /** How the last section numbers the notes at the foot of the page its text refers to; each section before says its own, in `Section.footnoteNumbering`. */
+  footnoteNumbering?: NoteNumbering;
+  /**
+   * 'sections' when the notes at the end go at the end of each section, after
+   * its last line, as the file says (`w:pos="sectEnd"` in `w:endnotePr`); at
+   * the end of the document when it does not. A section that says
+   * `noEndnotes` leaves its notes to the next.
+   */
+  endnotesAt?: 'sections';
   /** Whether what is typed and taken out is kept as changes to accept or reject, as Word's "Track changes". */
   trackRevisions?: boolean;
   /** Pictures put in since the document was made or opened, by the key their drawing names. */
@@ -534,6 +585,7 @@ export const DEFAULT_RUN: ResolvedRunProps = {
   strike: false,
   fontSize: 11,
   fontFamily: 'Arial',
+  kern: 1,
   color: '000000',
   highlight: '',
   opaque: '',

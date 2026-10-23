@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { createDoc, insertImage, renderPdf } from '../src';
+import { createDoc, insertImage, renderPdf } from '../src/internal';
 import { decodeGif } from '../src/png';
 
 // A letterhead of 153 × 198 made into a GIF by macOS (sips): a blue band at the top, a red one at the foot, white between.
-const GIF = Uint8Array.from(atob('R0lGODdhmQDGAKIAAAAAALQeHh9OjP///wAAAAAAAAAAAAAAACH5BAkAAAQALAAAAACZAMYAAAP/KLrc/jDKSau9OOvNu/9gKI5kaZ5oqq5s675wLM90bd94ru987//AoHBILBqPyKRyyWw6n9CodEqtWq/YbG3A7Xq/4LB4TC6bz+i0es1uu9/wuHxOr9vv+Lx+z+/7/4CBgoOEhYaHiImKi4yNjo+QkZKTlJWWl5iZmpucnZ6foKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr/AwcLDxMXGx8jJysvMzc7P0NHS09TV1tfY2drb3N3e3+Dh4uPk5ebn6Onq6+zt7u/w8fLz9PX29/j5+vv8/f7/AAMKHEiwoMGDCBMqXMiwocOHECNKnEixosWLGDNq3MixYKPHjyBDihxJsqTJkyhTqlzJsqXLlzBjypxJs6bNmzhz6tyJLYDPn0CDCh1KtKjRo0iTKl3KtKnTp1CjSp1KtarVq1izat3KtavXr2DDih1LtqzZs2jTql3Ltq3bt28TAAA7'), (c) => c.charCodeAt(0));
+const GIF = Uint8Array.from(
+  atob(
+    'R0lGODdhmQDGAKIAAAAAALQeHh9OjP///wAAAAAAAAAAAAAAACH5BAkAAAQALAAAAACZAMYAAAP/KLrc/jDKSau9OOvNu/9gKI5kaZ5oqq5s675wLM90bd94ru987//AoHBILBqPyKRyyWw6n9CodEqtWq/YbG3A7Xq/4LB4TC6bz+i0es1uu9/wuHxOr9vv+Lx+z+/7/4CBgoOEhYaHiImKi4yNjo+QkZKTlJWWl5iZmpucnZ6foKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr/AwcLDxMXGx8jJysvMzc7P0NHS09TV1tfY2drb3N3e3+Dh4uPk5ebn6Onq6+zt7u/w8fLz9PX29/j5+vv8/f7/AAMKHEiwoMGDCBMqXMiwocOHECNKnEixosWLGDNq3MixYKPHjyBDihxJsqTJkyhTqlzJsqXLlzBjypxJs6bNmzhz6tyJLYDPn0CDCh1KtKjRo0iTKl3KtKnTp1CjSp1KtarVq1izat3KtavXr2DDih1LtqzZs2jTql3Ltq3bt28TAAA7',
+  ),
+  (c) => c.charCodeAt(0),
+);
 const pixel = (image: { width: number; rgb: Uint8Array }, x: number, y: number) => [...image.rgb.subarray((y * image.width + x) * 3, (y * image.width + x) * 3 + 3)];
 
 describe('GIF pictures', () => {

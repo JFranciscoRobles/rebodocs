@@ -34,9 +34,7 @@ function escapeText(text: string): string {
 
 /** A line that would start a heading, a list or a quote, kept as text. */
 function escapeLineStart(line: string): string {
-  return line
-    .replace(/^(\s*)(#{1,6}\s|[-+]\s)/, (_, space: string, mark: string) => `${space}\\${mark}`)
-    .replace(/^(\s*\d+)([.)]\s)/, (_, number: string, mark: string) => `${number}\\${mark}`);
+  return line.replace(/^(\s*)(#{1,6}\s|[-+]\s)/, (_, space: string, mark: string) => `${space}\\${mark}`).replace(/^(\s*\d+)([.)]\s)/, (_, number: string, mark: string) => `${number}\\${mark}`);
 }
 
 /** The text of the runs with its emphasis; `plainBold` drops the bold, for a heading that is bold all over. */

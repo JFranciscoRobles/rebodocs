@@ -61,7 +61,8 @@ export default function ListenDemo() {
     docs.editor.focus();
   };
 
-  const pill = (on: boolean) => `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
+  const pill = (on: boolean) =>
+    `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
 
   return (
     <DemoBox
@@ -96,7 +97,11 @@ export default function ListenDemo() {
           />
           <div>
             <p className={CAPTION}>What it says, newest first</p>
-            <ol tabIndex={0} aria-label="What the editor said" className="m-0 mt-2.5 grid max-h-[280px] list-none gap-1 overflow-auto rounded-xl bg-[#2f2e2b] p-3 font-code text-[12.5px] leading-[1.5] text-[#edece8]">
+            <ol
+              tabIndex={0}
+              aria-label="What the editor said"
+              className="m-0 mt-2.5 grid max-h-[280px] list-none gap-1 overflow-auto rounded-xl bg-[#2f2e2b] p-3 font-code text-[12.5px] leading-[1.5] text-[#edece8]"
+            >
               {said.length ? (
                 said.map((one) => (
                   <li key={one.n} className={one.n === said[0].n ? 'text-[#f5c443]' : ''}>
@@ -113,7 +118,11 @@ export default function ListenDemo() {
       }
     >
       <div ref={box} className="-m-5 h-[640px] overflow-hidden rounded-[14px]">
-        {file ? <DocsEditor docx={file} name="lease.docx" locale="en" author="Ana" onReady={ready} features={{ panel: false }} /> : <p className="m-0 grid h-full place-items-center text-sm text-muted">Drawing the plan…</p>}
+        {file ? (
+          <DocsEditor docx={file} name="lease.docx" locale="en" author="Ana" onReady={ready} features={{ panel: false }} />
+        ) : (
+          <p className="m-0 grid h-full place-items-center text-sm text-muted">Drawing the plan…</p>
+        )}
       </div>
     </DemoBox>
   );

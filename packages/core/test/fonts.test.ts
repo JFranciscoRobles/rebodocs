@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { FontMeasurer, readFont, readFonts } from '../src';
+import { FontMeasurer, readFont, readFonts } from '../src/internal';
 
 const file = (name: string) => new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
 

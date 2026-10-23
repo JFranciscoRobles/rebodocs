@@ -75,13 +75,13 @@ await bucket.put('contract.pdf', pdf, 'application/pdf');`,
     <>
       <h1 className="m-0 mt-3 font-display text-[clamp(36px,4vw,48px)] font-extrabold leading-[1.08] tracking-[-0.03em]">Documents in an S3 bucket</h1>
       <p className="m-0 mt-3.5 max-w-[700px] text-lg leading-[1.6] text-muted">
-        Where documents live is your application&apos;s business. This page shows one common answer, with a demo to run: the files in a bucket that speaks S3 (Cloudflare R2, AWS S3, MinIO,
-        Backblaze B2…), a small backend that holds the keys, and the editor in the browser.
+        Where documents live is your application&apos;s business. This page shows one common answer, with a demo to run: the files in a bucket that speaks S3 (Cloudflare R2, AWS S3, MinIO, Backblaze
+        B2…), a small backend that holds the keys, and the editor in the browser.
       </p>
       <Flow />
       <p className={prose}>
-        The browser never has a key of the bucket. It asks the backend for an address signed for one file and five minutes, and reads from or writes to the bucket itself, so the files do not
-        pass through your server. Only the PDF is made by the server, because that is work for one.
+        The browser never has a key of the bucket. It asks the backend for an address signed for one file and five minutes, and reads from or writes to the bucket itself, so the files do not pass
+        through your server. Only the PDF is made by the server, because that is work for one.
       </p>
       <div className="mt-4">
         <HandTip>tip: save the contract below and watch where each request goes</HandTip>
@@ -109,7 +109,10 @@ await bucket.put('contract.pdf', pdf, 'application/pdf');`,
         </SectionHead>
         <ol className="m-0 mt-6 grid max-w-[920px] list-none gap-3 p-0 [counter-reset:step]">
           {STEPS.map((step) => (
-            <li key={step.title} className="flex gap-4 rounded-2xl border border-border px-5 py-4 [counter-increment:step] before:font-display before:text-xl before:font-extrabold before:text-brand before:content-[counter(step)]">
+            <li
+              key={step.title}
+              className="flex gap-4 rounded-2xl border border-border px-5 py-4 [counter-increment:step] before:font-display before:text-xl before:font-extrabold before:text-brand before:content-[counter(step)]"
+            >
               <div>
                 <p className="m-0 text-[15px] font-semibold text-ink">{step.title}</p>
                 <p className="m-0 mt-1 text-[15px] leading-normal text-ink-soft">{step.text}</p>
@@ -119,9 +122,9 @@ await bucket.put('contract.pdf', pdf, 'application/pdf');`,
         </ol>
         <div className={`mt-6 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: run }} />
         <p className={prose}>
-          Open <code className={mono}>contract.docx</code> from the list, change it, save: it is written to the bucket, and a version beside it, signed with the name you give your notes. If
-          the document is written and its version is not, the demo says so apart: the document is saved. <strong>PDF on the server…</strong> asks for the
-          values of its variables and leaves <code className={mono}>contract.pdf</code> beside it. <strong>New</strong> starts an empty document that goes to the bucket when it is saved.
+          Open <code className={mono}>contract.docx</code> from the list, change it, save: it is written to the bucket, and a version beside it, signed with the name you give your notes. If the
+          document is written and its version is not, the demo says so apart: the document is saved. <strong>PDF on the server…</strong> asks for the values of its variables and leaves{' '}
+          <code className={mono}>contract.pdf</code> beside it. <strong>New</strong> starts an empty document that goes to the bucket when it is saved.
         </p>
       </section>
 
@@ -149,9 +152,9 @@ await bucket.put('contract.pdf', pdf, 'application/pdf');`,
           ))}
         </dl>
         <p className={prose}>
-          A version is a file under <code className={mono}>versions/&lt;key&gt;/</code>. Its key holds when it was kept and, encoded, who kept it and its name, so that one listing request gives
-          them all; the editor&apos;s side panel lists them, compares them and restores them. It is written once and never again: the backend signs no address to write over one. Fifty are kept
-          of each document, or what <code className={mono}>VERSIONS_KEPT</code> says, and the oldest go as new ones come. See{' '}
+          A version is a file under <code className={mono}>versions/&lt;key&gt;/</code>. Its key holds when it was kept and, encoded, who kept it and its name, so that one listing request gives them
+          all; the editor&apos;s side panel lists them, compares them and restores them. It is written once and never again: the backend signs no address to write over one. Fifty are kept of each
+          document, or what <code className={mono}>VERSIONS_KEPT</code> says, and the oldest go as new ones come. See{' '}
           <a href="/docs/versions/" className={LINK}>
             versions
           </a>
@@ -177,8 +180,8 @@ await bucket.put('contract.pdf', pdf, 'application/pdf');`,
         </SectionHead>
         <div className={`mt-6 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: pdf }} />
         <p className={prose}>
-          The demo looks for <code className={mono}>.ttf</code> and <code className={mono}>.otf</code> files in the fonts of the system, or in the folder <code className={mono}>FONTS_DIR</code>{' '}
-          names. A server of yours has no fonts unless you put them there: ship the ones your documents use, and read <code className={mono}>missingFonts</code> to know when one was stood in for.
+          The demo looks for <code className={mono}>.ttf</code> and <code className={mono}>.otf</code> files in the fonts of the system, or in the folder <code className={mono}>FONTS_DIR</code> names.
+          A server of yours has no fonts unless you put them there: ship the ones your documents use, and read <code className={mono}>missingFonts</code> to know when one was stood in for.
         </p>
       </section>
 
@@ -194,7 +197,8 @@ await bucket.put('contract.pdf', pdf, 'application/pdf');`,
         </div>
         <p className={prose}>
           <strong>How it has been checked.</strong> The backend has automated tests against an S3 kept in memory: listing, signed addresses, writing as a browser does, the variables, the PDF (on a
-          machine with fonts), versions kept, pruned and never written over, and the rule of origins. Against a bucket of Cloudflare R2 the same was run by hand from Node, with the origin rule in place.
+          machine with fonts), versions kept, pruned and never written over, and the rule of origins. Against a bucket of Cloudflare R2 the same was run by hand from Node, with the origin rule in
+          place.
         </p>
       </section>
     </>

@@ -27,21 +27,18 @@ const exampleOf = (name: string) =>
 export async function ComponentsPage() {
   const entryCode = await Promise.all(ENTRIES.map((entry) => highlight(entry.code, 'tsx', LIGHT_THEME)));
   const componentHtml = Object.fromEntries(
-    await Promise.all(
-      COMPONENTS.map(async (component) => [component.name, (await Promise.all(component.example.map(([lang, code]) => highlight(code, lang, LIGHT_THEME)))).join('')] as const),
-    ),
+    await Promise.all(COMPONENTS.map(async (component) => [component.name, (await Promise.all(component.example.map(([lang, code]) => highlight(code, lang, LIGHT_THEME)))).join('')] as const)),
   );
   const hookHtml = Object.fromEntries(
-    await Promise.all(
-      HOOKS.map(async (hook) => [hook.name, { code: await highlight(codeOf(hook), 'tsx', LIGHT_THEME), example: await highlight(exampleOf(hook.name), 'tsx', LIGHT_THEME) }] as const),
-    ),
+    await Promise.all(HOOKS.map(async (hook) => [hook.name, { code: await highlight(codeOf(hook), 'tsx', LIGHT_THEME), example: await highlight(exampleOf(hook.name), 'tsx', LIGHT_THEME) }] as const)),
   );
 
   return (
     <>
       <h1 className="m-0 mt-3 font-display text-[clamp(36px,4vw,48px)] font-extrabold leading-[1.08] tracking-[-0.03em]">Components and hooks</h1>
       <p className="m-0 mt-3.5 max-w-[680px] text-lg leading-[1.6] text-muted">
-        Everything <code className="rounded-[5px] bg-hover px-1.5 py-0.5 font-code text-[15px] text-ink">@rebodocs/react</code> exports — four components, thirteen hooks, the functions beside them, and a way to use it without React.
+        Everything <code className="rounded-[5px] bg-hover px-1.5 py-0.5 font-code text-[15px] text-ink">@rebodocs/react</code> exports — four components, thirteen hooks, the functions beside them,
+        and a way to use it without React.
       </p>
       <div className="mt-5 flex flex-wrap items-center gap-2.5">
         <InstallCommand command="npm install @rebodocs/react" />
@@ -109,8 +106,8 @@ export async function ComponentsPage() {
             Versions and assistants
           </h3>
           <p className="m-0 mt-2.5 text-[15px] leading-[1.65] text-ink-soft">
-            With <code className={mono}>versions</code> on <code className={mono}>DocsEditor</code>, the side panel compares and goes back. To draw that panel yourself, or to open a DOCX as one more change of a shared room,
-            use these; <code className={mono}>createAssistantChat</code> puts Claude in a chat of your own, working on the document. See{' '}
+            With <code className={mono}>versions</code> on <code className={mono}>DocsEditor</code>, the side panel compares and goes back. To draw that panel yourself, or to open a DOCX as one more
+            change of a shared room, use these; <code className={mono}>createAssistantChat</code> puts Claude in a chat of your own, working on the document. See{' '}
             <a href="/docs/versions/" className="font-medium text-brand hover:text-brand-hover">
               versions
             </a>{' '}

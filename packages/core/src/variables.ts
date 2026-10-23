@@ -65,13 +65,7 @@ const FORMATS: Record<FormatId, FormatKind> = {
   currency: { write: 'moneda', group: 'type', alias: ['importe'] },
 };
 
-const plain = (text: string) =>
-  text
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
+const plain = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 const BY_NAME = new Map<string, FormatId>();
 for (const [id, kind] of Object.entries(FORMATS) as [FormatId, FormatKind][]) for (const name of [id, kind.write, ...(kind.alias ?? [])]) BY_NAME.set(plain(name), id);
@@ -135,9 +129,7 @@ function parseDay(value: string, today: Date, locale: string): Day | undefined {
   const local = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(text);
   if (!iso && !local) return undefined;
   const swap = !iso && monthFirst(locale);
-  const [year, month, day] = iso
-    ? [+iso[1], +iso[2], +iso[3]]
-    : [+local![3] < 100 ? 2000 + +local![3] : +local![3], +local![swap ? 1 : 2], +local![swap ? 2 : 1]];
+  const [year, month, day] = iso ? [+iso[1], +iso[2], +iso[3]] : [+local![3] < 100 ? 2000 + +local![3] : +local![3], +local![swap ? 1 : 2], +local![swap ? 2 : 1]];
   // The last day of the month is the day before the first of the next.
   if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate()) return undefined;
   return { year, month, day };

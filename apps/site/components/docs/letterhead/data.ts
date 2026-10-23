@@ -23,7 +23,10 @@ export const MENU: { item: string; text: string }[] = [
 export const MEMBERS: { sig: string; text: string }[] = [
   { sig: 'hasLetterhead: boolean', text: 'Whether the document has one.' },
   { sig: 'letterhead: { bytes, type } | undefined', text: 'Its picture, as the document keeps it: to save apart, or to put on another document.' },
-  { sig: 'setLetterheadFile(file, fit = true) → Promise<boolean>', text: 'Gives it the letterhead a PNG or JPG file is, and, unless fit is false, grows the margins to clear it: one step to undo. A file that does not say its kind is told by how it starts. False when it is not a picture that can be one.' },
+  {
+    sig: 'setLetterheadFile(file, fit = true) → Promise<boolean>',
+    text: 'Gives it the letterhead a PNG or JPG file is, and, unless fit is false, grows the margins to clear it: one step to undo. A file that does not say its kind is told by how it starts. False when it is not a picture that can be one.',
+  },
   { sig: 'setLetterhead(bytes, type)', text: 'The same from bytes, without touching the margins.' },
   { sig: 'fitLetterheadMargins() → Promise<boolean>', text: 'Grows the top and bottom margins to clear what it prints; one that already clears it stays. False when nothing changed.' },
   { sig: 'removeLetterhead()', text: 'Takes it away.' },
@@ -40,13 +43,28 @@ export const HEADLESS: { sig: string; text: string }[] = [
 
 /** The functions of @rebodocs/core. */
 export const CORE: { sig: string; text: string }[] = [
-  { sig: 'setLetterhead(doc, { bytes, type }) → Doc', text: 'The picture stretched over the whole page, in the header of every page, the first page’s own and that of each section with its own, each the size of its page; the one there was goes. A kind of picture a document cannot hold leaves it as it was. The margins are not touched.' },
+  {
+    sig: 'setLetterhead(doc, { bytes, type }) → Doc',
+    text: 'The picture stretched over the whole page, in the header of every page, the first page’s own and that of each section with its own, each the size of its page; the one there was goes. A kind of picture a document cannot hold leaves it as it was. The margins are not touched.',
+  },
   { sig: 'removeLetterhead(doc) → Doc', text: 'Without it; the rest of the header stays.' },
   { sig: 'letterheadOf(doc) → { part, para, offset, xml } | undefined', text: 'Where it is: the header and the place in it.' },
   { sig: 'letterheadImage(doc) → { bytes, type } | undefined', text: 'Its picture.' },
-  { sig: 'letterheadMargins(pixels, page) → { top?, bottom? }', text: 'The margins a picture asks for, read from its pixels (RGBA, as a canvas gives them). A side with nothing printed asks for nothing.' },
-  { sig: 'pngLetterheadMargins(bytes, page) → { top?, bottom? } | undefined', text: 'The same from the bytes of a PNG, without a browser, as on a server. Undefined for a JPEG, whose pixels are not read here.' },
-  { sig: 'withLetterheadMargins(doc, asked) → Doc', text: 'The top and bottom margins grown to what was asked: never shrunk, never past 40% of the page. What the editor does after reading a picture.' },
-  { sig: 'resizeLetterhead(doc, width, height, section?) → Doc', text: 'The letterhead made the size of another page. setSectionPage does it when the paper or its orientation changes, so it is called by hand only for a page set some other way.' },
+  {
+    sig: 'letterheadMargins(pixels, page) → { top?, bottom? }',
+    text: 'The margins a picture asks for, read from its pixels (RGBA, as a canvas gives them). A side with nothing printed asks for nothing.',
+  },
+  {
+    sig: 'pngLetterheadMargins(bytes, page) → { top?, bottom? } | undefined',
+    text: 'The same from the bytes of a PNG, without a browser, as on a server. Undefined for a JPEG, whose pixels are not read here.',
+  },
+  {
+    sig: 'withLetterheadMargins(doc, asked) → Doc',
+    text: 'The top and bottom margins grown to what was asked: never shrunk, never past 40% of the page. What the editor does after reading a picture.',
+  },
+  {
+    sig: 'resizeLetterhead(doc, width, height, section?) → Doc',
+    text: 'The letterhead made the size of another page. setSectionPage does it when the paper or its orientation changes, so it is called by hand only for a page set some other way.',
+  },
   { sig: 'imageTypeOf(bytes) → string | undefined', text: 'image/png, image/jpeg or image/gif, by how the bytes start, for a file that did not say.' },
 ];

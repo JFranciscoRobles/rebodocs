@@ -14,10 +14,13 @@ describe('languages of the interface', () => {
     expect(t('status.page', { page: 2, pages: 9 })).toBe('Page 2 of 9');
     // The braces of a variable stay around its name.
     expect(t('bubble.toVariable', { name: 'client' })).toBe('Turns the selection into the variable {{client}}');
-    expect(locales()).toEqual([{ code: 'es', name: 'Español' }, { code: 'en', name: 'English' }]);
+    expect(locales()).toEqual([
+      { code: 'es', name: 'Español' },
+      { code: 'en', name: 'English' },
+    ]);
   });
 
-  it('starts in the first of the browser\'s languages it speaks, or in English', async () => {
+  it("starts in the first of the browser's languages it speaks, or in English", async () => {
     const startsIn = async (languages: string[]) => {
       vi.resetModules();
       vi.stubGlobal('navigator', { languages, language: languages[0] });

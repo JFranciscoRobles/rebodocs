@@ -13,7 +13,7 @@
 // the order of the document, and the headings are its bookmarks too.
 
 import { zlibSync } from 'fflate';
-import { type Band, type FontSpec, type Fragment, type Layout, type LayoutPage, type Line, type TextBoxBand, type TextMeasurer, boxLines } from './layout';
+import { type Band, type FontSpec, type Fragment, type Layout, type LayoutPage, type Line, type TextBoxBand, type TextMeasurer, boxLines, noteRules } from './layout';
 import { type Border, type Doc, DEFAULT_BORDER } from './model';
 import { linkHref } from './links';
 import { altText, isDecorative } from './images';
@@ -139,6 +139,8 @@ export interface TrueType {
   italicAngle: number;
   glyph(codePoint: number): number;
   advance(glyph: number): number;
+  /** How much closer (less than 0) or further apart a glyph and the one after it are set, in the units of the font, by its pairs: what Word does when kerning is on. 0 for a pair the font says nothing of. */
+  kerning?(left: number, right: number): number;
   /** Set for an OpenType file whose outlines are in CFF, not TrueType: it goes into a PDF whole. */
   cff?: boolean;
 }
@@ -233,7 +235,7 @@ function cffCharset(bytes: Uint8Array, at: number): { at: number; length: number
     } else if (b === 30) {
       // A real number, of no use here: skipped to the nibble that ends it.
       k++;
-      while (k < top[1] && (bytes[k] & 0x0f) !== 0x0f && (bytes[k] >> 4) !== 0x0f) k++;
+      while (k < top[1] && (bytes[k] & 0x0f) !== 0x0f && bytes[k] >> 4 !== 0x0f) k++;
       k++;
     } else if (b <= 246) {
       operand = b - 139;
@@ -366,6 +368,7 @@ export function parseTrueType(bytes: Uint8Array): TrueType | undefined {
       }
     }
     const macStyle = view.getUint16(head + 44);
+    const pairs = kernPairs(view, tables.get('kern'));
     return {
       ...(cff ? { cff } : {}),
       family,
@@ -384,10 +387,41 @@ export function parseTrueType(bytes: Uint8Array): TrueType | undefined {
         return fromBasic(code) || (symbol && code < 0x100 ? fromBasic(0xf000 + code) : 0);
       },
       advance: (glyph) => view.getUint16(hmtx + Math.min(glyph, metrics - 1) * 4),
+      kerning: (left, right) => pairs?.get(left * 0x10000 + right) ?? 0,
     };
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The pairs of the 'kern' table of a font, by the two glyphs (left × 65536 +
+ * right): its horizontal subtables of format 0, the one Windows and Word read.
+ * Measured against Word, its values are the ones Word sets text by: the pair
+ * "11" of Arial, -152 units. Undefined for a font without the table.
+ */
+function kernPairs(view: DataView, at: number | undefined): Map<number, number> | undefined {
+  if (at === undefined) return undefined;
+  const pairs = new Map<number, number>();
+  // Version 0, as Microsoft has it: a version and a count of 16 bits each.
+  if (view.getUint16(at) !== 0) return undefined;
+  let sub = at + 4;
+  for (let n = view.getUint16(at + 2); n > 0; n--) {
+    const length = view.getUint16(sub + 2);
+    const coverage = view.getUint16(sub + 4);
+    // Horizontal (bit 0), not minimum values (1) nor across the line (2), format 0 (the high byte).
+    if ((coverage & 0x7) === 0x1 && coverage >> 8 === 0) {
+      const count = view.getUint16(sub + 6);
+      for (let i = 0; i < count; i++) {
+        const pair = sub + 14 + i * 6;
+        const key = view.getUint16(pair) * 0x10000 + view.getUint16(pair + 2);
+        // Several subtables add up, as the format says.
+        pairs.set(key, (pairs.get(key) ?? 0) + view.getInt16(pair + 4));
+      }
+    }
+    sub += length || 6;
+  }
+  return pairs.size ? pairs : undefined;
 }
 
 /**
@@ -505,13 +539,45 @@ export function subsetTrueType(bytes: Uint8Array, glyphs: Iterable<number>, keep
 
 /** What Windows-1252 has between 0x80 and 0x9F, which the fonts every reader has can write. */
 const WIN_ANSI: Record<number, number> = {
-  0x20ac: 0x80, 0x201a: 0x82, 0x0192: 0x83, 0x201e: 0x84, 0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02c6: 0x88,
-  0x2030: 0x89, 0x0160: 0x8a, 0x2039: 0x8b, 0x0152: 0x8c, 0x017d: 0x8e, 0x2018: 0x91, 0x2019: 0x92, 0x201c: 0x93,
-  0x201d: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97, 0x02dc: 0x98, 0x2122: 0x99, 0x0161: 0x9a, 0x203a: 0x9b,
-  0x0153: 0x9c, 0x017e: 0x9e, 0x0178: 0x9f,
+  0x20ac: 0x80,
+  0x201a: 0x82,
+  0x0192: 0x83,
+  0x201e: 0x84,
+  0x2026: 0x85,
+  0x2020: 0x86,
+  0x2021: 0x87,
+  0x02c6: 0x88,
+  0x2030: 0x89,
+  0x0160: 0x8a,
+  0x2039: 0x8b,
+  0x0152: 0x8c,
+  0x017d: 0x8e,
+  0x2018: 0x91,
+  0x2019: 0x92,
+  0x201c: 0x93,
+  0x201d: 0x94,
+  0x2022: 0x95,
+  0x2013: 0x96,
+  0x2014: 0x97,
+  0x02dc: 0x98,
+  0x2122: 0x99,
+  0x0161: 0x9a,
+  0x203a: 0x9b,
+  0x0153: 0x9c,
+  0x017e: 0x9e,
+  0x0178: 0x9f,
   // Near enough, for what it lacks: other hyphens and spaces, and the bullets of lists.
-  0x2010: 0x2d, 0x2011: 0x2d, 0x2212: 0x2d, 0x00a0: 0x20, 0x2009: 0x20, 0x202f: 0x20, 0x25cf: 0x95, 0x25aa: 0x95, 0x25a0: 0x95,
-  0x25cb: 0x6f, 0x2192: 0xbb,
+  0x2010: 0x2d,
+  0x2011: 0x2d,
+  0x2212: 0x2d,
+  0x00a0: 0x20,
+  0x2009: 0x20,
+  0x202f: 0x20,
+  0x25cf: 0x95,
+  0x25aa: 0x95,
+  0x25a0: 0x95,
+  0x25cb: 0x6f,
+  0x2192: 0xbb,
 };
 
 function winAnsi(code: number): number {
@@ -541,6 +607,32 @@ interface PdfFont {
   fake?: { bold: boolean; italic: boolean };
   /** `text` as the string operand that shows it in this font. */
   encode(text: string): string;
+}
+
+/**
+ * A word as the operator that shows it: with Tj as it is, or kerned with TJ,
+ * each pair of letters the font sets closer moved together by what the font
+ * says, in thousandths of the size, as the layout measured it. A font that is
+ * not in the PDF has no pairs to give.
+ */
+function kernedText(font: PdfFont, word: string, kern: boolean): string {
+  const file = font.file?.font;
+  if (!kern || !file?.kerning) return `${font.encode(word)} Tj`;
+  const parts: string[] = [];
+  let run = '';
+  let before = -1;
+  for (const ch of word) {
+    const glyph = file.glyph(ch.codePointAt(0)!) || file.glyph(0x20);
+    const pair = before >= 0 ? file.kerning(before, glyph) : 0;
+    if (pair) {
+      parts.push(font.encode(run), String(Math.round((-pair * 1000 * 100) / file.unitsPerEm) / 100));
+      run = '';
+    }
+    run += ch;
+    before = glyph;
+  }
+  parts.push(font.encode(run));
+  return parts.length === 1 ? `${parts[0]} Tj` : `[${parts.join(' ')}] TJ`;
 }
 
 // --- Pictures -------------------------------------------------------------------
@@ -832,7 +924,7 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
         const x = f.x + (before ? resources.measurer.width(before, f.font) : 0) + spaces;
         const word = match[0].replace(/\s+$/, ' ');
         // A space alone too, where a stretch starts with one: it shows nothing, and a reader takes it for the gap between two words.
-        ops += `1 0 ${slant} 1 ${num(x)} ${num(height - line.baseline)} Tm ${font.encode(word)} Tj\n`;
+        ops += `1 0 ${slant} 1 ${num(x)} ${num(height - line.baseline)} Tm ${kernedText(font, word, !!f.font.kern)}\n`;
       }
       ops += bold ? 'ET Q\n' : 'ET\n';
       const rule = (y: number) => (ops += `${rgb(f.props.color)} rg ${rect(f.x, y, f.width, Math.max(0.5, size * 0.05))} f\n`);
@@ -864,9 +956,15 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
         if (lines.left) ops += stroke(lines.left, x, y, x, y + h);
         if (lines.right) ops += stroke(lines.right, x + w, y, x + w, y + h);
       }
+      // The line round a table whose cells stand apart.
+      for (const { x, y, width: w, height: h, lines } of (band as LayoutPage).frames ?? []) {
+        if (lines.top) ops += stroke(lines.top, x, y, x + w, y);
+        if (lines.bottom) ops += stroke(lines.bottom, x, y + h, x + w, y + h);
+        if (lines.left) ops += stroke(lines.left, x, y, x, y + h);
+        if (lines.right) ops += stroke(lines.right, x + w, y, x + w, y + h);
+      }
       for (const rule of (band as LayoutPage).rules ?? []) ops += stroke(COLUMN_RULE, rule.x, rule.top, rule.x, rule.bottom);
-      const notesRule = (band as LayoutPage).footnotes?.rule;
-      if (notesRule) ops += `0 0 0 rg ${rect(notesRule.x, notesRule.y, notesRule.width, notesRule.height)} f\n`;
+      for (const notesRule of noteRules(band as LayoutPage)) ops += `0 0 0 rg ${rect(notesRule.x, notesRule.y, notesRule.width, notesRule.height)} f\n`;
       for (const line of band.lines) {
         const seen = `${kind}:${id ?? ''}:${line.para}:${line.start}`;
         const owner = told.has(seen) ? undefined : leaf(line.para);
@@ -888,7 +986,11 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
           if (f.kind !== 'object') tag(element);
           if (f.kind === 'text') text(f, line);
           // The number of a note: smaller, and raised.
-          else if (f.mark) text({ ...f, kind: 'text', text: f.mark.text, font: f.mark.font, wordSpacing: 0, props: { ...f.props, underline: false, strike: false, highlight: '' } }, { ...line, baseline: line.baseline - f.mark.rise });
+          else if (f.mark)
+            text(
+              { ...f, kind: 'text', text: f.mark.text, font: f.mark.font, wordSpacing: 0, props: { ...f.props, underline: false, strike: false, highlight: '' } },
+              { ...line, baseline: line.baseline - f.mark.rise },
+            );
           else if (f.leader) text({ ...f, kind: 'text', ...f.leader, wordSpacing: 0 }, line);
           else if (f.kind === 'object' && f.width > 0) picture(f.props.object, f.x, line.baseline - f.ascent, f.width, f.ascent, part, element);
           // The whole of an entry of a table of contents is its link: its dots and its page too. A turned one is not marked.
@@ -918,6 +1020,7 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
     if (page.header) bands.push({ band: page.header, part: page.header.part ?? 'header', kind: 'artifact' });
     bands.push({ band: page, kind: 'body' });
     if (page.footer) bands.push({ band: page.footer, part: page.footer.part ?? 'footer', kind: 'artifact' });
+    for (const note of page.endnotes?.notes ?? []) bands.push({ band: note, part: note.part, kind: 'note', id: `endnote:${note.id}` });
     for (const note of page.footnotes?.notes ?? []) bands.push({ band: note, part: note.part, kind: 'note', id: note.id });
     for (const box of page.textBoxes ?? []) if (!box.behind) bands.push({ band: box, part: box.part, kind: boxKind(box), id: box.id });
     links = [];
@@ -980,7 +1083,8 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
       const utf16 = code > 0xffff ? hex(0xd800 + ((code - 0x10000) >> 10), 4) + hex(0xdc00 + ((code - 0x10000) & 0x3ff), 4) : hex(code, 4);
       return `<${hex(glyph, 4)}> <${utf16}>`;
     });
-    let map = '/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n';
+    let map =
+      '/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n';
     for (let i = 0; i < pairs.length; i += 100) {
       const group = pairs.slice(i, i + 100);
       map += `${group.length} beginbfchar\n${group.join('\n')}\nendbfchar\n`;
@@ -991,10 +1095,18 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
   }
 
   const fontList = [...fonts.values()].map((font) => `/${font.name} ${font.id} 0 R`).join(' ');
-  const imageList = [...images.values()].filter((image) => image !== null).map((image) => `/${image.name} ${image.id} 0 R`).join(' ');
+  const imageList = [...images.values()]
+    .filter((image) => image !== null)
+    .map((image) => `/${image.name} ${image.id} 0 R`)
+    .join(' ');
   out.write(resourcesId, `<< /Font << ${fontList} >> /XObject << ${imageList} >> >>`);
   out.write(pagesId, `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`);
-  const structure = tree.write(() => out.reserve(), (id, dict) => out.write(id, dict), pageIds, textString);
+  const structure = tree.write(
+    () => out.reserve(),
+    (id, dict) => out.write(id, dict),
+    pageIds,
+    textString,
+  );
   const headings = doc ? writeOutlines(out, doc, layout, pageIds) : 0;
   const language = (resources.language ?? (doc && documentLanguage(doc)))?.replace(/[^A-Za-z0-9-]/g, '');
   const { title } = resources;

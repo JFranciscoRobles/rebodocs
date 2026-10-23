@@ -127,7 +127,7 @@ export function Editor({ file }: { file: Uint8Array }) {
 | `useDocsFind()` | Find and replace. |
 | `useDocsLink()`, `useDocsNotes()`, `useDocsOutline()` | Links, comments, the outline of headings. |
 | `useDocsVariables()` | Template variables: list, insert, fill, format. |
-| `useDocsStyles()`, `useDocsPage()` | Paragraph styles; page setup, numbering and letterhead. |
+| `useDocsStyles()`, `useDocsPage()` | Paragraph styles; page setup, page numbering, endnotes and letterhead. |
 | `useDocsSelectionBox()`, `useDocsBubble()` | Where the selection is on screen; the bar beside it. |
 | `useDocsResponsive()`, `useDocsCount()` | Narrow windows and on-screen keyboards; words and characters. |
 
@@ -162,7 +162,7 @@ Worker made from a Blob, so a Content Security Policy must allow
 
 ## Status
 
-0.9: ready to try in production; the API may change before 1.0. See the
+0.10: ready to try in production; the API may change before 1.0. See the
 [changelog](https://github.com/JFranciscoRobles/rebodocs/blob/main/CHANGELOG.md)
 and the [known limits](https://rebodocs.com/docs/status/).
 

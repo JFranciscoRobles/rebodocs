@@ -25,12 +25,20 @@ function FindBar({ onClose }: { onClose: () => void }) {
           if (e.key === 'Escape') close();
         }}
       />
-      <button className={button} aria-pressed={!!find.options.matchCase} onClick={() => find.setOptions({ ...find.options, matchCase: !find.options.matchCase })}>Aa</button>
+      <button className={button} aria-pressed={!!find.options.matchCase} onClick={() => find.setOptions({ ...find.options, matchCase: !find.options.matchCase })}>
+        Aa
+      </button>
       <span className="text-sm text-neutral-600">{find.count ? `${find.index} of ${find.count}` : 'Nothing found'}</span>
       <input aria-label="Replace with" className={field} value={replacement} onChange={(e) => setReplacement(e.target.value)} />
-      <button className={button} disabled={!find.count} onClick={() => find.replace(replacement)}>Replace</button>
-      <button className={button} disabled={!find.count} onClick={() => find.replaceAll(replacement)}>All</button>
-      <button className={button} onClick={close}>Close</button>
+      <button className={button} disabled={!find.count} onClick={() => find.replace(replacement)}>
+        Replace
+      </button>
+      <button className={button} disabled={!find.count} onClick={() => find.replaceAll(replacement)}>
+        All
+      </button>
+      <button className={button} onClick={close}>
+        Close
+      </button>
     </div>
   );
 }
@@ -39,5 +47,11 @@ function FindBar({ onClose }: { onClose: () => void }) {
 
 export default function Example() {
   const [open, setOpen] = useState(true);
-  return open ? <FindBar onClose={() => setOpen(false)} /> : <button className={button} onClick={() => setOpen(true)}>Find</button>;
+  return open ? (
+    <FindBar onClose={() => setOpen(false)} />
+  ) : (
+    <button className={button} onClick={() => setOpen(true)}>
+      Find
+    </button>
+  );
 }

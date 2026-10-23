@@ -105,7 +105,11 @@ const PROBES: Record<string, () => LiveValue[]> = {
   },
   useDocsOutline: () => {
     const { items, active } = useDocsOutline();
-    return [live.num('items', `${items.length} headings`), ...items.slice(0, 4).map((item, i) => live.str(`items[${i}]`, `{ level: ${item.level}, text: '${item.text}' }`)), live.num('active', active)];
+    return [
+      live.num('items', `${items.length} headings`),
+      ...items.slice(0, 4).map((item, i) => live.str(`items[${i}]`, `{ level: ${item.level}, text: '${item.text}' }`)),
+      live.num('active', active),
+    ];
   },
   useDocsPage: () => {
     const { page, numbering, sections, section, letterhead } = useDocsPage();
@@ -119,7 +123,9 @@ const PROBES: Record<string, () => LiveValue[]> = {
   },
   useDocsSelectionBox: () => {
     const box = useDocsSelectionBox();
-    return box ? [live.num('top', Math.round(box.top)), live.num('left', Math.round(box.left)), live.num('width', Math.round(box.width)), live.num('height', Math.round(box.height))] : [live.empty('box')];
+    return box
+      ? [live.num('top', Math.round(box.top)), live.num('left', Math.round(box.left)), live.num('width', Math.round(box.width)), live.num('height', Math.round(box.height))]
+      : [live.empty('box')];
   },
   useDocsBubble: () => {
     const bubble = useDocsBubble();

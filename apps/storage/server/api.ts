@@ -131,7 +131,10 @@ export function createApi(bucket: () => Bucket, options: { fontDirs?: string[]; 
       if (key.startsWith(VERSIONS)) throw new Refused(400, 'A version has no versions of its own.');
       const meta = metaOf(await bodyOf(request));
       // Room for the one that comes: the oldest beyond what is kept go. Their keys sort by when they were kept.
-      const kept = (await bucket().list(versionsOf(key))).map((file) => file.key).filter((name) => versionOf({ key: name, modified: '' }, key)).sort();
+      const kept = (await bucket().list(versionsOf(key)))
+        .map((file) => file.key)
+        .filter((name) => versionOf({ key: name, modified: '' }, key))
+        .sort();
       for (const old of kept.slice(0, Math.max(0, kept.length - (keep - 1)))) await bucket().remove(old);
       const version = versionKey(key, meta);
       return { url: await bucket().writeUrl(version, DOCX), type: DOCX, version: versionOf({ key: version, modified: new Date().toISOString() }, key) };

@@ -18,8 +18,13 @@ const TRANSLATED = Object.keys(FRENCH).filter((key) => key !== 'locale.name').le
 
 /** `locales` as it would be written in an application, for the line under the demo. */
 function written(locale: string, changed: Changed): string {
-  const texts = (all: Partial<Messages>) => Object.entries(all).map(([key, text]) => `'${key}': '${String(text).replace(/'/g, "\\'")}'`).join(', ');
-  const parts = Object.entries(changed).filter(([code]) => code !== 'fr').map(([code, all]) => `${code}: { ${texts(all)} }`);
+  const texts = (all: Partial<Messages>) =>
+    Object.entries(all)
+      .map(([key, text]) => `'${key}': '${String(text).replace(/'/g, "\\'")}'`)
+      .join(', ');
+  const parts = Object.entries(changed)
+    .filter(([code]) => code !== 'fr')
+    .map(([code, all]) => `${code}: { ${texts(all)} }`);
   parts.unshift(changed.fr ? `fr: { ...fr, ${texts(changed.fr)} }` : 'fr');
   return `<DocsEditor locale="${locale}" locales={{ ${parts.join(', ')} }} />`;
 }
@@ -145,7 +150,12 @@ export default function Switcher() {
             label="What the functions say"
             lines={[
               ['getLocale()', `'${locale}'`],
-              ['locales()', locales().map((l) => l.name).join(', ')],
+              [
+                'locales()',
+                locales()
+                  .map((l) => l.name)
+                  .join(', '),
+              ],
               ["t('status.page', …)", t('status.page', { page: 1, pages: 2 }), 'good'],
               ["t('menu.print')", missing, inFrench ? 'warn' : 'good'],
               inFrench ? ['translated', `${TRANSLATED} of ${TOTAL}, the rest in English`, 'warn'] : ['translated', `${TOTAL} of ${TOTAL}`, 'good'],
@@ -157,14 +167,7 @@ export default function Switcher() {
     >
       <div className="-m-5 h-[520px] overflow-hidden rounded-[14px]">
         {file ? (
-          <DocsEditor
-            docx={file}
-            name="receipt.docx"
-            locale={locale}
-            locales={given}
-            features={{ files: true, language: true }}
-            onReady={(ready) => (handle.current = ready)}
-          />
+          <DocsEditor docx={file} name="receipt.docx" locale={locale} locales={given} features={{ files: true, language: true }} onReady={(ready) => (handle.current = ready)} />
         ) : (
           <p className="grid h-full place-items-center text-sm text-muted">{failed ? 'The sample document could not be loaded.' : 'Opening the document…'}</p>
         )}

@@ -24,7 +24,12 @@ function Signatures({ rows }: { rows: { sig: string; text: string }[] }) {
 /** A sheet with a letterhead, drawn: the band, the text kept clear of it, the address. */
 function Sheet() {
   return (
-    <svg viewBox="0 0 612 792" role="img" aria-label="A page with a band at the top, an address at the foot, and the text between them" className="h-auto w-[150px] flex-none rounded shadow-[0_1px_4px_rgba(0,0,0,0.15)]">
+    <svg
+      viewBox="0 0 612 792"
+      role="img"
+      aria-label="A page with a band at the top, an address at the foot, and the text between them"
+      className="h-auto w-[150px] flex-none rounded shadow-[0_1px_4px_rgba(0,0,0,0.15)]"
+    >
       <rect width="612" height="792" fill="#fff" />
       <rect width="612" height="92" fill="#1f4e8c" />
       <circle cx="54" cy="46" r="18" fill="#fff" />
@@ -121,8 +126,16 @@ const docx = exportDocx(doc);`,
         <div className="mt-7 grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-4">
           {[
             { title: 'The paper', color: 'blue' as const, text: 'The tone there is most of. A row is printed when enough of it is far from that tone; what is see-through counts as white paper.' },
-            { title: 'Top and foot', color: 'purple' as const, text: 'Printing that starts in the top fifth and ends before 35% of the page asks for the top margin; the same from the foot. What is in the middle asks for nothing.' },
-            { title: 'Only growing', color: 'pink' as const, text: 'The margins grow, never shrink, and never past 40% of the page. Side margins are left alone, and so is any text already in the header.' },
+            {
+              title: 'Top and foot',
+              color: 'purple' as const,
+              text: 'Printing that starts in the top fifth and ends before 35% of the page asks for the top margin; the same from the foot. What is in the middle asks for nothing.',
+            },
+            {
+              title: 'Only growing',
+              color: 'pink' as const,
+              text: 'The margins grow, never shrink, and never past 40% of the page. Side margins are left alone, and so is any text already in the header.',
+            },
           ].map((card) => (
             <div key={card.title} className="rounded-2xl border border-border p-5">
               <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${PASTEL_CLASS[card.color]}`}>{card.title}</span>
@@ -138,18 +151,18 @@ const docx = exportDocx(doc);`,
         </SectionHead>
         <div className={`mt-6 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: prop }} />
         <p className={prose}>
-          <code className={mono}>letterhead</code> is an address to fetch, a <code className={mono}>File</code> or <code className={mono}>Blob</code>, or <code className={mono}>{'{ bytes, type }'}</code>;{' '}
-          <code className={mono}>null</code> for none. A server that does not say what it sends is no trouble: the picture is told by how it starts. Set, it is yours: the menu does not offer it to the
-          person. Left out, the document keeps its own, and the person may change it.
+          <code className={mono}>letterhead</code> is an address to fetch, a <code className={mono}>File</code> or <code className={mono}>Blob</code>, or{' '}
+          <code className={mono}>{'{ bytes, type }'}</code>; <code className={mono}>null</code> for none. A server that does not say what it sends is no trouble: the picture is told by how it starts.
+          Set, it is yours: the menu does not offer it to the person. Left out, the document keeps its own, and the person may change it.
         </p>
         <p className={prose}>
-          It is put once the document is open, and is how the document starts: not a step to undo, and the document is not left unsaved by it. A document that has the very same picture is left
-          alone, so in a{' '}
+          It is put once the document is open, and is how the document starts: not a step to undo, and the document is not left unsaved by it. A document that has the very same picture is left alone,
+          so in a{' '}
           <a href="/docs/collaboration/" className={LINK}>
             shared room
           </a>{' '}
-          the second person to come in does not put it again. Changing the prop later gives the new one as a change; the handle&apos;s <code className={mono}>setLetterhead(source | null)</code> does the
-          same.
+          the second person to come in does not put it again. Changing the prop later gives the new one as a change; the handle&apos;s <code className={mono}>setLetterhead(source | null)</code> does
+          the same.
         </p>
         <h3 id="headless" className="m-0 mt-10 scroll-mt-24 font-display text-xl font-bold tracking-[-0.01em]">
           Headless

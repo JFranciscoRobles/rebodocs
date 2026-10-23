@@ -14,7 +14,7 @@ import {
   paragraphLength,
   setParagraphProps,
   splitParagraph,
-} from '../src';
+} from '../src/internal';
 
 const NS =
   'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' +
@@ -29,8 +29,7 @@ const STYLES =
   '<w:style w:type="paragraph" w:styleId="ListParagraph"><w:pPr><w:ind w:left="720"/></w:pPr></w:style>' +
   '</w:styles>';
 
-const DRAWING =
-  '<w:drawing><wp:inline><wp:extent cx="1270000" cy="635000"/><a:blip r:embed="rId7"/></wp:inline></w:drawing>';
+const DRAWING = '<w:drawing><wp:inline><wp:extent cx="1270000" cy="635000"/><a:blip r:embed="rId7"/></wp:inline></w:drawing>';
 
 // One paragraph per feature, each on its own line so tests can find them.
 const P = {
@@ -63,8 +62,7 @@ const PARTS: Record<string, string> = {
   'word/styles.xml': STYLES,
   'word/numbering.xml': '<w:numbering/>',
   'word/header1.xml': '<w:hdr><w:p><w:r><w:t>Header</w:t></w:r></w:p></w:hdr>',
-  'word/_rels/document.xml.rels':
-    '<Relationships><Relationship Id="rId7" Target="media/image1.png"/><Relationship Id="rId5" Target="https://example.com" TargetMode="External"/></Relationships>',
+  'word/_rels/document.xml.rels': '<Relationships><Relationship Id="rId7" Target="media/image1.png"/><Relationship Id="rId5" Target="https://example.com" TargetMode="External"/></Relationships>',
   'word/media/image1.png': 'PNGDATA',
 };
 
@@ -80,7 +78,10 @@ function save(doc: Doc): { xml: string; files: Record<string, Uint8Array> } {
 /** Index of the paragraph holding `text`, and the offset where it starts. */
 function find(doc: Doc, text: string): { para: number; offset: number } {
   for (let para = 0; para < doc.paragraphs.length; para++) {
-    const offset = doc.paragraphs[para].runs.map((r) => r.text).join('').indexOf(text);
+    const offset = doc.paragraphs[para].runs
+      .map((r) => r.text)
+      .join('')
+      .indexOf(text);
     if (offset >= 0) return { para, offset };
   }
   throw new Error(`not found: ${text}`);
@@ -93,9 +94,7 @@ const measurer: TextMeasurer = {
 
 describe('lossless round-trip', () => {
   it('reads the text, what tracked changes took out among it, and skips field codes', () => {
-    expect(docText(open())).toBe(
-      ['Title', 'First item', 'See the site and addedremoved7', 'A1', 'B1', 'End of section', 'Plain & simple'].join('\n'),
-    );
+    expect(docText(open())).toBe(['Title', 'First item', 'See the site and addedremoved7', 'A1', 'B1', 'End of section', 'Plain & simple'].join('\n'));
   });
 
   it('writes an untouched document back byte for byte', () => {
@@ -144,9 +143,7 @@ describe('lossless round-trip', () => {
     const at = find(doc, 'the site');
     const range = { from: at, to: { para: at.para, offset: at.offset + 3 } };
     const { xml } = save(applyRunProps(doc, range, { bold: true, color: 'FF0000' }));
-    expect(xml).toContain(
-      '<w:r><w:rPr><w:rStyle w:val="Hyperlink"/><w:b/><w:bCs/><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">the</w:t></w:r>',
-    );
+    expect(xml).toContain('<w:r><w:rPr><w:rStyle w:val="Hyperlink"/><w:b/><w:bCs/><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">the</w:t></w:r>');
     // The rest of the link keeps its theme colour, and no size or font is spelled out.
     expect(xml).toContain('<w:color w:val="0563C1" w:themeColor="hyperlink"/></w:rPr><w:t xml:space="preserve"> site</w:t>');
     expect(xml).not.toContain('<w:sz ');
@@ -155,9 +152,7 @@ describe('lossless round-trip', () => {
     expect(heading.xml).toContain('<w:r><w:rPr><w:b w:val="0"/><w:bCs w:val="0"/></w:rPr><w:t xml:space="preserve">Title</w:t></w:r>');
 
     const aligned = save(setParagraphProps(doc, 0, 0, { align: 'center', spacingAfter: 12 }));
-    expect(aligned.xml).toContain(
-      '<w:pPr><w:pStyle w:val="Heading1"/><w:keepNext/><w:spacing w:after="240"/><w:jc w:val="center"/></w:pPr>',
-    );
+    expect(aligned.xml).toContain('<w:pPr><w:pStyle w:val="Heading1"/><w:keepNext/><w:spacing w:after="240"/><w:jc w:val="center"/></w:pPr>');
   });
 
   it('gives both halves of a split paragraph the original properties', () => {
@@ -165,10 +160,7 @@ describe('lossless round-trip', () => {
     const at = find(doc, 'First item');
     const { xml } = save(splitParagraph(doc, { para: at.para, offset: 6 }).doc);
     const pPr = '<w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="3"/></w:numPr></w:pPr>';
-    expect(xml).toContain(
-      `<w:p w14:paraId="0B0B0B0B">${pPr}<w:r><w:t xml:space="preserve">First </w:t></w:r></w:p>` +
-        `<w:p>${pPr}<w:r><w:t xml:space="preserve">item</w:t></w:r></w:p>`,
-    );
+    expect(xml).toContain(`<w:p w14:paraId="0B0B0B0B">${pPr}<w:r><w:t xml:space="preserve">First </w:t></w:r></w:p>` + `<w:p>${pPr}<w:r><w:t xml:space="preserve">item</w:t></w:r></w:p>`);
   });
 
   it('moves a section break to the last half of a split paragraph', () => {
@@ -176,8 +168,7 @@ describe('lossless round-trip', () => {
     const at = find(doc, 'End of section');
     const { xml } = save(splitParagraph(doc, { para: at.para, offset: 3 }).doc);
     expect(xml).toContain(
-      '<w:p><w:r><w:t xml:space="preserve">End</w:t></w:r></w:p>' +
-        '<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/></w:sectPr></w:pPr><w:r><w:t xml:space="preserve"> of section</w:t></w:r></w:p>',
+      '<w:p><w:r><w:t xml:space="preserve">End</w:t></w:r></w:p>' + '<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/></w:sectPr></w:pPr><w:r><w:t xml:space="preserve"> of section</w:t></w:r></w:p>',
     );
   });
 

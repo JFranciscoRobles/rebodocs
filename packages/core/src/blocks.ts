@@ -90,7 +90,7 @@ function pairsOf(marks: Mark[]): Pair[] {
 
 /** The value of a dotted name: `client.name` is the field of `client`, or the value given as "client.name". */
 export function valueAt(data: TemplateData, name: string): TemplateValue {
-  if (Object.prototype.hasOwnProperty.call(data, name)) return data[name];
+  if (Object.hasOwn(data, name)) return data[name];
   for (let i = name.indexOf('.'); i > 0; i = name.indexOf('.', i + 1)) {
     const head = data[name.slice(0, i)];
     if (head && typeof head === 'object' && !Array.isArray(head)) {
@@ -288,7 +288,10 @@ function expandPair(doc: Doc, { open, close }: Pair, kind: Block['kind'], items:
   });
   const container = doc.paragraphs[open.para];
   // A cell holds at least one paragraph, and so does the document.
-  if (!paragraphs.length && (container.cell ? !doc.paragraphs.some((p, i) => (i < open.para || i > close.para) && sameCell(p.cell, container.cell)) : doc.paragraphs.length === close.para - open.para + 1)) {
+  if (
+    !paragraphs.length &&
+    (container.cell ? !doc.paragraphs.some((p, i) => (i < open.para || i > close.para) && sameCell(p.cell, container.cell)) : doc.paragraphs.length === close.para - open.para + 1)
+  ) {
     paragraphs.push({ props: container.props, runs: [{ text: '', props: container.runs[0].props }], ...(container.cell ? { cell: container.cell } : {}) });
   }
   const all = doc.paragraphs.slice();
@@ -301,7 +304,9 @@ function expandPair(doc: Doc, { open, close }: Pair, kind: Block['kind'], items:
 /** The table left without rows taken away, the tables after it numbered one less. */
 function dropEmptyTable(doc: Doc, index: number): Doc {
   if (doc.tables![index].rows.length) return doc;
-  const tables = doc.tables!.filter((_, i) => i !== index).map((table) => (table.parent && table.parent.table > index ? { ...table, parent: { ...table.parent, table: table.parent.table - 1 } } : table));
+  const tables = doc
+    .tables!.filter((_, i) => i !== index)
+    .map((table) => (table.parent && table.parent.table > index ? { ...table, parent: { ...table.parent, table: table.parent.table - 1 } } : table));
   let paragraphs = doc.paragraphs.map((p) => (p.cell && p.cell.table > index ? { ...p, cell: { ...p.cell, table: p.cell.table - 1 } } : p));
   if (!paragraphs.length) paragraphs = [{ props: {}, runs: [{ text: '', props: {} }] }];
   return { ...doc, paragraphs, tables };

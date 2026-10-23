@@ -1,21 +1,8 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import {
-  type Band,
-  type Doc,
-  type TextMeasurer,
-  createDoc,
-  createParagraph,
-  exportDocx,
-  importDocx,
-  layoutDocument,
-  pageNumbering,
-  setPageNumbering,
-} from '../src';
+import { type Band, type Doc, type TextMeasurer, createDoc, createParagraph, exportDocx, importDocx, layoutDocument, pageNumbering, setPageNumbering } from '../src/internal';
 
-const NS =
-  'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' +
-  'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' + 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 
 // Monospace fake: every character is half the font size wide.
 const measurer: TextMeasurer = {
@@ -24,12 +11,23 @@ const measurer: TextMeasurer = {
 };
 
 const files = (doc: Doc) => Object.fromEntries(Object.entries(unzipSync(exportDocx(doc))).map(([path, bytes]) => [path, strFromU8(bytes)]));
-const textOf = (band: Band | undefined) => (band?.lines ?? []).map((l) => l.fragments.filter((f) => f.kind === 'text').map((f) => f.text).join('')).join('|');
+const textOf = (band: Band | undefined) =>
+  (band?.lines ?? [])
+    .map((l) =>
+      l.fragments
+        .filter((f) => f.kind === 'text')
+        .map((f) => f.text)
+        .join(''),
+    )
+    .join('|');
 
 /** Three pages of one line each. */
 function threePages(): Doc {
   const page = { width: 200, height: 200, marginTop: 50, marginRight: 20, marginBottom: 50, marginLeft: 20, headerDistance: 10, footerDistance: 10 };
-  return createDoc(['one\ftwo\fthree'].map((t) => createParagraph(t, { fontSize: 10 }, { spacingAfter: 0, lineHeight: 1 })), page);
+  return createDoc(
+    ['one\ftwo\fthree'].map((t) => createParagraph(t, { fontSize: 10 }, { spacingAfter: 0, lineHeight: 1 })),
+    page,
+  );
 }
 
 describe('page numbers', () => {
@@ -59,7 +57,18 @@ describe('page numbers', () => {
     expect(textOf(layoutDocument(setPageNumbering(plain, { place: 'footer', align: 'center', format: 'page', words: { page: 'Seite', of: 'von' } }), measurer).pages[1].footer)).toBe('Seite 2');
 
     // The number takes the font of the text, not of a mark that happens to come first.
-    const marked = { ...plain, paragraphs: [{ props: {}, runs: [{ text: '\u2060', props: { fontFamily: 'Symbol', object: '<w:bookmarkStart/>', anchor: true } }, { text: 'Text', props: { fontFamily: 'Georgia' } }] }] };
+    const marked = {
+      ...plain,
+      paragraphs: [
+        {
+          props: {},
+          runs: [
+            { text: '\u2060', props: { fontFamily: 'Symbol', object: '<w:bookmarkStart/>', anchor: true } },
+            { text: 'Text', props: { fontFamily: 'Georgia' } },
+          ],
+        },
+      ],
+    };
     expect(setPageNumbering(marked, { place: 'footer', align: 'left', format: 'number' }).footer!.paragraphs[0].runs[0].props).toMatchObject({ fontFamily: 'Georgia', fontSize: 10 });
 
     // Setting it again moves it: there is never more than one.
@@ -97,11 +106,10 @@ describe('page numbers', () => {
   const PAGE_FIELD =
     '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>PAGE</w:instrText></w:r>' +
     '<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>';
-  const FOOTER =
-    `<w:ftr ${NS}><w:p><w:pPr><w:pStyle w:val="Footer"/></w:pPr><w:r><w:t>Confidencial</w:t></w:r></w:p>` +
-    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr>${PAGE_FIELD}</w:p></w:ftr>`;
+  const FOOTER = `<w:ftr ${NS}><w:p><w:pPr><w:pStyle w:val="Footer"/></w:pPr><w:r><w:t>Confidencial</w:t></w:r></w:p>` + `<w:p><w:pPr><w:jc w:val="right"/></w:pPr>${PAGE_FIELD}</w:p></w:ftr>`;
   const HEADER = `<w:hdr ${NS}><w:p><w:r><w:t>Empresa</w:t></w:r></w:p></w:hdr>`;
-  const sect = (refs: string) => `<w:sectPr>${refs}<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>`;
+  const sect = (refs: string) =>
+    `<w:sectPr>${refs}<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>`;
   const body = (refs: string, root = NS) => `<w:document ${root}><w:body><w:p><w:r><w:t>Body</w:t></w:r></w:p>${sect(refs)}</w:body></w:document>`;
   const RELS = (extra: string) => `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${extra}</Relationships>`;
 
@@ -121,7 +129,11 @@ describe('page numbers', () => {
     const doc = withParts();
     expect(pageNumbering(doc)).toEqual({ place: 'footer', align: 'right', format: 'number' });
     // Untouched, everything is written back as it was.
-    expect(files(doc)).toMatchObject({ 'word/footer1.xml': FOOTER, 'word/header1.xml': HEADER, 'word/document.xml': body('<w:headerReference w:type="default" r:id="rId1"/><w:footerReference w:type="default" r:id="rId2"/>') });
+    expect(files(doc)).toMatchObject({
+      'word/footer1.xml': FOOTER,
+      'word/header1.xml': HEADER,
+      'word/document.xml': body('<w:headerReference w:type="default" r:id="rId1"/><w:footerReference w:type="default" r:id="rId2"/>'),
+    });
 
     const changed = setPageNumbering(doc, { place: 'footer', align: 'center', format: 'pageOfTotal' });
     const out = files(changed);
@@ -168,8 +180,7 @@ describe('page numbers', () => {
 
   it('adds a footer to an opened document that had none', () => {
     const types = '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>';
-    const open = (root: string) =>
-      importDocx(zipSync({ '[Content_Types].xml': strToU8(types), 'word/document.xml': strToU8(body('', root)), 'word/footer1.xml': strToU8('taken') }));
+    const open = (root: string) => importDocx(zipSync({ '[Content_Types].xml': strToU8(types), 'word/document.xml': strToU8(body('', root)), 'word/footer1.xml': strToU8('taken') }));
     const out = files(setPageNumbering(open(NS), { place: 'footer', align: 'center', format: 'number' }));
     // The name footer1.xml was taken by a part nothing refers to, so the new one is footer2.xml.
     expect(out['word/footer1.xml']).toBe('taken');

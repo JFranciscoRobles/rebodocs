@@ -11,9 +11,11 @@ import {
   importDocx,
   insertFootnote,
   layoutDocument,
+  noteLabels,
+  setNoteNumbering,
   storyOf,
   withStory,
-} from '../src';
+} from '../src/internal';
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 
@@ -54,7 +56,10 @@ const lines = (n: number, from = 0) => Array.from({ length: n }, (_, i) => p(`li
 /** Each page: the first line of its text, and each note at its foot with the text of its lines. */
 const pages = (doc: Doc) =>
   layoutDocument(doc, measurer).pages.map((page) => ({
-    first: page.lines[0]?.fragments.filter((f) => !f.mark).map((f) => f.text).join(''),
+    first: page.lines[0]?.fragments
+      .filter((f) => !f.mark)
+      .map((f) => f.text)
+      .join(''),
     notes: page.footnotes?.notes.map((band) => `${band.id}:${band.lines.length}`) ?? [],
   }));
 
@@ -62,7 +67,10 @@ describe('notes at the foot of the page', () => {
   it('reads the notes, and numbers them in the order of their references', () => {
     const doc = open(p('a', ref(5)) + p('b', ref(2)), note(2, ' second') + note(5, ' first'));
     expect(doc.footnotes?.map((n) => n.id)).toEqual(['2', '5']);
-    expect([...footnoteNumbers(doc)]).toEqual([['5', 1], ['2', 2]]);
+    expect([...footnoteNumbers(doc)]).toEqual([
+      ['5', 1],
+      ['2', 2],
+    ]);
     const [line] = layoutDocument(doc, measurer).lines;
     // The reference shows its number, smaller and raised; it does not make the line taller.
     const mark = line.fragments.find((f) => f.mark)!;
@@ -115,7 +123,61 @@ describe('notes at the foot of the page', () => {
     expect(strFromU8(files['[Content_Types].xml'])).toContain('footnotes+xml');
     expect(strFromU8(files['word/_rels/document.xml.rels'])).toContain('/footnotes');
     const back = importDocx(exportDocx(made.doc));
-    expect([...footnoteNumbers(back)]).toEqual([['2', 1], ['1', 2]]);
+    expect([...footnoteNumbers(back)]).toEqual([
+      ['2', 1],
+      ['1', 2],
+    ]);
     expect(layoutDocument(back, measurer).pages[0].footnotes?.notes.map((n) => n.id)).toEqual(['2', '1']);
+  });
+
+  describe('numbered as their section says', () => {
+    // Twelve paragraphs of a line, each with a note and three lines before it; in two sections, the second starting a page,
+    // each running over two pages.
+    const sectioned = (sectPr: string) => {
+      // The sixth paragraph ends the first section.
+      const mark = `<w:pPr><w:sectPr>${sectPr}<w:pgSz w:w="6000" w:h="6000"/><w:pgMar w:top="1000" w:right="200" w:bottom="1000" w:left="200"/></w:sectPr></w:pPr>`;
+      const body = Array.from({ length: 12 }, (_, i) => lines(3, i * 10) + p(`linea ${i}`, ref(i + 1)).replace('<w:p>', i === 5 ? `<w:p>${mark}` : '<w:p>')).join('');
+      const notes = Array.from({ length: 12 }, (_, i) => note(i + 1, `nota ${i + 1}`)).join('');
+      return open(body, notes);
+    };
+    const shown = (doc: Doc) => layoutDocument(doc, measurer).pages.map((page) => (page.footnotes?.notes ?? []).map((n) => n.lines[0].fragments.find((f) => f.mark)?.mark?.text).join(' '));
+
+    it('in its format, from its start, the count going on or starting again, and on each page when it says so', () => {
+      const base = sectioned('');
+      expect(base.paragraphs.filter((para) => para.section)).toHaveLength(1);
+      expect([...noteLabels(base, 'footnote').values()]).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']);
+      // As measured against Word: the second section in letters from 5, the count going on: its first note, the seventh, is k.
+      const letters = setNoteNumbering(base, 'footnote', 1, { format: 'lowerLetter', start: 5 });
+      expect([...noteLabels(letters, 'footnote').values()].slice(5)).toEqual(['6', 'k', 'l', 'm', 'n', 'o', 'p']);
+      expect([...noteLabels(setNoteNumbering(base, 'footnote', 1, { restart: 'section' }), 'footnote').values()].slice(5)).toEqual(['6', '1', '2', '3', '4', '5', '6']);
+      // Again on each page: the layout knows the pages, and the notes at the feet of them show it.
+      const paged = setNoteNumbering(setNoteNumbering(base, 'footnote', 0, { restart: 'page' }), 'footnote', 1, { restart: 'page' });
+      expect(shown(base).filter(Boolean)).toEqual(['1 2 3', '4 5 6', '7 8 9', '10 11 12']);
+      expect(shown(paged).filter(Boolean)).toEqual(['1 2 3', '1 2 3', '1 2 3', '1 2 3']);
+    });
+
+    it('are read from the sections and written back, and the settings say nothing of them, as in Word', () => {
+      const doc = sectioned('<w:footnotePr><w:numFmt w:val="upperRoman"/><w:numStart w:val="3"/><w:numRestart w:val="eachPage"/></w:footnotePr>');
+      const first = doc.paragraphs.find((para) => para.section)!.section!;
+      expect(first.footnoteNumbering).toEqual({ format: 'upperRoman', start: 3, restart: 'page' });
+      expect(doc.footnoteNumbering).toBeUndefined();
+      const again = importDocx(exportDocx(setNoteNumbering(doc, 'footnote', 1, { format: 'lowerLetter' })));
+      expect(again.paragraphs.find((para) => para.section)!.section!.footnoteNumbering).toEqual({ format: 'upperRoman', start: 3, restart: 'page' });
+      expect(again.footnoteNumbering).toEqual({ format: 'lowerLetter' });
+    });
+  });
+
+  it('keep the last line of a paragraph and the space below it clear of the notes, all of it, as Word does', () => {
+    // Lines of 10 at 1.5 spacing, 6 below each paragraph: at the foot of the page the 5 under the text and the 6 may run past it,
+    // over notes they may not.
+    const spaced = (n: number, extra = '') =>
+      Array.from({ length: n }, (_, i) => p(`linea ${i}`, i === n - 1 ? extra : '').replace('<w:p>', '<w:p><w:pPr><w:spacing w:after="120" w:line="360" w:lineRule="auto"/></w:pPr>')).join('');
+    // Nine paragraphs of 21 each are 189 of the 200; the tenth, of 15 and its 6, with a note of 10 under a separator of 10, does not fit.
+    const doc = open(spaced(9) + spaced(1, ref(1)), note(1, 'nota'));
+    const [first, second] = layoutDocument(doc, measurer).pages;
+    expect(first.lines).toHaveLength(9);
+    expect(second.footnotes?.notes).toHaveLength(1);
+    // Without a note, its text fits at the foot of the page.
+    expect(layoutDocument(open(spaced(10), ''), measurer).pages[0].lines).toHaveLength(10);
   });
 });

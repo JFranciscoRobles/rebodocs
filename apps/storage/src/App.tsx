@@ -1,50 +1,50 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { type DocsHandle, DocsEditor, type Versions } from '@rebodocs/react'
-import { type BucketFile, type MadePdf, listFiles, listVersions, makePdf, readFile, readUrl, saveVersion, variablesOf, writeFile } from './api'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type DocsHandle, DocsEditor, type Versions } from '@rebodocs/react';
+import { type BucketFile, type MadePdf, listFiles, listVersions, makePdf, readFile, readUrl, saveVersion, variablesOf, writeFile } from './api';
 
-const isDocx = (key: string) => /\.docx$/i.test(key)
-const sizeOf = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`)
-const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+const isDocx = (key: string) => /\.docx$/i.test(key);
+const sizeOf = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /** The document in the editor: its place in the bucket, and what it had when it was opened; none for a new one. */
 interface Open {
-  key: string
-  docx?: Uint8Array
+  key: string;
+  docx?: Uint8Array;
 }
 
 /** Asks for the values of a template, and has the server make the PDF with them. */
 function PdfDialog({ file, onDone, onClose }: { file: string; onDone: () => void; onClose: () => void }) {
-  const [names, setNames] = useState<string[]>()
-  const [values, setValues] = useState<Record<string, string>>({})
-  const [working, setWorking] = useState(false)
-  const [made, setMade] = useState<MadePdf>()
-  const [error, setError] = useState('')
+  const [names, setNames] = useState<string[]>();
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [working, setWorking] = useState(false);
+  const [made, setMade] = useState<MadePdf>();
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    variablesOf(file).then(setNames, (problem) => setError(messageOf(problem)))
-  }, [file])
+    variablesOf(file).then(setNames, (problem) => setError(messageOf(problem)));
+  }, [file]);
 
   async function make() {
-    setWorking(true)
-    setError('')
+    setWorking(true);
+    setError('');
     try {
-      setMade(await makePdf(file, values))
-      onDone()
+      setMade(await makePdf(file, values));
+      onDone();
     } catch (problem) {
-      setError(messageOf(problem))
+      setError(messageOf(problem));
     }
-    setWorking(false)
+    setWorking(false);
   }
 
-  const missing = Object.entries(made?.missingFonts ?? {})
+  const missing = Object.entries(made?.missingFonts ?? {});
   return (
     <div className="scrim" onClick={onClose}>
       <form
         className="dialog"
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
-          e.preventDefault()
-          void make()
+          e.preventDefault();
+          void make();
         }}
       >
         <h2>A PDF made on the server</h2>
@@ -62,52 +62,59 @@ function PdfDialog({ file, onDone, onClose }: { file: string; onDone: () => void
         {error && <p className="bad">{error}</p>}
         {made && (
           <p className="good">
-            <a href={made.url} target="_blank" rel="noreferrer">{made.key}</a> is in the bucket: {made.pages} {made.pages === 1 ? 'page' : 'pages'}.
+            <a href={made.url} target="_blank" rel="noreferrer">
+              {made.key}
+            </a>{' '}
+            is in the bucket: {made.pages} {made.pages === 1 ? 'page' : 'pages'}.
             {missing.length > 0 && ` The server has no font for ${missing.map(([family, used]) => `${family} (it used ${used})`).join(', ')}, so lines may break elsewhere.`}
           </p>
         )}
         <div className="row">
-          <button type="button" onClick={onClose}>Close</button>
-          <button className="primary" disabled={!names || working}>{working ? 'Making it…' : 'Make the PDF'}</button>
+          <button type="button" onClick={onClose}>
+            Close
+          </button>
+          <button className="primary" disabled={!names || working}>
+            {working ? 'Making it…' : 'Make the PDF'}
+          </button>
         </div>
       </form>
     </div>
-  )
+  );
 }
 
 export function App() {
-  const [files, setFiles] = useState<BucketFile[]>()
-  const [open, setOpen] = useState<Open>()
-  const [status, setStatus] = useState<{ text: string; bad?: boolean }>({ text: '' })
-  const [pdf, setPdf] = useState(false)
-  const handle = useRef<DocsHandle | undefined>(undefined)
-  const say = (text: string) => setStatus({ text })
-  const fail = (problem: unknown) => setStatus({ text: messageOf(problem), bad: true })
+  const [files, setFiles] = useState<BucketFile[]>();
+  const [open, setOpen] = useState<Open>();
+  const [status, setStatus] = useState<{ text: string; bad?: boolean }>({ text: '' });
+  const [pdf, setPdf] = useState(false);
+  const handle = useRef<DocsHandle | undefined>(undefined);
+  const say = (text: string) => setStatus({ text });
+  const fail = (problem: unknown) => setStatus({ text: messageOf(problem), bad: true });
 
-  const refresh = useCallback(() => listFiles().then(setFiles, fail), [])
+  const refresh = useCallback(() => listFiles().then(setFiles, fail), []);
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    void refresh();
+  }, [refresh]);
 
   async function show(file: BucketFile) {
     try {
       // A PDF is for reading: the browser opens it from the bucket, with an address good for a few minutes.
-      if (!isDocx(file.key)) return void window.open(await readUrl(file.key), '_blank', 'noopener')
-      say(`Opening ${file.key}…`)
-      setOpen({ key: file.key, docx: await readFile(file.key) })
-      say('')
+      if (!isDocx(file.key)) return void window.open(await readUrl(file.key), '_blank', 'noopener');
+      say(`Opening ${file.key}…`);
+      setOpen({ key: file.key, docx: await readFile(file.key) });
+      say('');
     } catch (problem) {
-      fail(problem)
+      fail(problem);
     }
   }
 
   function create() {
-    const name = window.prompt('A name for the new document', 'untitled')?.trim()
-    if (!name) return
-    const key = isDocx(name) ? name : `${name}.docx`
-    if (files?.some((file) => file.key === key) && !window.confirm(`${key} is in the bucket already. Saving will replace it.`)) return
-    setOpen({ key })
-    say(`${key} goes to the bucket when you save it.`)
+    const name = window.prompt('A name for the new document', 'untitled')?.trim();
+    if (!name) return;
+    const key = isDocx(name) ? name : `${name}.docx`;
+    if (files?.some((file) => file.key === key) && !window.confirm(`${key} is in the bucket already. Saving will replace it.`)) return;
+    setOpen({ key });
+    say(`${key} goes to the bucket when you save it.`);
   }
 
   // Each save keeps a version too, beside the document: the panel lists them, compares them and goes back to one.
@@ -119,37 +126,41 @@ export function App() {
         save: (docx, meta) => saveVersion(open.key, docx, meta),
       },
     [open?.key],
-  )
+  );
 
   async function save(docx: Uint8Array) {
-    if (!open) return
+    if (!open) return;
     try {
-      say(`Saving ${open.key}…`)
-      await writeFile(open.key, docx)
+      say(`Saving ${open.key}…`);
+      await writeFile(open.key, docx);
     } catch (problem) {
       // Thrown back: the editor says it could not be saved, and the document stays unsaved.
-      say('')
-      throw problem
+      say('');
+      throw problem;
     }
     // The document is in the bucket now, whatever happens to its version: said apart.
     try {
       // Signed with the name the person gives their notes, when they gave one.
-      await saveVersion(open.key, docx, { author: handle.current?.editor.author || undefined })
-      say(`${open.key} saved, ${sizeOf(docx.length)}, and kept as a version.`)
+      await saveVersion(open.key, docx, { author: handle.current?.editor.author || undefined });
+      say(`${open.key} saved, ${sizeOf(docx.length)}, and kept as a version.`);
     } catch (problem) {
-      fail(new Error(`${open.key} is saved, but its version could not be kept: ${messageOf(problem)}`))
+      fail(new Error(`${open.key} is saved, but its version could not be kept: ${messageOf(problem)}`));
     }
-    void refresh()
+    void refresh();
   }
 
-  const stored = !!open && !!files?.some((file) => file.key === open.key)
+  const stored = !!open && !!files?.some((file) => file.key === open.key);
   return (
     <div className="app">
       <aside className="files">
         <header>
           <strong>The bucket</strong>
-          <button onClick={() => void refresh()} title="Read the list again">↻</button>
-          <button className="primary" onClick={create}>New</button>
+          <button onClick={() => void refresh()} title="Read the list again">
+            ↻
+          </button>
+          <button className="primary" onClick={create}>
+            New
+          </button>
         </header>
         {!files && !status.bad && <p className="quiet">Reading the bucket…</p>}
         {files?.length === 0 && (
@@ -181,7 +192,17 @@ export function App() {
         <div className="editor">
           {open ? (
             // Made again for another document: the key is its place in the bucket.
-            <DocsEditor key={open.key} className="fill" docx={open.docx} name={open.key.split('/').pop()} locale="en" versions={versions} onSave={(docx) => save(docx)} onReady={(docs) => (handle.current = docs)} onError={(message) => fail(new Error(message))} />
+            <DocsEditor
+              key={open.key}
+              className="fill"
+              docx={open.docx}
+              name={open.key.split('/').pop()}
+              locale="en"
+              versions={versions}
+              onSave={(docx) => save(docx)}
+              onReady={(docs) => (handle.current = docs)}
+              onError={(message) => fail(new Error(message))}
+            />
           ) : (
             <p className="empty">Nothing open.</p>
           )}
@@ -189,5 +210,5 @@ export function App() {
       </main>
       {pdf && open && <PdfDialog file={open.key} onDone={() => void refresh()} onClose={() => setPdf(false)} />}
     </div>
-  )
+  );
 }

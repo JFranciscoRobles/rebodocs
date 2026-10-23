@@ -64,7 +64,7 @@ function flattenDefinitions(main: Element): void {
 }
 function pairs(nodes: Element[]): Element[][] {
   const out: Element[][] = [];
-  for (const node of nodes) (node.nodeName === 'DT' || !out.length ? out.push([node]) : out[out.length - 1].push(node));
+  for (const node of nodes) node.nodeName === 'DT' || !out.length ? out.push([node]) : out[out.length - 1].push(node);
   return out;
 }
 const text = (node: Element) => node.textContent?.trim() ?? '';
@@ -93,7 +93,10 @@ turndown.addRule('listItem', {
   replacement: (content, node) => {
     const parent = node.parentNode as HTMLElement;
     const marker = parent.nodeName === 'OL' ? `${Array.prototype.indexOf.call(parent.children, node) + 1}. ` : '- ';
-    const body = content.replace(/^\n+/, '').replace(/\n+$/, '\n').replace(/\n/gm, `\n${' '.repeat(marker.length)}`);
+    const body = content
+      .replace(/^\n+/, '')
+      .replace(/\n+$/, '\n')
+      .replace(/\n/gm, `\n${' '.repeat(marker.length)}`);
     return marker + body + (node.nextSibling && !/\n$/.test(body) ? '\n' : '');
   },
 });

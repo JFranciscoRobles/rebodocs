@@ -1,6 +1,6 @@
 import { zlibSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type FontFile, FontMeasurer, createDoc, decodePng, jpegSize, layoutDocument, renderPdf } from '../src';
+import { type FontFile, FontMeasurer, createDoc, decodePng, jpegSize, layoutDocument, renderPdf } from '../src/internal';
 
 /** A font of two widths: a space and every letter half an em, "W" a whole one. Enough to lay text out with. */
 function font(family: string, bold = false): FontFile {
@@ -30,13 +30,16 @@ describe('laying out without a browser', () => {
     expect(measurer.width('abc', { ...spec, bold: true })).toBe(18);
     // A letter the font lacks takes the room of a space.
     expect(measurer.width('☃', spec)).toBe(5);
-    // Half the line gap goes above the text and half below.
-    expect(measurer.metrics(spec)).toEqual({ ascent: 8.5, descent: 2.5 });
+    // Half the line gap goes above the text and half below; the whole of it is said too, for a line of several fonts.
+    expect(measurer.metrics(spec)).toEqual({ ascent: 8.5, descent: 2.5, lineGap: 1 });
     // A style the family lacks is set in its plain font; a family that is missing, in one of its kind.
     expect(measurer.fontFor({ family: 'Arial', bold: true, italic: true })!.bold).toBe(true);
     expect(measurer.fontFor({ family: 'Georgia', bold: false, italic: false })!.family).toBe('Times New Roman');
     expect(measurer.fontFor({ family: 'Calibri', bold: false, italic: false })!.family).toBe('Arial');
-    expect([...measurer.missing]).toEqual([['Georgia', 'Times New Roman'], ['Calibri', 'Arial']]);
+    expect([...measurer.missing]).toEqual([
+      ['Georgia', 'Times New Roman'],
+      ['Calibri', 'Arial'],
+    ]);
   });
 
   it('lays a document out and writes its PDF with those fonts', () => {
@@ -55,12 +58,21 @@ describe('reading pictures without a browser', () => {
     const body = Uint8Array.from(data);
     const out = new Uint8Array(12 + body.length);
     new DataView(out.buffer).setUint32(0, body.length);
-    out.set(Array.from(tag, (c) => c.charCodeAt(0)), 4);
+    out.set(
+      Array.from(tag, (c) => c.charCodeAt(0)),
+      4,
+    );
     out.set(body, 8);
     return out;
   };
   const png = (width: number, height: number, type: number, interlace: number, rows: number[], extra: Uint8Array[] = []) => {
-    const parts = [Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', [0, 0, 0, width, 0, 0, 0, height, 8, type, 0, 0, interlace]), ...extra, chunk('IDAT', zlibSync(Uint8Array.from(rows))), chunk('IEND', [])];
+    const parts = [
+      Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk('IHDR', [0, 0, 0, width, 0, 0, 0, height, 8, type, 0, 0, interlace]),
+      ...extra,
+      chunk('IDAT', zlibSync(Uint8Array.from(rows))),
+      chunk('IEND', []),
+    ];
     const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
     let at = 0;
     for (const p of parts) {

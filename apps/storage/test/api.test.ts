@@ -27,7 +27,9 @@ const s3 = createServer(async (request, response) => {
     response.writeHead(200).end();
   } else if (!key && request.method === 'GET') {
     const prefix = url.searchParams.get('prefix') ?? '';
-    const contents = [...objects].filter(([name]) => name.startsWith(prefix)).map(([name, file]) => `<Contents><Key>${name}</Key><Size>${file.body.length}</Size><LastModified>${file.at.toISOString()}</LastModified></Contents>`);
+    const contents = [...objects]
+      .filter(([name]) => name.startsWith(prefix))
+      .map(([name, file]) => `<Contents><Key>${name}</Key><Size>${file.body.length}</Size><LastModified>${file.at.toISOString()}</LastModified></Contents>`);
     xml(200, `<ListBucketResult><Name>bucket</Name><IsTruncated>false</IsTruncated>${contents.join('')}</ListBucketResult>`);
   } else if (request.method === 'DELETE') {
     objects.delete(key);

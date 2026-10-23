@@ -16,7 +16,10 @@ const PIECES: { call: string; text: string }[] = [
   { call: 'createStatusBar(el, editor, options)', text: 'Pages, words, the language of the text, the view, the zoom; who is on the document and the assistant, when given.' },
   { call: 'createBubble(editor)', text: 'The bar beside the selection, with what can be done to it; on a phone, copy and paste too.' },
   { call: 'createFindBar(editor)', text: 'Find and replace, opened with open() or ⌘F (Ctrl+F).' },
-  { call: 'createSidebar(editor, options)', text: "The document menu: open, save, export, page setup, letterhead, the language of the interface. A card from the button of the menu, or with variant: 'screen' a screen of its own. With within: an element, it stays inside that box instead of the whole window." },
+  {
+    call: 'createSidebar(editor, options)',
+    text: "The document menu: open, save, export, page setup, letterhead, the language of the interface. A card from the button of the menu, or with variant: 'screen' a screen of its own. With within: an element, it stays inside that box instead of the whole window.",
+  },
   { call: 'createFocusMode(editor, options)', text: 'The pages alone, full screen, with ⌘⇧. (Ctrl+Shift+.); Escape leaves.' },
   { call: 'createResponsive(shell, editor)', text: 'Narrow windows and the keyboard of a phone. See Phones and touch.' },
 ];
@@ -28,7 +31,7 @@ const MORE: { call: string; text: string }[] = [
   { call: 'setAuthor(editor, name) · recallAuthor(editor)', text: 'The name notes and changes are signed with, kept for the next visit.' },
   { call: 'addFont(source) · setLocale(code) · addLocale(code, texts)', text: 'Fonts of your own, and the language of the interface. See Fonts and Languages.' },
   { call: 'createSpellChecker({ dictionaries }) → editor.spellChecker', text: 'The red wave under words spelled wrong, with Hunspell dictionaries you give, read in a worker. See Spelling.' },
-  { call: "applyTheme(element, theme) · editor.theme", text: "The dark theme, or 'auto' for the system's: on the element around the pieces, and on the editor for what it shows outside it." },
+  { call: 'applyTheme(element, theme) · editor.theme', text: "The dark theme, or 'auto' for the system's: on the element around the pieces, and on the editor for what it shows outside it." },
 ];
 
 /** The options that wire one piece to another. */
@@ -36,7 +39,10 @@ const WIRES: { option: string; text: string }[] = [
   { option: 'toolbar onMenu: menu.toggle', text: 'The button at its start opens the document menu.' },
   { option: 'toolbar onPanel: panel.toggle', text: 'The button that shows and hides the side panel.' },
   { option: 'toolbar onFind: () => find.open()', text: 'The search button at its end.' },
-  { option: "toolbar onInsertLink · onInsertNote · onInsertVariable", text: "Insert → Link, Note and Variable ask in the selection bar: () => bubble.ask('link'). Without them they ask in a prompt of the browser." },
+  {
+    option: 'toolbar onInsertLink · onInsertNote · onInsertVariable',
+    text: "Insert → Link, Note and Variable ask in the selection bar: () => bubble.ask('link'). Without them they ask in a prompt of the browser.",
+  },
   { option: "editor.onLinkKey = () => bubble.ask('link')", text: '⌘K (Ctrl+K) asks for the address there too; without it, the key is left to the browser.' },
   { option: 'status focus: { on: () => focus.on, toggle: focus.toggle }', text: 'The full-screen button at the end of the status bar.' },
 ];
@@ -111,7 +117,11 @@ editor.setZoom(1.25);`,
   const rows = (list: { call?: string; option?: string; text: string }[], width = 300) => (
     <dl className="m-0 mt-6 max-w-[920px] rounded-2xl border border-border px-5">
       {list.map((row) => (
-        <div key={row.call ?? row.option} className="grid gap-x-6 gap-y-1 border-t border-[#f0eee9] py-3 first:border-t-0" style={{ gridTemplateColumns: `repeat(auto-fit,minmax(min(100%,${width}px),1fr))` }}>
+        <div
+          key={row.call ?? row.option}
+          className="grid gap-x-6 gap-y-1 border-t border-[#f0eee9] py-3 first:border-t-0"
+          style={{ gridTemplateColumns: `repeat(auto-fit,minmax(min(100%,${width}px),1fr))` }}
+        >
           <dt className="font-code text-[13.5px] font-semibold text-ink [overflow-wrap:anywhere]">{row.call ?? row.option}</dt>
           <dd className="m-0 text-[15px] leading-normal text-ink-soft">{row.text}</dd>
         </div>
@@ -134,8 +144,8 @@ editor.setZoom(1.25);`,
 
       <section aria-labelledby="try" className="mt-16">
         <SectionHead id="try" badge="Live" color="green" title="Put it together">
-          One <code className={mono}>Editor</code>, made once, and the pieces around it: each choice destroys them all and makes the chosen ones again, wired to each other. The document and its history
-          stay.
+          One <code className={mono}>Editor</code>, made once, and the pieces around it: each choice destroys them all and makes the chosen ones again, wired to each other. The document and its
+          history stay.
         </SectionHead>
         <LazyAssembleDemo />
       </section>

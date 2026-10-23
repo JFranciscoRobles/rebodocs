@@ -43,7 +43,8 @@ export default function EngineDemo() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const pill = (active: boolean) => `cursor-pointer rounded-full border px-3 py-1 font-code text-[12.5px] font-semibold ${active ? `border-transparent ${PASTEL_CLASS.blue}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
+  const pill = (active: boolean) =>
+    `cursor-pointer rounded-full border px-3 py-1 font-code text-[12.5px] font-semibold ${active ? `border-transparent ${PASTEL_CLASS.blue}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
   const code = `fillVariables(doc, { ${Object.entries(values)
     .filter(([, value]) => value.trim())
     .map(([name, value]) => `${name}: '${value}'`)
@@ -80,7 +81,13 @@ export default function EngineDemo() {
         <div className="min-w-0">
           <p className={CAPTION}>What it wrote</p>
           <div className="mt-2.5 rounded-xl border border-border bg-white px-4 py-3 text-[14px] leading-[1.6] text-ink-soft">
-            {filled ? filled.lines.map((line, i) => <p key={i} className={`m-0 ${i ? 'mt-1.5' : 'font-semibold text-ink'}`}>{line}</p>) : 'Reading the template…'}
+            {filled
+              ? filled.lines.map((line, i) => (
+                  <p key={i} className={`m-0 ${i ? 'mt-1.5' : 'font-semibold text-ink'}`}>
+                    {line}
+                  </p>
+                ))
+              : 'Reading the template…'}
           </div>
           <pre tabIndex={0} aria-label="The call" className="m-0 mt-3 overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3 font-code text-[12.5px] leading-[1.65] text-[#edece8]">
             {code}
@@ -95,7 +102,12 @@ export default function EngineDemo() {
               ['left as they are', filled ? filled.left.join(', ') || 'none' : '—', filled?.left.length ? 'warn' : 'good'],
             ]}
           />
-          <button type="button" disabled={!filled} onClick={download} className="cursor-pointer self-start rounded-lg border border-border bg-white px-3 py-1.5 text-[13px] font-semibold text-ink-soft hover:bg-hover disabled:opacity-50">
+          <button
+            type="button"
+            disabled={!filled}
+            onClick={download}
+            className="cursor-pointer self-start rounded-lg border border-border bg-white px-3 py-1.5 text-[13px] font-semibold text-ink-soft hover:bg-hover disabled:opacity-50"
+          >
             Download out.docx
           </button>
         </div>

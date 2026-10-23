@@ -23,7 +23,11 @@
   height: 100%;
   background: var(--hd-canvas);
   color: var(--hd-text);
-  font: 13px/1.35 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+  font:
+    13px / 1.35 "Source Sans 3",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
   color-scheme: dark;
 }
 
@@ -51,7 +55,7 @@
 }
 
 .hd select,
-.hd input:not([type='color']):not([type='file']) {
+.hd input:not([type="color"]):not([type="file"]) {
   box-sizing: border-box;
   height: 32px;
   min-width: 0;
@@ -61,7 +65,7 @@
   background: var(--hd-field);
 }
 
-.hd input[type='color'] {
+.hd input[type="color"] {
   width: 40px;
   height: 32px;
   padding: 2px;
@@ -547,7 +551,7 @@
   box-shadow: inset 0 2px 0 var(--hd-accent);
 }
 
-.hd-outline-list button[draggable='true'] {
+.hd-outline-list button[draggable="true"] {
   cursor: grab;
 }
 

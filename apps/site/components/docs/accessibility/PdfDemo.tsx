@@ -65,8 +65,8 @@ function readTags(pdf: Uint8Array): Tag[] {
       else if (op[0] === 'EMC' || op[0] === '/Artifact BMC') mcid = undefined;
       else if (op[2]) font = fonts.get(op[2]);
       else if (op[3] !== undefined && mcid) {
-        const codes = font ? op[3].match(/.{4}/g) ?? [] : op[3].match(/.{2}/g) ?? [];
-        pieces.set(mcid, (pieces.get(mcid) ?? '') + codes.map((code) => (font ? font.get(code) ?? '' : String.fromCharCode(parseInt(code, 16)))).join(''));
+        const codes = font ? (op[3].match(/.{4}/g) ?? []) : (op[3].match(/.{2}/g) ?? []);
+        pieces.set(mcid, (pieces.get(mcid) ?? '') + codes.map((code) => (font ? (font.get(code) ?? '') : String.fromCharCode(parseInt(code, 16)))).join(''));
       }
     }
   }
@@ -103,9 +103,9 @@ export default function PdfDemo() {
 
   useEffect(() => {
     void lease().then(setDoc);
-    void Promise.all(
-      ['CourierPrime-Regular', 'CourierPrime-Bold', 'CourierPrime-Italic'].map(async (name) => readFont(new Uint8Array(await (await fetch(`/fonts/${name}.ttf`)).arrayBuffer()))),
-    ).then((read) => setFonts(read.filter((font): font is FontFile => !!font)));
+    void Promise.all(['CourierPrime-Regular', 'CourierPrime-Bold', 'CourierPrime-Italic'].map(async (name) => readFont(new Uint8Array(await (await fetch(`/fonts/${name}.ttf`)).arrayBuffer())))).then(
+      (read) => setFonts(read.filter((font): font is FontFile => !!font)),
+    );
   }, []);
 
   const made = useMemo(() => {
@@ -115,7 +115,13 @@ export default function PdfDemo() {
     const shown = described ? doc : setAltText(doc, { para: picture, offset: 0 }, '');
     const { pdf } = renderPdf(shown, fonts, 'Lease of the flat', language || undefined);
     const text = latin1(pdf);
-    return { pdf, tags: readTags(pdf), universal: text.includes('<pdfuaid:part>1'), bookmarks: (text.match(/\/Title <FEFF[0-9A-F]*> \/Parent/g) ?? []).length, lang: /\/Lang \(([^)]*)\)/.exec(text)?.[1] };
+    return {
+      pdf,
+      tags: readTags(pdf),
+      universal: text.includes('<pdfuaid:part>1'),
+      bookmarks: (text.match(/\/Title <FEFF[0-9A-F]*> \/Parent/g) ?? []).length,
+      lang: /\/Lang \(([^)]*)\)/.exec(text)?.[1],
+    };
   }, [doc, fonts, language, described]);
 
   const [url, setUrl] = useState<string>();
@@ -126,7 +132,8 @@ export default function PdfDemo() {
     return () => URL.revokeObjectURL(link);
   }, [made]);
 
-  const pill = (on: boolean) => `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
+  const pill = (on: boolean) =>
+    `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
   const why = !made ? '' : made.universal ? 'said' : !made.lang ? 'not said: no language' : !described ? 'not said: a picture has no description' : 'not said';
 
   return (

@@ -17,9 +17,15 @@ export function Toolbar() {
         ))}
       </select>
       <span className="mx-1 h-5 w-px bg-white/20" />
-      <button type="button" aria-pressed={state.bold} className={`${pill(state.bold)} font-bold`} onClick={() => commands.toggleMark('bold')}>B</button>
-      <button type="button" aria-pressed={state.italic} className={`${pill(state.italic)} italic`} onClick={() => commands.toggleMark('italic')}>I</button>
-      <button type="button" aria-pressed={state.underline} className={`${pill(state.underline)} underline`} onClick={() => commands.toggleMark('underline')}>U</button>
+      <button type="button" aria-pressed={state.bold} className={`${pill(state.bold)} font-bold`} onClick={() => commands.toggleMark('bold')}>
+        B
+      </button>
+      <button type="button" aria-pressed={state.italic} className={`${pill(state.italic)} italic`} onClick={() => commands.toggleMark('italic')}>
+        I
+      </button>
+      <button type="button" aria-pressed={state.underline} className={`${pill(state.underline)} underline`} onClick={() => commands.toggleMark('underline')}>
+        U
+      </button>
       <span className="mx-1 h-5 w-px bg-white/20" />
       {(['left', 'center', 'right', 'justify'] as const).map((align) => (
         <button key={align} type="button" aria-pressed={state.align === align} className={pill(state.align === align)} onClick={() => commands.setParagraphProps({ align })}>

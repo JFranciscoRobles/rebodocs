@@ -21,16 +21,14 @@ import {
   textBoxPart,
   trackEdit,
   withStory,
-} from '../src';
+} from '../src/internal';
 
 const para = (text: string): Paragraph => ({ props: {}, runs: [{ text, props: {} }] });
 const doc = (...texts: string[]): Doc => createDoc(texts.map(para));
 /** The text of each paragraph, with what was taken out as [-…-] and what was put in as {+…+}. */
 const shown = (d: Doc) =>
   d.paragraphs.map((p) =>
-    p.runs
-      .map((run) => (run.props.color === REMOVED_COLOR && run.props.strike ? `[-${run.text}-]` : run.props.color === ADDED_COLOR && run.props.underline ? `{+${run.text}+}` : run.text))
-      .join(''),
+    p.runs.map((run) => (run.props.color === REMOVED_COLOR && run.props.strike ? `[-${run.text}-]` : run.props.color === ADDED_COLOR && run.props.underline ? `{+${run.text}+}` : run.text)).join(''),
   );
 const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
 
@@ -102,7 +100,13 @@ describe('what else a comparison takes in', () => {
     const range = { from: { para: 0, offset: 0 }, to: { para: 0, offset: 3 } };
     const one = addNote(doc('Uno dos'), range, { text: 'Revisar el monto', author: 'Ana', date: '2026-10-01T10:00:00Z' }).doc;
     const both = addNote(one, range, { text: 'Falta la firma', author: 'Luis', date: '2026-10-02T10:00:00Z' }).doc;
-    const later = { ...both, notes: [{ ...both.notes![0], text: 'Revisar el monto final' }, { id: '9', author: 'Eva', date: '2026-10-03T10:00:00Z', text: 'De acuerdo' }] };
+    const later = {
+      ...both,
+      notes: [
+        { ...both.notes![0], text: 'Revisar el monto final' },
+        { id: '9', author: 'Eva', date: '2026-10-03T10:00:00Z', text: 'De acuerdo' },
+      ],
+    };
     const { notes, changes } = compareDocs(both, later);
     expect(changes).toEqual([]);
     expect(notes.map((n) => [n.kind, n.author, describeChange(n)])).toEqual([

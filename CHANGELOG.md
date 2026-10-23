@@ -4,6 +4,277 @@ Every package of Rebodocs is released at the same version. Before 1.0, a
 minor version (0.x.0) may change the API; such changes are listed under
 **Changed** with what to do about them.
 
+## 0.10.0
+
+### Added
+
+- **Endnotes.** Notes at the end of the document, as Word's: read from and
+  written to `endnotes.xml`, numbered i, ii, iii (or as the file says, in
+  `w:endnotePr`), set out after the last line of the text under a short line,
+  and on pages of their own after it when they do not fit, under a line as
+  wide as the text. Or at the end of each section, when the file says so
+  (`w:pos="sectEnd"`, `Doc.endnotesAt`): what follows on the page goes on
+  under them, and a section that says `w:noEndnote` (`Section.noEndnotes`)
+  leaves its notes to the next. `noteRules(page)` gives every line over notes
+  on a page, of which there may be several. In the editor, the page menu sets
+  where they go and how the section numbers them (`editor.setEndnotesAt()`,
+  `editor.setNoteNumbering('endnote', …)`). Measured against Word, the three
+  cases of where they go lay out as Word's, line for line. In the editor: *Insert ▸ Endnote* (⌘⌥D / Ctrl+Alt+D), a click on
+  one to write in it, `editor.insertEndnote()`, `editor.endnotes` and the area
+  `'endnote'`; in the core, `insertEndnote`; for an assistant,
+  `insert_endnote`, the area `"endnote"` with `area_endnote`, and `[^i]` in
+  `read_document`. They are compared between versions, tracked, tagged in the
+  PDF, and edited together in a room.
+
+- **Notes numbered as each section says**, at the foot of the page and at the
+  end: in `w:footnotePr` and `w:endnotePr` of the section
+  (`Section.footnoteNumbering`, `Section.endnoteNumbering`, and those of
+  `Doc` for the last), the format, the number the count starts at, and
+  whether it starts again in the section or, at the foot of the page, on each
+  page. As Word does, measured with twelve files that differ in it: what a
+  section does not say it does not take from the one before, the count goes
+  on through the document moved on by its start (from 3, the third note shows
+  5), and what the settings of the document say of it is not read. Notes
+  that start again on each page are numbered once the pages are known.
+  `noteNumberingOf` and `setNoteNumbering` in the core,
+  `editor.noteNumbering()` and `editor.setNoteNumbering()`, and in React,
+  `useDocsPage()`'s `endnotesAt`, `noteNumbering` and their setters, which the
+  interface of the demo built on the hooks uses.
+
+- **Pasting a table.** A table copied from Word, Google Docs or a web page
+  comes in as a table: its cells and the paragraphs in each, cells merged
+  across rows and columns, the widths of its columns fitted to the page and
+  its heading rows. One of a single cell, or one a page is laid out with
+  (`role="presentation"`), comes as its text; a table inside a cell comes as
+  lines, cells apart by a tab, as a table in a table is not modelled. A table
+  copied from the editor goes to Word and Google Docs as a table, and comes
+  back whole. `Clip.tables` and `ClipParagraph.cell` in the core. Measured
+  with what Word for Mac puts on the clipboard for sixteen tables of a file
+  of its own: the colour of each cell, the line of each side as Word has it
+  (not the thicker one it shows a browser), where its text sits, the height
+  of each row, white text, and the places Word keeps for a row set further
+  in. The colours a table style gives its bands Word does not put in the HTML
+  (it writes white), and they do not come. Copied from the editor, a table
+  takes its colours, lines and heights to Word too (`ClipTable.cells`,
+  `ClipTable.heights`).
+- **Documents to measure against Word, in the repository.** `test-documents/`
+  keeps 47 documents made up for it (contracts, floating pictures, a
+  brochure, tables in every way Word makes them, and one probe for each rule
+  of Word measured), each with the PDF Word for Mac made of it.
+  `npm run word-check` lays them all out in one run and fails when one has
+  fewer lines where Word puts them than `test-documents/expected.json` says;
+  no Word is needed. `word-compare` takes several documents or a folder, and
+  never closes a Word that was already open.
+- `npm run contract-cases`: six contracts made to measure the layout against
+  Word where it was weakest (justified text, lists, long tables, sections,
+  columns, text kept together), in Times New Roman, Georgia, Verdana and
+  Arial, and three of endnotes. All but one lay out exactly as in Word.
+- `npm run bench`: how long the engine takes on a long document, to compare
+  before and after a change. `npm run coverage`: what the tests reach.
+- Damaged files: a test reads thousands of DOCX broken at random (an element
+  or an attribute taken out, a value no program writes, a part cut short) and
+  asks that each be read or refused with a reason, never failing inside the
+  engine. 20,000 went through without one.
+
+- **`edit_document`**: several changes at once (replace, rewrite, insert,
+  delete, style, list, format, link, note, page break), all or none, with
+  every paragraph number taken from the document as it was read: an assistant
+  no longer reads again after each paragraph it inserts or deletes.
+- **`read_pages`**: how a document falls on its pages, in words, and what may
+  want mending: a paragraph cut by a page, a heading left at the foot of one,
+  a page of a line or two, a table over pages, a blank page. On files and in
+  the editor (`editor.layoutOf(doc)`, `layoutOf` of `AssistantHost`).
+- **Clauses.** `move_section` moves a heading with everything under it, as
+  dragging it in the outline does. `renumber_clauses` puts in order the
+  numbers written at the start of the headings of clauses ("Primera.",
+  "CLÁUSULA 3.", "IV."), keeping how each is written, and says where the text
+  names a clause whose number changed.
+- `set_cell_text`: the text of a table cell by its table, row and cell, empty
+  or not: the way to fill a row just put in.
+- **Keeping together.** `keep_together` and `allow_split` in `edit_table`: no
+  row cut by a page, and each row kept with the next, as Word keeps a table
+  whole; `keep_lines_together` in `format_paragraphs`. A block of signatures
+  goes to the next page only when it does not fit; a page break before it
+  breaks the page even when the text above has grown shorter.
+- `undo` on the server: the last changes to a file that is open, up to 50.
+- **`assistantHandler`** in `@rebodocs/mcp/claude`: the backend of the chat
+  for servers of Request and Response (Next.js, Hono, Bun, Deno, Workers).
+- `key`, `context` and `toolSearch` on `assistantRoute` and
+  `assistantHandler`: count `perMinute` per user instead of per address,
+  tell Claude what the application knows after its instructions, and have
+  Claude search for the less used tools instead of reading all on each step.
+- **Streamable HTTP**: `rebodocs-mcp --http 7412` listens at `/mcp`, a session
+  for each client, `Authorization: Bearer` when started with `--token`.
+- A title for each tool, and `readOnlyHint`, `destructiveHint`,
+  `idempotentHint` and `openWorldHint` on all of them, the server's own
+  included: a client can let the reading ones run without asking.
+- `notifications/cancelled`: the server stops waiting for the editor and
+  does not answer the call. `--timeout` sets how long it waits (30 seconds).
+- Protocol version 2025-11-25.
+- `npm run eval:assistant`: nineteen cases through the chat and the route as
+  they ship, against the Claude API, graded on the document each leaves; with
+  `--claude-code`, through Claude Code and the MCP server, on a .docx file.
+
+- **Collaboration: rooms that stay open all day.**
+  - A room people never leave folded its changes into its file only once
+    they all left, so its log grew all day and whoever came in had to make
+    every change of it. It is now folded at the next pause once it has 1000
+    changes (`foldAfter`), with everybody still in it. Each editor loads the
+    new file and makes on it what it had not sent, under the paragraphs' new
+    ids, keeping what it can undo. It folds only when the file reads back as
+    the document it was written from.
+  - The document is given to the backend 5 seconds after the changes stop
+    (`saveAfter`, `--save-after`), and at least every 30 while they go on,
+    so a hard crash loses seconds and not half a minute.
+  - `recheckEvery` (`--recheck-every`) and `server.recheck(room)` ask
+    `/access` again whether each person may still be in. Whoever it turns
+    away is sent out (`removed`), and whoever it now lets only watch, or
+    edit, comes back as that.
+  - `onEvent` is told who comes and goes, each fold, save and removal, and
+    what goes wrong, which then no longer goes to the console.
+  - Each person may send 200 requests at once and 50 a second, and a caret
+    may weigh up to 64 KB; past that, the server answers 429 and the editor
+    tries again.
+
+- **The editor tested in a browser.** `npm run test:browser` makes an editor
+  on a page in Chrome, without a window, and gives it keys, clicks, touches,
+  the clipboard and text a keyboard composes: thirty tests of what it does
+  with them, of the pages it draws and of the files it makes.
+
+### Changed
+
+- **`packages/editor/src/editor.ts` in pieces.** It was 5,400 lines; the
+  `Editor` keeps its API and its state, in 3,000, and what it does on the
+  screen is in pieces of their own: `painter.ts` (what is drawn),
+  `pointer.ts` (the mouse and the fingers), `keys.ts` (the hidden field and
+  the clipboard), `spelling.ts` and `pdfexport.ts`. Nothing changes for
+  whoever uses it: its published types have the same members.
+- Vitest 5.0.5, for a flaw of 5.0.4 that let its server give out files such
+  as `.env`, the one the tests in a browser open.
+- **Collaboration: update the editors with the server.** An editor now sends
+  a key with everything it sends (see *Fixed*). An editor of an earlier
+  version comes into a room of this server and sees the others type, but
+  what it changes is not taken; an editor of this one works with a server of
+  before. `folderStorage` writes
+  asynchronously, in order for each room, rather than blocking the process;
+  the server's messages are in English. Without `--data`, `--memory` or
+  `--backend`, the command keeps rooms in `./rooms`, not `./salas`: move that
+  folder, or pass `--data salas`, to keep the rooms you had.
+- **Collaboration: update the server and the editors together.** A note at
+  the end is a part of its own (`endnote:<id>`) in the changes a room sends;
+  a server of an earlier version does not know it, so an editor of this one
+  writing in an endnote, in a room of a server not updated, is not kept.
+- **The API of `@rebodocs/core` is what it says it is.** It exported every
+  name of every file of the engine, 404 of them, its insides among them; it
+  now exports 231, chosen: what the documentation, the demos and the READMEs
+  use, and every type their declarations name, which a test checks. `packages/core/API.md` says
+  each as the source has it, and a test fails when the two differ, so that a
+  change of the API shows in a diff. The rest is in `@rebodocs/core/internal`,
+  for the packages of the repository, with no promise: if you used a name
+  that is no longer in `@rebodocs/core` (such as `parseXml`, `hitTest` or
+  `storyOf`), import it from there for now, and say what you use it for, so
+  that it can be made public.
+- `Tool` (of `@rebodocs/mcp`) has a `title`, and may say `idempotent`. A tool
+  of your own made to that type needs a `title`.
+
+### Fixed
+
+- **Shift+Enter made a new paragraph** instead of a new line in the same
+  one, as Word makes: the editor typed a line break with `insertText`, which
+  starts a paragraph at each line break, as a paste of several lines does.
+  It is `editor.insertLineBreak()` now, which the key uses.
+- **Collaboration: what was typed while away was lost** when the room's
+  changes were folded into its file meanwhile: everybody left, or the server
+  started again and read the document from the backend. The editor coming
+  back now tells which paragraphs of the new file are those it had by what
+  they read, takes what the others did as the change from one to the other,
+  and makes what it typed after it, as two people typing at once. A room
+  read from the backend also has an epoch of its own each time
+  (`backendStorage`), so that an editor coming back cannot take the room's
+  new changes as following from the old file.
+- **Collaboration: what was typed as someone else's change came.** An edit
+  the editor had not yet looked at when a change of someone else's arrived
+  could be sent as if made after it, without being adjusted to it. What the
+  person did is now taken first, and adjusted like the rest. The browser
+  client is now three parts: what keeps it in step with the room
+  (`sync.ts`), what looks at the editor (`mirror.ts`) and what talks to the
+  server (`session.ts`); the server's rooms are in `room.ts`, without HTTP;
+  and what both sides say to each other is typed once, in `protocol.ts`.
+- **Collaboration: someone let in only to watch could edit.** The server took
+  what was sent in the name of any client id in the room, and every id is
+  sent to everybody to draw the carets. A viewer, or anyone in the room,
+  could therefore send changes as an editor, or connect with that editor's
+  id and turn them read-only, or give them another name. Each editor is now
+  given a key of its own on coming in, and nothing is taken without it.
+- **Layout, as measured against Word.**
+  - A heading kept with the paragraph after it was left alone at the foot of
+    the page when that paragraph keeps its lines together and goes whole to
+    the next one; it now goes with it, as in Word.
+  - A paragraph that starts a page (page break before) started lower than in
+    Word: the space below the paragraph before still counts against the space
+    it asks for above it, as between two paragraphs on a page. 20 pt above
+    after 8 below starts 12 pt down, not 20.
+  - In the editor, the browser measured text a little narrow (some 0.05% of a
+    line), so a word Word sends to the next line could fit on this one. Text
+    is now measured large and scaled down, which matches the font files to a
+    hundredth of a point.
+  - Text was not kerned. Word sets the pairs of letters a font lists closer
+    (with its `kern` table, a space and the letter after it too) when the run
+    is as big as its `w:kern` or bigger, and kerns every run of a file that
+    gives no defaults for runs. The layout, the editor and the PDF now kern as
+    it does; `RunProps.kern` holds the threshold, read from and written to
+    `w:kern`. In the browser, Times New Roman is kerned but for its pairs
+    with a space, which only the PDF has.
+  - With a line spacing above single, the last line of a page went to the
+    next when the room under its text did not fit; in Word only its text has
+    to, and the rest may run past the foot. With single spacing nothing may:
+    the point and a half a line could run past the foot is gone.
+  - In the editor, the height of a line of Arial 11 came out 0.015 pt taller
+    than the font file says, which over a page sent two lines Word keeps on
+    it to the next. The browser's metrics are read larger now, to 0.002 pt.
+  - Cells that stand apart (`w:tblCellSpacing`) shared the line between two
+    rows, as touching cells do; each has its own, above and below, and the
+    table its own line round them, which takes room too and is now drawn
+    (`LayoutPage.frames`). A row of them was half a point short, which added
+    up down a table.
+  - A paragraph that ends in a column break has its end, an empty line, at the
+    top of the next column, as in Word; the column started a line high.
+  - A picture whose room reaches up into the lines of the paragraphs above it
+    has those lines set round it too, the picture staying where it was, as
+    in Word: a subtitle went below a banner, a heading beside a picture.
+  - The lines of a paragraph that go on to the next page from beside a picture
+    are broken again for the room there, as wide as the column.
+  - A file that says no version of Word is laid out as Word opens it, as one
+    of Word 2007 (`Doc.compatMode` 12): its tables line up by the text of
+    their cells, their margins past the margin of the page.
+  - The last line of a justified paragraph that ends a section runs across
+    its column, as in Word.
+  - The label of a list item is set in the formatting of its paragraph mark
+    (`Paragraph.mark`, read from the file), as in Word, not in that of the
+    text: a label of Arial made a line of Georgia taller.
+  - A line of several fonts is as tall as the most any reaches above the
+    baseline, its whole line gap included, and the most any reaches below
+    (`FontMetrics.lineGap`): a bullet of Symbol needs no measure of its own,
+    and lines of one font are as tall as before.
+  - A cell merged down and cut by the page sets its text, in the middle, at
+    the foot or on its side, in the rows of it on the page, as in Word.
+  - Over notes at the foot of the page, the last line of a paragraph needs all
+    of its line and the space below it, as in Word; it went in with a point or
+    so too little.
+  - A bullet of Symbol was measured in the font of the text it is drawn in;
+    Word makes its line as tall as a line of Symbol, 12.24 pt at 10 where one
+    of Arial is 11.5.
+  - Together: a contract of tables and columns measured before has all its
+    6 pages and 276 lines as in Word (it had 3 and 266), none more than 0.7 pt
+    from where Word puts it, and the one in Arial across two sections all its
+    lines.
+
+- `perMinute` counted every user behind a proxy as one, and kept every
+  address it had seen for as long as the server ran. The addresses not seen
+  for a minute are now forgotten; give `key` to count per user.
+- The version the server told a client was written by hand; it is now that
+  of the package.
+
 ## 0.9.1
 
 ### Added

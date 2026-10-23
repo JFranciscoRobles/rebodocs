@@ -122,7 +122,11 @@ export function DemoApp() {
       </header>
       <div id="demo-panel" role="tabpanel" aria-labelledby={`demo-tab-${tab}`} className="min-h-0 flex-1">
         {docx ? (
-          tab === 'headless' ? <HeadlessEditor docx={docx} name={name} /> : <FullEditor key={tab} docx={docx} name={name} layout={tab === 'screen' ? 'another' : 'included'} />
+          tab === 'headless' ? (
+            <HeadlessEditor docx={docx} name={name} />
+          ) : (
+            <FullEditor key={tab} docx={docx} name={name} layout={tab === 'screen' ? 'another' : 'included'} />
+          )
         ) : (
           <p className="grid h-full place-items-center text-sm text-muted">{failed ? 'The sample document could not be loaded.' : 'Opening the document…'}</p>
         )}

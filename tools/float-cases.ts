@@ -2,12 +2,12 @@
 // measure the layout against Microsoft Word's: each picture is a block of one
 // plain colour, so where Word puts it can be read off its PDF.
 //
-//   npm run float-cases                 writes fixtures/float-*.docx and our PDF of each
-//   npm run word-compare -- fixtures/float-<case>.docx --word     Word's PDF of one, and its lines against ours
+//   npm run float-cases                 writes test-documents/float-*.docx and our PDF of each
+//   npm run word-compare -- test-documents/float-<case>.docx --word     Word's PDF of one, and its lines against ours
 //   npm run float-cases -- --check      where each picture is in Word's PDF and in ours
 //
 // Needs pdftoppm (brew install poppler) for the check. The files go to
-// fixtures/, which git ignores.
+// test-documents/, with the PDF Word made of each; our own PDFs are not kept.
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -29,10 +29,10 @@ import {
   moveFloat,
   renderPdf,
   setPictureWrap,
-} from '../packages/core/src/index';
+} from '../packages/core/src/internal';
 import { fontsFor } from '../packages/mcp/src/fonts';
 
-const OUT = resolve('fixtures');
+const OUT = resolve('test-documents');
 const COLORS = { red: [230, 0, 0], green: [0, 170, 0], blue: [0, 0, 230], magenta: [220, 0, 220] } as const;
 type Color = keyof typeof COLORS;
 
@@ -114,7 +114,10 @@ const from = (axis: 'H' | 'V', base: string, placed: string) => (xml: string) =>
   xml.replace(new RegExp(`<wp:position${axis}\\b[^>]*>.*?</wp:position${axis}>`, 's'), `<wp:position${axis} relativeFrom="${base}">${placed}</wp:position${axis}>`);
 const offset = (points: number) => `<wp:posOffset>${Math.round(points * 12700)}</wp:posOffset>`;
 const align = (where: string) => `<wp:align>${where}</wp:align>`;
-const both = (...edits: ((xml: string) => string)[]) => (xml: string) => edits.reduce((now, edit) => edit(now), xml);
+const both =
+  (...edits: ((xml: string) => string)[]) =>
+  (xml: string) =>
+    edits.reduce((now, edit) => edit(now), xml);
 const tight = (xml: string) =>
   xml.replace(
     /<wp:wrapSquare\b[^>]*\/>/,
@@ -162,7 +165,18 @@ const CASES: Record<string, () => Doc> = {
   reach: () =>
     floats(
       createDoc(text(8, 60, { lineHeight: 2, spacingAfter: 0 })),
-      ...([2.6, 3.2, 3.8, 4.4, 5, 6, 8, 11] as const).map((under, i): Float => ({ color: (['red', 'green', 'blue', 'magenta'] as const)[i % 4], at: { para: i, offset: 0 }, width: 130, height: 20, wrap: 'square', x: 338, y: 37.95 + under, edit: gap(0) })),
+      ...([2.6, 3.2, 3.8, 4.4, 5, 6, 8, 11] as const).map(
+        (under, i): Float => ({
+          color: (['red', 'green', 'blue', 'magenta'] as const)[i % 4],
+          at: { para: i, offset: 0 },
+          width: 130,
+          height: 20,
+          wrap: 'square',
+          x: 338,
+          y: 37.95 + under,
+          edit: gap(0),
+        }),
+      ),
     ),
   // Told which side the text may go down.
   sides: () =>
@@ -212,6 +226,30 @@ const CASES: Record<string, () => Doc> = {
       { color: 'red', at: { para: 8, offset: 0 }, width: 150, height: 150, wrap: 'square', x: 0, y: 10 },
       { color: 'green', at: { para: 11, offset: 0 }, width: 150, height: 120, wrap: 'topBottom', x: 150, y: 20 },
     ),
+  // A brochure of two pages: a title and a banner across the page, then sections whose pictures go down one side or the
+  // other, near together, one beside a heading, and one placed on the page itself.
+  brochure: () => {
+    const title = (text: string, size: number): Paragraph => ({ props: { align: 'center', spacingAfter: 6 }, runs: [{ text, props: { bold: true, fontSize: size, color: '1F3864' } }] });
+    const heading = (text: string): Paragraph => ({ props: { spacingBefore: 14, spacingAfter: 4, keepNext: true }, runs: [{ text, props: { bold: true, fontSize: 14, color: '1F3864' } }] });
+    const sections = ['Ubicación', 'Espacios', 'Servicios', 'Accesos', 'Condiciones'];
+    const doc = createDoc([
+      title('Torre Mirador', 26),
+      title('Oficinas en renta en el centro de la ciudad', 13),
+      para(filler(60, 3), { align: 'justify' }),
+      ...sections.flatMap((name, k) => [heading(name), ...text(2 + (k % 2), 75, { align: 'justify' })]),
+    ]);
+    // Paragraph indexes: 0 and 1 the titles, 2 the introduction, then each section's heading and its paragraphs.
+    const at = (section: number, paragraph = 0) => 3 + [0, 3, 7, 10, 14][section] + 1 + paragraph;
+    return floats(
+      doc,
+      { color: 'blue', at: { para: 2, offset: 0 }, width: 468, height: 70, wrap: 'topBottom', x: 0, y: 0, edit: gap(8) },
+      { color: 'red', at: { para: at(0), offset: 0 }, width: 150, height: 110, wrap: 'square', x: 0, y: 4, edit: gap(9) },
+      { color: 'green', at: { para: at(1, 1), offset: 0 }, width: 140, height: 100, wrap: 'square', x: 328, y: 0, edit: gap(9) },
+      { color: 'magenta', at: { para: at(2), offset: 0 }, width: 120, height: 120, wrap: 'square', x: 174, y: 10, edit: gap(6) },
+      { color: 'red', at: { para: at(3, 1), offset: 0 }, width: 160, height: 90, wrap: 'square', edit: both(gap(9), from('H', 'margin', align('right')), from('V', 'paragraph', offset(6))) },
+      { color: 'blue', at: { para: at(4), offset: 0 }, width: 200, height: 60, wrap: 'topBottom', edit: both(from('H', 'margin', align('center')), from('V', 'paragraph', offset(40))) },
+    );
+  },
   // In a cell of a table, and in the header.
   'table-and-header': () => {
     let doc = createDoc([...text(2), para(''), ...text(2)]);
@@ -220,7 +258,10 @@ const CASES: Record<string, () => Doc> = {
     for (let i = 3; i >= 0; i--) doc = insertText(doc, { para: cell + i, offset: 0 }, filler(30, i * 5)).doc;
     doc = float(doc, { color: 'red', at: { para: cell, offset: 0 }, width: 60, height: 40, wrap: 'square', x: 100, y: 6 });
     // The header as a document of its own, with the pictures of the whole.
-    const head = float({ ...doc, paragraphs: [para('Encabezado de prueba con un texto que pasa junto a la imagen')], tables: undefined }, { color: 'blue', at: { para: 0, offset: 0 }, width: 60, height: 30, wrap: 'square', x: 380, y: -6 });
+    const head = float(
+      { ...doc, paragraphs: [para('Encabezado de prueba con un texto que pasa junto a la imagen')], tables: undefined },
+      { color: 'blue', at: { para: 0, offset: 0 }, width: 60, height: 30, wrap: 'square', x: 380, y: -6 },
+    );
     return { ...doc, media: head.media, header: { paragraphs: head.paragraphs } };
   },
 };

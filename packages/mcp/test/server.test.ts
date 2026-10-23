@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { type Paragraph, createDoc, exportDocx, importDocx, plainText, setParagraphStyle } from '@rebodocs/core';
+import { type Paragraph, createDoc, exportDocx, importDocx, plainText, setParagraphStyle } from '@rebodocs/core/internal';
 import { createBridge } from '../src/bridge';
 import { EXPORT_TOOL } from '../src/browser';
 import { createDocServer } from '../src/server';
@@ -19,7 +19,10 @@ const file = (name: string) => {
   return path;
 };
 
-type Answer = { result?: { content?: { text: string }[]; isError?: boolean; tools?: { name: string; inputSchema: { properties: Record<string, unknown> } }[]; protocolVersion?: string }; error?: { code: number } };
+type Answer = {
+  result?: { content?: { text: string }[]; isError?: boolean; tools?: { name: string; inputSchema: { properties: Record<string, unknown> } }[]; protocolVersion?: string };
+  error?: { code: number };
+};
 const client = (server: ReturnType<typeof createDocServer>) => {
   let id = 0;
   const ask = async (method: string, params: object = {}) => (await server.handle({ jsonrpc: '2.0', id: ++id, method, params: params as Record<string, unknown> })) as Answer;
@@ -35,7 +38,7 @@ describe('the server for an assistant', () => {
     const server = createDocServer();
     const { ask } = client(server);
     expect((await ask('initialize', { protocolVersion: '2025-03-26' })).result!.protocolVersion).toBe('2025-03-26');
-    expect((await ask('initialize', { protocolVersion: '1999-01-01' })).result!.protocolVersion).toBe('2025-06-18');
+    expect((await ask('initialize', { protocolVersion: '1999-01-01' })).result!.protocolVersion).toBe('2025-11-25');
     expect(await server.handle({ jsonrpc: '2.0', method: 'notifications/initialized' })).toBeUndefined();
     expect((await ask('ping')).result).toEqual({});
     expect((await ask('resources/list')).error!.code).toBe(-32601);
@@ -80,7 +83,17 @@ describe('the server for an assistant', () => {
     const { call } = client(createDocServer({ roots: [dir] }));
     const path = join(dir, 'nuevo.docx');
     expect((await call('new_document', { path })).failed).toBe(false);
-    expect((await call('insert_paragraphs', { after_paragraph: 0, paragraphs: [{ text: 'Informe', style: 'Title' }, { text: 'Primer punto', list: 'number' }] })).failed).toBe(false);
+    expect(
+      (
+        await call('insert_paragraphs', {
+          after_paragraph: 0,
+          paragraphs: [
+            { text: 'Informe', style: 'Title' },
+            { text: 'Primer punto', list: 'number' },
+          ],
+        })
+      ).failed,
+    ).toBe(false);
     expect(existsSync(path)).toBe(false);
     expect((await call('save_document')).text).toBe(`Saved ${path}.`);
     expect(plainText(importDocx(new Uint8Array(readFileSync(path))).paragraphs[0].runs)).toBe('Informe');
@@ -157,7 +170,9 @@ describe('the server for an assistant', () => {
       expect(wrong.text).toContain('is not in the document');
       expect((await call('list_documents')).text).toContain('An editor is connected: its document is "editor" — contrato.docx.');
       // It opens another file: the server knows it by that name at once, before anything is asked of it.
-      expect((await fetch(`${url}/name`, { method: 'POST', headers: { Origin: 'http://localhost:5173', 'Content-Type': 'text/plain' }, body: JSON.stringify({ editor: 1, name: 'otro.docx' }) })).status).toBe(204);
+      expect(
+        (await fetch(`${url}/name`, { method: 'POST', headers: { Origin: 'http://localhost:5173', 'Content-Type': 'text/plain' }, body: JSON.stringify({ editor: 1, name: 'otro.docx' }) })).status,
+      ).toBe(204);
       expect((await call('list_documents')).text).toContain('"editor" — otro.docx');
       expect((await fetch(`${url}/name`, { method: 'POST', headers: { Origin: 'https://example.com' }, body: '{}' })).status).toBe(403);
       // Its header, through the same way.

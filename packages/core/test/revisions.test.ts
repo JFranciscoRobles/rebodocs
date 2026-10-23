@@ -25,7 +25,7 @@ import {
   revisionsOf,
   splitParagraph,
   trackEdit,
-} from '../src';
+} from '../src/internal';
 
 const para = (text: string, props: Paragraph['props'] = {}): Paragraph => ({ props, runs: [{ text, props: {} }] });
 const doc = (...texts: string[]): Doc => createDoc(texts.map((text) => para(text)));
@@ -102,7 +102,10 @@ describe('tracking an edit', () => {
     const enter = splitParagraph(start, { para: 0, offset: 6 }).doc;
     const tracked = trackEdit(start, { ...enter, paragraphs: enter.paragraphs.map((p, i) => (i === 1 ? { ...p, props: {} } : p)) }, ANA).doc;
     expect(shown(tracked)).toEqual(['Título', '¶+', 'Texto']);
-    expect(rejectRevisions(tracked).paragraphs.map((p) => [paragraphText(p), p.props.styleId])).toEqual([['Título', 'Heading1'], ['Texto', undefined]]);
+    expect(rejectRevisions(tracked).paragraphs.map((p) => [paragraphText(p), p.props.styleId])).toEqual([
+      ['Título', 'Heading1'],
+      ['Texto', undefined],
+    ]);
   });
 });
 
@@ -227,7 +230,9 @@ describe('changes of more than one person', () => {
     expect(texts(decideAllRevisions(ana, false))).toEqual(['Pago a 15 días.']);
     // Into the file as Word writes it, and back.
     const xml = strFromU8(unzipSync(exportDocx(ana))['word/document.xml']);
-    expect(xml).toMatch(/<w:ins w:id="\d+" w:author="Luis" w:date="[^"]+"><w:del w:id="\d+" w:author="Ana" w:date="[^"]+"><w:r>(<w:rPr>.*?<\/w:rPr>)?<w:delText xml:space="preserve">naturales <\/w:delText><\/w:r><\/w:del><\/w:ins>/);
+    expect(xml).toMatch(
+      /<w:ins w:id="\d+" w:author="Luis" w:date="[^"]+"><w:del w:id="\d+" w:author="Ana" w:date="[^"]+"><w:r>(<w:rPr>.*?<\/w:rPr>)?<w:delText xml:space="preserve">naturales <\/w:delText><\/w:r><\/w:del><\/w:ins>/,
+    );
     expect(both(importDocx(exportDocx(ana)))).toEqual(both(ana));
   });
 
@@ -357,12 +362,31 @@ describe('rows of tables', () => {
 
   it('marks a row put in, lists it as one change, and keeps or drops it', () => {
     const start = table();
-    const added = trackEdit(start, insertRow(start, start.paragraphs.findIndex((p) => p.cell), true), ANA).doc;
-    expect(rowsOf(added)).toEqual([[0, '', ''], [2, 'insert', 'Ana'], [1, '', '']]);
+    const added = trackEdit(
+      start,
+      insertRow(
+        start,
+        start.paragraphs.findIndex((p) => p.cell),
+        true,
+      ),
+      ANA,
+    ).doc;
+    expect(rowsOf(added)).toEqual([
+      [0, '', ''],
+      [2, 'insert', 'Ana'],
+      [1, '', ''],
+    ]);
     expect(revisionsOf(added).map((r) => [r.type, r.author, r.row])).toEqual([['insert', 'Ana', true]]);
-    expect(rowsOf(acceptRevisions(added))).toEqual([[0, '', ''], [2, '', ''], [1, '', '']]);
+    expect(rowsOf(acceptRevisions(added))).toEqual([
+      [0, '', ''],
+      [2, '', ''],
+      [1, '', ''],
+    ]);
     const rejected = rejectRevisions(added);
-    expect(rowsOf(rejected)).toEqual([[0, '', ''], [1, '', '']]);
+    expect(rowsOf(rejected)).toEqual([
+      [0, '', ''],
+      [1, '', ''],
+    ]);
     expect(cellTexts(rejected)).toEqual(['a', 'b', 'c', 'd']);
   });
 
@@ -370,7 +394,10 @@ describe('rows of tables', () => {
     const start = table();
     const second = start.paragraphs.findIndex((p) => paragraphText(p) === 'c');
     const cut = trackEdit(start, deleteRow(start, second).doc, LUIS).doc;
-    expect(rowsOf(cut)).toEqual([[0, '', ''], [1, 'delete', 'Luis']]);
+    expect(rowsOf(cut)).toEqual([
+      [0, '', ''],
+      [1, 'delete', 'Luis'],
+    ]);
     expect(cellTexts(cut)).toEqual(['a', 'b', 'c', 'd']);
     expect(shown(cut).filter((t) => t.includes('c') || t.includes('d'))).toEqual(['[-c-]', '[-d-]']);
     // One change, the row's, not one for each cell's text.
@@ -379,11 +406,17 @@ describe('rows of tables', () => {
     expect(rowsOf(accepted)).toEqual([[0, '', '']]);
     expect(cellTexts(accepted)).toEqual(['a', 'b']);
     const rejected = rejectRevisions(cut);
-    expect(rowsOf(rejected)).toEqual([[0, '', ''], [1, '', '']]);
+    expect(rowsOf(rejected)).toEqual([
+      [0, '', ''],
+      [1, '', ''],
+    ]);
     expect(shown(rejected)).toEqual(shown(start));
     // A whole table taken out: its rows stay, taken out.
     const gone = trackEdit(start, deleteTable(start, second).doc, LUIS).doc;
-    expect(rowsOf(gone)).toEqual([[0, 'delete', 'Luis'], [1, 'delete', 'Luis']]);
+    expect(rowsOf(gone)).toEqual([
+      [0, 'delete', 'Luis'],
+      [1, 'delete', 'Luis'],
+    ]);
     expect(texts(gone)).toEqual(texts(start));
     expect(texts(acceptRevisions(gone)).filter(Boolean)).toEqual(['Antes', 'Después']);
   });
@@ -391,15 +424,25 @@ describe('rows of tables', () => {
   it('marks a table put in as rows put in, and writes the rows as Word keeps them', () => {
     const start = doc('Antes', 'Después');
     const made = trackEdit(start, insertTable(start, { para: 1, offset: 0 }, 2, 1).doc, ANA).doc;
-    expect(rowsOf(made)).toEqual([[0, 'insert', 'Ana'], [1, 'insert', 'Ana']]);
+    expect(rowsOf(made)).toEqual([
+      [0, 'insert', 'Ana'],
+      [1, 'insert', 'Ana'],
+    ]);
     const xml = strFromU8(unzipSync(exportDocx(made))['word/document.xml']);
     expect(xml.match(/<w:trPr>(?:(?!<\/w:trPr>).)*<w:ins w:id="\d+" w:author="Ana" w:date="[^"]+"\/><\/w:trPr>/g)).toHaveLength(2);
-    expect(rowsOf(importDocx(exportDocx(made)))).toEqual([[0, 'insert', 'Ana'], [1, 'insert', 'Ana']]);
+    expect(rowsOf(importDocx(exportDocx(made)))).toEqual([
+      [0, 'insert', 'Ana'],
+      [1, 'insert', 'Ana'],
+    ]);
   });
 
   it('leaves untracked what it does not track: a column', () => {
     const start = table();
-    const wider = insertColumn(start, start.paragraphs.findIndex((p) => p.cell), true);
+    const wider = insertColumn(
+      start,
+      start.paragraphs.findIndex((p) => p.cell),
+      true,
+    );
     expect(trackEdit(start, wider, ANA).doc).toBe(wider);
   });
 });

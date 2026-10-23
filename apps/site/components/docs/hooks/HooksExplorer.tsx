@@ -37,7 +37,12 @@ export function HooksExplorer({ html }: { html: Record<string, { code: string; e
           </button>
         ))}
       </div>
-      <div role="tablist" aria-label="Hooks" className="mt-4 flex snap-x gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible" onKeyDown={(event) => roving(event, (i) => setSelected(shown[i].name))}>
+      <div
+        role="tablist"
+        aria-label="Hooks"
+        className="mt-4 flex snap-x gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible"
+        onKeyDown={(event) => roving(event, (i) => setSelected(shown[i].name))}
+      >
         {shown.map((h) => {
           const on = h.name === selected;
           return (

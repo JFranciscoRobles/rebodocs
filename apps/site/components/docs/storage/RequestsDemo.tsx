@@ -162,7 +162,11 @@ export default function RequestsDemo() {
             live={false}
             lines={
               requests.length
-                ? requests.map((r) => [`${r.n}. ${r.to === 'backend' ? 'api' : 's3 '} ${r.method} ${r.path.replace('?key=contract.docx', '')}`, r.status ? `${r.status} ${r.note}` : r.note, r.status === 200 ? 'good' : 'warn'])
+                ? requests.map((r) => [
+                    `${r.n}. ${r.to === 'backend' ? 'api' : 's3 '} ${r.method} ${r.path.replace('?key=contract.docx', '')}`,
+                    r.status ? `${r.status} ${r.note}` : r.note,
+                    r.status === 200 ? 'good' : 'warn',
+                  ])
                 : [['—', 'nothing yet', 'dim']]
             }
           />
@@ -172,7 +176,16 @@ export default function RequestsDemo() {
     >
       <div className="-m-5 h-[540px] overflow-hidden rounded-[14px]">
         {docx ? (
-          <DocsEditor docx={docx} name={KEY} locale="en" author="Ana" versions={versions} onSave={onSave} onReady={(docs) => (handle.current = docs)} onError={(text) => setSaid({ text, bad: true })} />
+          <DocsEditor
+            docx={docx}
+            name={KEY}
+            locale="en"
+            author="Ana"
+            versions={versions}
+            onSave={onSave}
+            onReady={(docs) => (handle.current = docs)}
+            onError={(text) => setSaid({ text, bad: true })}
+          />
         ) : (
           <p className="m-0 grid h-full place-items-center text-sm text-muted">Reading the bucket…</p>
         )}

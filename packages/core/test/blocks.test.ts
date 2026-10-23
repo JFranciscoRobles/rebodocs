@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type Doc, type Paragraph, createDoc, docText, exportDocx, fillVariables, findBlocks, importDocx, insertTable, insertText, isPresent, variableNames } from '../src';
+import { type Doc, type Paragraph, createDoc, docText, exportDocx, fillVariables, findBlocks, importDocx, insertTable, insertText, isPresent, variableNames } from '../src/internal';
 
 const p = (text: string): Paragraph => ({ props: {}, runs: [{ text, props: {} }] });
 
@@ -29,7 +29,15 @@ describe('blocks of a template', () => {
 
   it('repeats paragraphs and text for each item of a list, and keeps or takes away what a condition holds', () => {
     const doc = letter();
-    const filled = fillVariables(doc, { client: 'Ana', vip: true, items: [{ name: 'Desk', price: 250 }, { name: 'Chair', price: 90.5 }], tags: ['a', 'b'] });
+    const filled = fillVariables(doc, {
+      client: 'Ana',
+      vip: true,
+      items: [
+        { name: 'Desk', price: 250 },
+        { name: 'Chair', price: 90.5 },
+      ],
+      tags: ['a', 'b'],
+    });
     expect(docText(filled).split('\n')).toEqual(['Dear Ana, our valued member.', '- Desk: $250.00', '- Chair: $90.50', 'Tags: [a][b]']);
     // A block without a value stays as it is, to be filled later.
     expect(docText(fillVariables(doc, { client: 'Ana', vip: 'false', items: [] })).split('\n')).toEqual(['Dear Ana.', 'Nothing ordered.', 'Tags: {{#tags}}[{{tags}}]{{/tags}}']);
@@ -39,9 +47,17 @@ describe('blocks of a template', () => {
     let doc: Doc = createDoc([p('Invoice'), p('')]);
     doc = insertTable(doc, { para: 1, offset: 0 }, 3, 2).doc;
     const cells = doc.paragraphs.flatMap((q, i) => (q.cell ? [i] : []));
-    ['Item', 'Price', '{{#lines}}{{lines.item}}', '{{lines.price | currency}}{{/lines}}', 'Total', '{{total | currency}}'].forEach((text, k) => (doc = insertText(doc, { para: cells[k], offset: 0 }, text).doc));
+    ['Item', 'Price', '{{#lines}}{{lines.item}}', '{{lines.price | currency}}{{/lines}}', 'Total', '{{total | currency}}'].forEach(
+      (text, k) => (doc = insertText(doc, { para: cells[k], offset: 0 }, text).doc),
+    );
     expect(findBlocks(doc)).toEqual([{ name: 'lines', inverted: false, kind: 'row' }]);
-    const filled = fillVariables(doc, { lines: [{ item: 'Desk', price: 250 }, { item: 'Chair', price: 90 }], total: 340 });
+    const filled = fillVariables(doc, {
+      lines: [
+        { item: 'Desk', price: 250 },
+        { item: 'Chair', price: 90 },
+      ],
+      total: 340,
+    });
     expect(filled.tables![0].rows).toHaveLength(4);
     expect(docText(importDocx(exportDocx(filled))).split('\n')).toEqual(['Invoice', 'Item', 'Price', 'Desk', '$250.00', 'Chair', '$90.00', 'Total', '$340.00', '']);
     // No items, no row.
@@ -50,7 +66,13 @@ describe('blocks of a template', () => {
 
   it('writes nested blocks with the item of each, and fields of nested values by their dotted names', () => {
     const doc = createDoc([p('{{#orders}}'), p('Order {{orders.number}} for {{client.name}}: {{#orders.lines}}{{orders.lines.item}} {{/orders.lines}}'), p('{{/orders}}')]);
-    const filled = fillVariables(doc, { client: { name: 'Ana' }, orders: [{ number: 1, lines: [{ item: 'a' }, { item: 'b' }] }, { number: 2, lines: [] }] });
+    const filled = fillVariables(doc, {
+      client: { name: 'Ana' },
+      orders: [
+        { number: 1, lines: [{ item: 'a' }, { item: 'b' }] },
+        { number: 2, lines: [] },
+      ],
+    });
     expect(docText(filled).split('\n')).toEqual(['Order 1 for Ana: a b ', 'Order 2 for Ana: ']);
   });
 

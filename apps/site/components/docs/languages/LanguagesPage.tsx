@@ -157,8 +157,8 @@ locales();                                 // [{ code: 'es', name: 'Español' },
       </p>
       <div className={`mt-6 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: basic }} />
       <p className={prose}>
-        <code className={mono}>locale</code> takes a code or a browser tag (<code className={mono}>&apos;en-US&apos;</code>, <code className={mono}>&apos;es_MX&apos;</code>). A language the interface does
-        not speak gives English.
+        <code className={mono}>locale</code> takes a code or a browser tag (<code className={mono}>&apos;en-US&apos;</code>, <code className={mono}>&apos;es_MX&apos;</code>). A language the interface
+        does not speak gives English.
       </p>
       <div className="mt-4">
         <HandTip>tip: switch the editor below to French</HandTip>
@@ -170,8 +170,8 @@ locales();                                 // [{ code: 'es', name: 'Español' },
         </SectionHead>
         <LazySwitcher />
         <p className={prose}>
-          In French, open the menu (☰): <em>Fichier</em>, <em>Ouvrir un document…</em>, <em>Exporter</em>, and then <em>Print…</em> and <em>Page setup…</em>, in English, because the file does not say them. A partial translation works; what it leaves out
-          reads in English. Changing the language builds the bars again; the document and its history stay as they were.
+          In French, open the menu (☰): <em>Fichier</em>, <em>Ouvrir un document…</em>, <em>Exporter</em>, and then <em>Print…</em> and <em>Page setup…</em>, in English, because the file does not say
+          them. A partial translation works; what it leaves out reads in English. Changing the language builds the bars again; the document and its history stay as they were.
         </p>
       </section>
 
@@ -205,25 +205,25 @@ locales();                                 // [{ code: 'es', name: 'Español' },
               <div className={`mt-3 ${CODE}`} dangerouslySetInnerHTML={{ __html: give }} />
               <div className={`mt-3 ${CODE}`} dangerouslySetInnerHTML={{ __html: alone }} />
               <p className={prose}>
-                With <code className={mono}>features.language</code>, the language is in the menu by itself, under its own name: <code className={mono}>locale.name</code>, or what the browser calls the
-                language if the file leaves it out.
+                With <code className={mono}>features.language</code>, the language is in the menu by itself, under its own name: <code className={mono}>locale.name</code>, or what the browser calls
+                the language if the file leaves it out.
               </p>
             </>,
           )}
         </ol>
         <h3 className="m-0 mt-12 font-display text-xl font-bold tracking-[-0.01em]">Languages with more plural forms</h3>
         <p className={prose}>
-          Spanish and English say a number of things one way for one and another for the rest. Russian has four plural categories, Arabic six. {counted.length} texts are said of a number, and for each a language
-          gives a form per plural category of its own, as <code className={mono}>&lt;key&gt;.&lt;category&gt;</code>; the editor picks it with <code className={mono}>Intl.PluralRules</code>. What a form
-          leaves out is the key&apos;s text.
+          Spanish and English say a number of things one way for one and another for the rest. Russian has four plural categories, Arabic six. {counted.length} texts are said of a number, and for each
+          a language gives a form per plural category of its own, as <code className={mono}>&lt;key&gt;.&lt;category&gt;</code>; the editor picks it with <code className={mono}>Intl.PluralRules</code>
+          . What a form leaves out is the key&apos;s text.
         </p>
         <div className={`mt-4 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: russian }} />
         <p className={prose}>
           In Russian, “one” is 1, 21, 31…; “few” is 2 to 4, 22 to 24…; “many” is 5 to 20, 25 to 30…: 21 words is <em>21 слово</em>, said like one.
         </p>
         <p className={prose}>
-          <code className={mono}>npm run locale</code> puts the forms the language needs in its file, to translate with the rest: one, few and many for Russian, none for German. The texts said of a number
-          are{' '}
+          <code className={mono}>npm run locale</code> puts the forms the language needs in its file, to translate with the rest: one, few and many for Russian, none for German. The texts said of a
+          number are{' '}
           {counted.map((key, i) => (
             <span key={key}>
               {i > 0 && (i === counted.length - 1 ? ' and ' : ', ')}
@@ -256,8 +256,8 @@ locales();                                 // [{ code: 'es', name: 'Español' },
         </SectionHead>
         <div className={`mt-6 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: change }} />
         <p className={prose}>
-          Given later, to the <code className={mono}>locales</code> prop or to <code className={mono}>addLocale</code>, they take effect at once: when they are of the language shown, the bars are built
-          again with them.
+          Given later, to the <code className={mono}>locales</code> prop or to <code className={mono}>addLocale</code>, they take effect at once: when they are of the language shown, the bars are
+          built again with them.
         </p>
       </section>
 
@@ -323,16 +323,19 @@ locales();                                 // [{ code: 'es', name: 'Español' },
 
       <section aria-labelledby="spelling" className="mt-24">
         <SectionHead id="spelling" badge="The text" color="green" title="Spelling">
-          A browser checks spelling only in text it edits, and the editor edits none of its own: it checks it itself. Words spelled wrong get a red wave, in the language the text is in,
-          and their suggestions come in the bar beside the selection.
+          A browser checks spelling only in text it edits, and the editor edits none of its own: it checks it itself. Words spelled wrong get a red wave, in the language the text is in, and their
+          suggestions come in the bar beside the selection.
         </SectionHead>
         <div className={`mt-6 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: spelling }} />
         <ul className="m-0 mt-5 grid max-w-[760px] list-none gap-3 p-0">
           {[
             <>
               <strong>The dictionaries are yours to give.</strong> Hunspell’s, as LibreOffice and Firefox use: an <code className={mono}>.aff</code> and a <code className={mono}>.dic</code> for each
-              language, by address or by a function that gives their text. Those of <a href="https://github.com/wooorm/dictionaries" className={LINK}>wooorm/dictionaries</a> on npm are one source,
-              each under its own licence: the Spanish one GPL, LGPL or MPL, the English one MIT and BSD. Rebodocs carries none.
+              language, by address or by a function that gives their text. Those of{' '}
+              <a href="https://github.com/wooorm/dictionaries" className={LINK}>
+                wooorm/dictionaries
+              </a>{' '}
+              on npm are one source, each under its own licence: the Spanish one GPL, LGPL or MPL, the English one MIT and BSD. Rebodocs carries none.
             </>,
             <>
               <strong>Away from the page.</strong> nspell reads them in a worker the editor makes from a string, so no bundler has to find a file; a page with a Content Security Policy has to allow{' '}
@@ -343,8 +346,8 @@ locales();                                 // [{ code: 'es', name: 'Español' },
               <code className={mono}>es-MX</code> too. Changing it checks the words again; a language with no dictionary is not checked.
             </>,
             <>
-              <strong>What it checks:</strong> the words of the pages near the view, a quarter of a second after typing stops, and not the one being written until it is finished. Single letters,
-              words in capitals, words joined to digits, variables, addresses, emails and text taken out in tracked changes are left alone.
+              <strong>What it checks:</strong> the words of the pages near the view, a quarter of a second after typing stops, and not the one being written until it is finished. Single letters, words
+              in capitals, words joined to digits, variables, addresses, emails and text taken out in tracked changes are left alone.
             </>,
             <>
               <strong>The suggestions:</strong> the other button on a word with the wave, a tap on it, or a tap of ⌘ (Ctrl) with the caret in it. A suggestion replaces the word as any edit does,

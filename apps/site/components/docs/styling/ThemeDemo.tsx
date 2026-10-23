@@ -26,7 +26,8 @@ export default function ThemeDemo() {
   const css = `.my-editor {\n${scheme ? `  color-scheme: ${scheme};\n` : ''}${Object.entries(vars)
     .map(([name, value]) => `  ${name}: ${value};`)
     .join('\n')}\n}`;
-  const pill = (on: boolean) => `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
+  const pill = (on: boolean) =>
+    `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
 
   return (
     <div className="mt-7 overflow-hidden rounded-[18px] border border-border">
@@ -42,11 +43,15 @@ export default function ThemeDemo() {
         <p className="m-0 text-[13.5px] text-ink-soft">Open a menu, the side panel or the one at the left: the whole interface takes the theme. The page stays white, as paper does.</p>
       </div>
       <div className="h-[560px]" style={{ ...vars, colorScheme: scheme ?? 'light' } as CSSProperties}>
-        {file ? <DocsEditor docx={file} name="lease.docx" locale="en" author="Ana"  /> : <p className="m-0 grid h-full place-items-center text-sm text-muted">Opening the editor…</p>}
+        {file ? <DocsEditor docx={file} name="lease.docx" locale="en" author="Ana" /> : <p className="m-0 grid h-full place-items-center text-sm text-muted">Opening the editor…</p>}
       </div>
       <div className="border-t border-border bg-surface px-6 py-5">
         <p className={CAPTION}>The CSS</p>
-        <pre tabIndex={0} aria-label="The CSS of the theme" className="m-0 mt-2.5 overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3.5 font-code text-[12.5px] leading-[1.65] text-[#edece8] sm:columns-2">
+        <pre
+          tabIndex={0}
+          aria-label="The CSS of the theme"
+          className="m-0 mt-2.5 overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3.5 font-code text-[12.5px] leading-[1.65] text-[#edece8] sm:columns-2"
+        >
           {css}
         </pre>
       </div>

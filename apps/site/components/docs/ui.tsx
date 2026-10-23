@@ -79,7 +79,13 @@ export function Readout({ label, lines, live = true }: { label: string; lines: [
     <div>
       <p className={CAPTION}>{label}</p>
       {/* It scrolls when a line is long: the keyboard reaches it. */}
-      <div tabIndex={0} role="group" aria-label={label} aria-live={live ? 'polite' : undefined} className="mt-2.5 overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3.5 font-code text-[13px] leading-[1.75] text-[#edece8]">
+      <div
+        tabIndex={0}
+        role="group"
+        aria-label={label}
+        aria-live={live ? 'polite' : undefined}
+        className="mt-2.5 overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3.5 font-code text-[13px] leading-[1.75] text-[#edece8]"
+      >
         {lines.map(([key, value, tone]) => (
           <div key={key} className="flex gap-2.5 whitespace-nowrap">
             <span className="text-[#9cc0fa]">{key}</span>

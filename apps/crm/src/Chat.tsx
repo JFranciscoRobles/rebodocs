@@ -1,6 +1,6 @@
-import { type AssistantChat, type Editor, createAssistantChat } from '@rebodocs/react'
-import { useEffect, useReducer, useRef, useState } from 'react'
-import type { Property } from './data'
+import { type AssistantChat, type Editor, createAssistantChat } from '@rebodocs/react';
+import { useEffect, useReducer, useRef, useState } from 'react';
+import type { Property } from './data';
 
 /** Things to ask, to start with: what a team does to a contract. */
 const IDEAS = [
@@ -8,7 +8,7 @@ const IDEAS = [
   'Revisa el contrato y deja notas donde falte información o algo no cuadre.',
   'Agrega una cláusula de confidencialidad después de la sexta, con el mismo formato.',
   'Resume en cinco puntos lo que se obliga a hacer el propietario.',
-]
+];
 
 /** What a tool did, said the way a person would. */
 const TOOLS: Record<string, string> = {
@@ -30,33 +30,32 @@ const TOOLS: Record<string, string> = {
   add_note: 'Dejó una nota',
   track_changes: 'Control de cambios',
   list_changes: 'Revisó los cambios',
-}
+};
 
 /** What the server says when something is missing, in the language of the page. */
-const said = (text: string) =>
-  text.includes('ANTHROPIC_API_KEY') ? 'El asistente no tiene clave de la API: ponla en apps/crm/.env (ANTHROPIC_API_KEY) y vuelve a arrancar el demo.' : text
+const said = (text: string) => (text.includes('ANTHROPIC_API_KEY') ? 'El asistente no tiene clave de la API: ponla en apps/crm/.env (ANTHROPIC_API_KEY) y vuelve a arrancar el demo.' : text);
 
 /** The assistant beside the document: one conversation for the document open. */
 export function Chat({ editor, property, close }: { editor: Editor | undefined; property: Property; close: () => void }) {
-  const [, redraw] = useReducer((n: number) => n + 1, 0)
-  const [chat, setChat] = useState<AssistantChat>()
-  const [text, setText] = useState('')
-  const list = useRef<HTMLDivElement>(null)
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  const [chat, setChat] = useState<AssistantChat>();
+  const [text, setText] = useState('');
+  const list = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setChat(editor ? createAssistantChat(editor, { onChange: redraw }) : undefined)
-  }, [editor])
+    setChat(editor ? createAssistantChat(editor, { onChange: redraw }) : undefined);
+  }, [editor]);
 
   // The newest at the bottom, in view.
   useEffect(() => {
-    list.current?.scrollTo({ top: list.current.scrollHeight })
-  })
+    list.current?.scrollTo({ top: list.current.scrollHeight });
+  });
 
   const ask = (question: string) => {
-    if (!chat || chat.busy || !question.trim()) return
-    setText('')
-    void chat.send(question)
-  }
+    if (!chat || chat.busy || !question.trim()) return;
+    setText('');
+    void chat.send(question);
+  };
 
   return (
     <aside className="crm-chat" aria-label="Asistente">
@@ -99,8 +98,8 @@ export function Chat({ editor, property, close }: { editor: Editor | undefined; 
       </div>
       <form
         onSubmit={(e) => {
-          e.preventDefault()
-          ask(text)
+          e.preventDefault();
+          ask(text);
         }}
       >
         <textarea
@@ -112,8 +111,8 @@ export function Chat({ editor, property, close }: { editor: Editor | undefined; 
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              ask(text)
+              e.preventDefault();
+              ask(text);
             }
           }}
         />
@@ -128,5 +127,5 @@ export function Chat({ editor, property, close }: { editor: Editor | undefined; 
         )}
       </form>
     </aside>
-  )
+  );
 }

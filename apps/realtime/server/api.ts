@@ -79,7 +79,8 @@ export interface ApiOptions {
 export function createApi(store: () => Store, options: ApiOptions) {
   const routes: Record<string, (url: URL, request: IncomingMessage, response: ServerResponse) => Promise<unknown>> = {
     // The versions are beside the documents, not among them.
-    'GET /api/docs': async () => (await store().list()).filter((file) => /\.docx$/i.test(file.key) && !file.key.startsWith(VERSIONS)).map((file) => ({ ...file, people: options.inRoom?.(roomOf(file.key)) ?? [] })),
+    'GET /api/docs': async () =>
+      (await store().list()).filter((file) => /\.docx$/i.test(file.key) && !file.key.startsWith(VERSIONS)).map((file) => ({ ...file, people: options.inRoom?.(roomOf(file.key)) ?? [] })),
     'POST /api/docs': async (url) => {
       const key = keyOf(url);
       if (await store().get(key)) throw new Refused(409, 'There is a document with that name already.');
@@ -88,7 +89,10 @@ export function createApi(store: () => Store, options: ApiOptions) {
     },
     'POST /api/room': async (url, request) => {
       const key = keyOf(url);
-      const name = String((await bodyOf(request)).name ?? '').trim().slice(0, 80) || 'Someone';
+      const name =
+        String((await bodyOf(request)).name ?? '')
+          .trim()
+          .slice(0, 80) || 'Someone';
       if (!(await store().get(key))) throw new Refused(404, 'There is no such document.');
       const room = roomOf(key);
       return { url: options.collabUrl(new URL(`http://${request.headers.host ?? 'localhost'}`).hostname), room, ticket: options.tickets.issue(room, name) };

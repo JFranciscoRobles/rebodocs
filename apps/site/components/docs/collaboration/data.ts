@@ -100,8 +100,10 @@ export const OPTIONS: [option: string, env: string, text: string][] = [
   ['--backend-key KEY', 'REBODOCS_COLLAB_BACKEND_KEY', 'Sent to your backend as Authorization: Bearer …. Put it in the environment, not on the command line.'],
   ['--port N', 'REBODOCS_COLLAB_PORT', '7420 by default.'],
   ['--host ADDR', '', 'The address to listen on: this machine alone when left out; 0.0.0.0 lets others in.'],
-  ['--save-every N', '', 'Seconds between saves while a room has changes. 30 by default.'],
-  ['--data DIR', '', 'Without a backend: the folder rooms are kept in, ./salas when left out.'],
+  ['--save-after N', '', 'Seconds after the last change that the document is saved. 5 by default.'],
+  ['--save-every N', '', 'The most seconds a room with changes goes without being saved while people keep typing. 30 by default.'],
+  ['--recheck-every N', 'REBODOCS_COLLAB_RECHECK_EVERY', 'Seconds between asking /access again whether each person may still be in; whoever it turns away is sent out. Never by default.'],
+  ['--data DIR', '', 'Without a backend: the folder rooms are kept in, ./rooms when left out.'],
   ['--memory', '', 'Without a backend: keep nothing, rooms last as long as the process.'],
   ['--token WORD', 'REBODOCS_COLLAB_TOKEN', 'Without a backend: the word a page must give to start a room.'],
   ['--static DIR', '', 'Also serve a built editor from that folder: one address for the page and its rooms.'],
@@ -110,6 +112,14 @@ export const OPTIONS: [option: string, env: string, text: string][] = [
 /** The three routes of your backend, and when the server calls each. */
 export const ROUTES: [route: string, when: string, what: string][] = [
   ['GET /docs/<id>', 'Someone opens a room nobody is in.', 'Return the DOCX.'],
-  ['PUT /docs/<id>', 'Every --save-every seconds with changes, when the last person leaves, on shutdown.', 'Store the DOCX in the body. The one when the last person leaves ends a session of work, and says so.'],
-  ['POST /docs/<id>/access', 'Someone joins, with { "ticket": "…" }.', 'Answer { "name": "Ana" } to let them in under that name, with "readOnly": true to let them only watch, or 403.'],
+  [
+    'PUT /docs/<id>',
+    '--save-after seconds after the changes stop (at least every --save-every while they go on), when the last person leaves, on shutdown.',
+    'Store the DOCX in the body. The one when the last person leaves ends a session of work, and says so.',
+  ],
+  [
+    'POST /docs/<id>/access',
+    'Someone joins, with { "ticket": "…" }; and every --recheck-every seconds while they stay.',
+    'Answer { "name": "Ana" } to let them in under that name, with "readOnly": true to let them only watch, or 403.',
+  ],
 ];

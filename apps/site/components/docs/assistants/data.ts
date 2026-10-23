@@ -14,17 +14,39 @@ export interface ToolGroup {
 
 /** The tools of a document, by what they are for. Every tool of TOOLS is in one, which the page checks when it is built. */
 export const TOOL_GROUPS: ToolGroup[] = [
-  { id: 'reading', title: 'Reading', color: 'blue', tools: ['get_overview', 'read_document', 'read_formatting', 'find_text', 'list_links', 'list_notes', 'list_variables', 'compare_documents'] },
-  { id: 'text', title: 'Text', color: 'yellow', tools: ['replace_text', 'rewrite_paragraph', 'insert_paragraphs', 'delete_paragraphs', 'set_style', 'set_list', 'set_link'] },
+  {
+    id: 'reading',
+    title: 'Reading',
+    color: 'blue',
+    tools: ['get_overview', 'read_document', 'read_formatting', 'read_pages', 'find_text', 'list_links', 'list_notes', 'list_variables', 'compare_documents'],
+  },
+  {
+    id: 'text',
+    title: 'Text',
+    color: 'yellow',
+    tools: ['replace_text', 'rewrite_paragraph', 'insert_paragraphs', 'delete_paragraphs', 'edit_document', 'move_section', 'renumber_clauses', 'set_style', 'set_list', 'set_link'],
+  },
   { id: 'formatting', title: 'Formatting', color: 'pink', tools: ['format_text', 'format_paragraphs'] },
   { id: 'review', title: 'Comments and tracked changes', color: 'purple', tools: ['add_note', 'remove_note', 'track_changes', 'list_changes', 'accept_changes', 'reject_changes'] },
   { id: 'templates', title: 'Templates', color: 'green', tools: ['fill_variables'] },
-  { id: 'objects', title: 'Tables and pictures', color: 'orange', tools: ['insert_table', 'edit_table', 'insert_signatures', 'insert_image', 'edit_image'] },
+  { id: 'objects', title: 'Tables and pictures', color: 'orange', tools: ['insert_table', 'edit_table', 'set_cell_text', 'insert_signatures', 'insert_image', 'edit_image'] },
   {
     id: 'pages',
     title: 'Pages and columns',
     color: 'blue',
-    tools: ['set_page_setup', 'set_letterhead', 'set_columns', 'insert_column_break', 'set_page_number', 'insert_page_break', 'insert_footnote', 'insert_text_box', 'insert_table_of_contents', 'update_table_of_contents'],
+    tools: [
+      'set_page_setup',
+      'set_letterhead',
+      'set_columns',
+      'insert_column_break',
+      'set_page_number',
+      'insert_page_break',
+      'insert_footnote',
+      'insert_endnote',
+      'insert_text_box',
+      'insert_table_of_contents',
+      'update_table_of_contents',
+    ],
   },
 ];
 
@@ -38,14 +60,28 @@ export const FILE_TOOLS: { name: string; description: string; params: [name: str
     description: 'Opens a Word file (.docx) to read it and change it. It is kept in memory: nothing is written until save_document. Gives its overview.',
     params: [['path', 'string', true, 'The path of the .docx file.']],
   },
-  { name: 'new_document', description: 'Starts an empty document, to write in and save. Gives it the path it will be saved to.', params: [['path', 'string', true, 'Where it will be saved: a path ending in .docx.']] },
+  {
+    name: 'new_document',
+    description: 'Starts an empty document, to write in and save. Gives it the path it will be saved to.',
+    params: [['path', 'string', true, 'Where it will be saved: a path ending in .docx.']],
+  },
   {
     name: 'save_document',
-    description: 'Writes a document to a file: Word (.docx), PDF (.pdf) or Markdown (.md), by the ending of the path. A DOCX that was opened keeps everything that was not changed exactly as it was. It does not write over a file that is there unless "overwrite" is true.',
+    description:
+      'Writes a document to a file: Word (.docx), PDF (.pdf) or Markdown (.md), by the ending of the path. A DOCX that was opened keeps everything that was not changed exactly as it was. It does not write over a file that is there unless "overwrite" is true.',
     params: [
       ['document', 'string', false, 'Which document: a path opened before, or "editor" for the one open in the browser.'],
       ['path', 'string', false, 'Where to write. Left out, the file the document was opened from.'],
       ['overwrite', 'boolean', false, 'Write over a file that is already there. False when left out.'],
+    ],
+  },
+  {
+    name: 'undo',
+    description:
+      'Undoes the last changes the tools made to a file that is open, one at a time or several: the way back from a mistake without opening the file again and losing the rest. Up to 50 changes. In the editor in the browser, each change is a step the person undoes there.',
+    params: [
+      ['document', 'string', false, 'The path of the file. Left out, the last file opened.'],
+      ['steps', 'integer', false, 'How many changes to undo. 1 when left out.'],
     ],
   },
   { name: 'list_documents', description: 'The documents that can be worked on now: the files that are open, with whether each has changes not saved, and whether an editor is connected.', params: [] },
@@ -60,6 +96,17 @@ export const EXAMPLES: { label: string; tool: string; args: Record<string, unkno
   { label: 'Find “deposit”', tool: 'find_text', args: { query: 'deposit' } },
   { label: 'Fill the template', tool: 'fill_variables', args: { values: { city: 'Lisbon', date: '20 October 2026', client: 'ana lópez', property: 'Rua Augusta 12' } } },
   { label: 'Replace a word', tool: 'replace_text', args: { find: 'deposit', replace: 'down payment', all: true } },
+  {
+    label: 'Several at once',
+    tool: 'edit_document',
+    args: {
+      edits: [
+        { tool: 'replace_text', find: 'deposit', replace: 'down payment', all: true },
+        { tool: 'format_text', find: 'Terms', bold: true },
+      ],
+    },
+  },
+  { label: 'How it falls on pages', tool: 'read_pages', args: {} },
   { label: 'Track changes', tool: 'track_changes', args: { on: true } },
   { label: 'Comment', tool: 'add_note', args: { find: 'cancel in writing', note: 'Should we give a deadline?' } },
   {
@@ -70,8 +117,24 @@ export const EXAMPLES: { label: string; tool: string; args: Record<string, unkno
       segments: [{ text: 'Selecciona una palabra y ponla en ' }, { text: 'negrita', bold: true }, { text: ', ' }, { text: 'roja', color: 'C0392B' }, { text: ' o resáltala.' }],
     },
   },
-  { label: 'Add one like it', tool: 'insert_paragraphs', args: { after_paragraph: 14, like_paragraph: 13, paragraphs: [{ text: 'Ask Claude to fill the template and translate it, keeping its look.' }] } },
-  { label: 'Add a table', tool: 'insert_table', args: { after_paragraph: 4, header: true, rows: [['Item', 'Amount'], ['Deposit', '1,500 €'], ['Balance', '13,500 €']] } },
+  {
+    label: 'Add one like it',
+    tool: 'insert_paragraphs',
+    args: { after_paragraph: 14, like_paragraph: 13, paragraphs: [{ text: 'Ask Claude to fill the template and translate it, keeping its look.' }] },
+  },
+  {
+    label: 'Add a table',
+    tool: 'insert_table',
+    args: {
+      after_paragraph: 4,
+      header: true,
+      rows: [
+        ['Item', 'Amount'],
+        ['Deposit', '1,500 €'],
+        ['Balance', '13,500 €'],
+      ],
+    },
+  },
   { label: 'Bold', tool: 'format_text', args: { find: 'Terms', bold: true, color: 'C0392B' } },
 ];
 
@@ -82,9 +145,25 @@ export const OPTIONS: [option: string, text: string][] = [
   ['--port N', 'Where the editor in the browser connects. 7411 by default, or REBODOCS_MCP_PORT.'],
   ['--no-editor', 'Files only: do not listen for an editor.'],
   ['--origin URL', 'A page allowed to connect, besides localhost.'],
-  ['--host ADDR', 'To listen for editors on other machines. A --token of 12 characters or more is then required, or REBODOCS_MCP_TOKEN.'],
+  ['--host ADDR', 'To listen for editors, and with --http for clients, on other machines. A --token of 12 characters or more is then required, or REBODOCS_MCP_TOKEN.'],
+  [
+    '--http N',
+    'Listen for assistants over HTTP at http://127.0.0.1:N/mcp (Streamable HTTP), each with a session of its own, instead of over standard input and output. With --token, a client gives it as “Authorization: Bearer”.',
+  ],
+  ['--timeout S', 'How many seconds to wait for the editor to answer a tool: 30 by default.'],
   ['--editor-url URL', 'The address of your editor, told to the assistant when no editor is connected, so it can say where to open it.'],
 ];
+
+/** Starting the server for clients over HTTP, and pointing a client at it. */
+export const HTTP_SETUP = `# The server, listening for assistants at http://127.0.0.1:7412/mcp
+npx -y @rebodocs/mcp --root /path/to/documents --http 7412
+
+# Claude Code, pointed at it
+claude mcp add --transport http rebodocs http://127.0.0.1:7412/mcp
+
+# From another machine: --host and a --token of 12 characters or more,
+# which the client gives as "Authorization: Bearer <token>"
+npx -y @rebodocs/mcp --root /srv/documents --http 7412 --host 0.0.0.0 --token "$REBODOCS_MCP_TOKEN"`;
 
 export type Client = 'desktop' | 'code' | 'cursor';
 

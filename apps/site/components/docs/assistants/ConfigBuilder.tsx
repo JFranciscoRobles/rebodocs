@@ -22,10 +22,7 @@ export function ConfigBuilder() {
 
   const args = ['-y', '@rebodocs/mcp', ...(root.trim() ? ['--root', root.trim()] : []), ...(fonts.trim() ? ['--fonts', fonts.trim()] : []), ...(editor ? [] : ['--no-editor'])];
   const command = npx.trim() || 'npx';
-  const text =
-    client === 'code'
-      ? `claude mcp add rebodocs -- ${[command, ...args].map(quoted).join(' ')}`
-      : JSON.stringify({ mcpServers: { rebodocs: { command, args } } }, null, 2);
+  const text = client === 'code' ? `claude mcp add rebodocs -- ${[command, ...args].map(quoted).join(' ')}` : JSON.stringify({ mcpServers: { rebodocs: { command, args } } }, null, 2);
   const where = CLIENTS.find(([id]) => id === client)![2];
 
   const copy = async () => {
@@ -55,7 +52,9 @@ export function ConfigBuilder() {
           <span className={CAPTION}>Folder of documents (--root)</span>
           <input value={root} onChange={(event) => setRoot(event.target.value)} spellCheck={false} placeholder="leave empty for anywhere" className={field} />
           {!root.trim() && <span className="text-[13px] text-pastel-yellow-fg">Without one, the assistant may read and write files anywhere on the machine.</span>}
-          {client !== 'code' && /(^|\s)~/.test(`${root} ${fonts}`) && <span className="text-[13px] text-pastel-yellow-fg">Write the whole path: the server does not turn ~ into your home folder, and no shell does it here.</span>}
+          {client !== 'code' && /(^|\s)~/.test(`${root} ${fonts}`) && (
+            <span className="text-[13px] text-pastel-yellow-fg">Write the whole path: the server does not turn ~ into your home folder, and no shell does it here.</span>
+          )}
         </label>
         <label className="flex flex-col gap-1.5">
           <span className={CAPTION}>Fonts folder (--fonts), optional</span>
@@ -81,7 +80,8 @@ export function ConfigBuilder() {
           </button>
         </div>
         <p className="m-0 text-sm leading-normal text-muted">
-          It comes from npm, with the engine as its dependency: there is nothing to clone. Then ask the assistant: “Open {root.trim() ? `${root.trim().replace(/\/$/, '')}/` : ''}lease.docx and fill it for Ana López”.
+          It comes from npm, with the engine as its dependency: there is nothing to clone. Then ask the assistant: “Open {root.trim() ? `${root.trim().replace(/\/$/, '')}/` : ''}lease.docx and fill it
+          for Ana López”.
         </p>
       </div>
     </div>

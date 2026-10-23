@@ -101,7 +101,10 @@ export function DocxDemo() {
       <p className="m-0 mt-4 text-[13px] font-semibold uppercase tracking-[0.04em] text-muted">Parts it never reads</p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {UNREAD.map((part) => (
-          <code key={part} className={`rounded-md border px-2 py-0.75 font-code text-[12px] transition-colors duration-300 ${saved ? 'border-[#b7dcc0] bg-pastel-green text-pastel-green-fg' : 'border-border bg-surface text-muted'}`}>
+          <code
+            key={part}
+            className={`rounded-md border px-2 py-0.75 font-code text-[12px] transition-colors duration-300 ${saved ? 'border-[#b7dcc0] bg-pastel-green text-pastel-green-fg' : 'border-border bg-surface text-muted'}`}
+          >
             {part}
             {saved && ' ✓'}
           </code>

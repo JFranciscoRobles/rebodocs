@@ -30,7 +30,13 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.45 Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font:
+    15px / 1.45 Inter,
+    -apple-system,
+    "Segoe UI",
+    Helvetica,
+    Arial,
+    sans-serif;
 }
 button,
 input,
@@ -459,7 +465,7 @@ button.crm-nav {
   white-space: nowrap;
 }
 .crm-saved::before {
-  content: '';
+  content: "";
   display: inline-block;
   width: 8px;
   height: 8px;

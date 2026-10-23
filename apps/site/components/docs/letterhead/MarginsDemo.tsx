@@ -68,7 +68,8 @@ export default function MarginsDemo() {
             ]}
           />
           <p className="m-0 text-[13px] leading-normal text-muted">
-            Where the printing ends, plus 18 pt. A band reaching past 35% of the page is not at its edge, and the faint pattern is not in the way: neither asks for anything. The editor never gives a margin more than 40% of the page.
+            Where the printing ends, plus 18 pt. A band reaching past 35% of the page is not at its edge, and the faint pattern is not in the way: neither asks for anything. The editor never gives a
+            margin more than 40% of the page.
           </p>
         </>
       }

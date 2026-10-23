@@ -1,6 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type Doc, type TextMeasurer, boxLines, exportDocx, importDocx, layoutDocument } from '../src';
+import { type Doc, type TextMeasurer, boxLines, exportDocx, importDocx, layoutDocument } from '../src/internal';
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 
@@ -26,16 +26,13 @@ const STYLES =
 const p = (text: string) => `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`;
 const tc = (content: string, tcPr = '') => `<w:tc><w:tcPr>${tcPr}</w:tcPr>${content}</w:tc>`;
 const tr = (cells: string, trPr = '') => `<w:tr>${trPr ? `<w:trPr>${trPr}</w:trPr>` : ''}${cells}</w:tr>`;
-const tbl = (rows: string, tblPr: string, grid = [2000, 2000]) =>
-  `<w:tbl><w:tblPr>${tblPr}</w:tblPr><w:tblGrid>${grid.map((w) => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid>${rows}</w:tbl>`;
+const tbl = (rows: string, tblPr: string, grid = [2000, 2000]) => `<w:tbl><w:tblPr>${tblPr}</w:tblPr><w:tblGrid>${grid.map((w) => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid>${rows}</w:tbl>`;
 const LOOK = '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>';
 
 // 300 x 200pt page with 10pt margins: a text area 280pt wide and 180pt tall.
 function open(body: string): Doc {
   const document =
-    `<w:document ${W}><w:body>${body}` +
-    '<w:sectPr><w:pgSz w:w="6000" w:h="4000"/><w:pgMar w:top="200" w:right="200" w:bottom="200" w:left="200"/></w:sectPr>' +
-    '</w:body></w:document>';
+    `<w:document ${W}><w:body>${body}` + '<w:sectPr><w:pgSz w:w="6000" w:h="4000"/><w:pgMar w:top="200" w:right="200" w:bottom="200" w:left="200"/></w:sectPr>' + '</w:body></w:document>';
   return importDocx(zipSync({ 'word/document.xml': strToU8(document), 'word/styles.xml': strToU8(STYLES) }));
 }
 

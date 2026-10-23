@@ -4,17 +4,23 @@
 // same names with '@' and the index of the section.
 
 import type { Doc, Section, Story } from './model';
-import type { BasePart, DocxSource, FootnotePart, StorySource, StoryPart, TextBoxPart } from './docx/source';
-import { footnoteOf, withFootnote } from './footnotes';
+import type { BasePart, DocxSource, EndnotePart, FootnotePart, StorySource, StoryPart, TextBoxPart } from './docx/source';
+import { endnoteOf, footnoteOf, withEndnote, withFootnote } from './footnotes';
 import { textBoxIdOf, textBoxOf, textBoxPart, withTextBox } from './textboxes';
 
-export type { BasePart, FootnotePart, StoryPart, TextBoxPart };
+export type { BasePart, EndnotePart, FootnotePart, StoryPart, TextBoxPart };
 
 /** The id of the note a part is the text of, when it is one. */
 export const footnoteIdOf = (part: StoryPart): string | undefined => (part.startsWith('footnote:') ? part.slice('footnote:'.length) : undefined);
 
 /** The part the text of note `id` is. */
 export const footnotePart = (id: string): FootnotePart => `footnote:${id}`;
+
+/** The id of the note at the end a part is the text of, when it is one. */
+export const endnoteIdOf = (part: StoryPart): string | undefined => (part.startsWith('endnote:') ? part.slice('endnote:'.length) : undefined);
+
+/** The part the text of note `id` at the end is. */
+export const endnotePart = (id: string): EndnotePart => `endnote:${id}`;
 
 export const STORY_PARTS: BasePart[] = ['header', 'footer', 'firstHeader', 'firstFooter'];
 
@@ -31,14 +37,16 @@ export const sectionPart = (base: BasePart, section?: number): StoryPart => (sec
 
 /** Whether a part is a header, a footer, or the text of a note. */
 export function storyKind(part: BasePart | `${BasePart}@${number}`): 'header' | 'footer';
-export function storyKind(part: StoryPart): 'header' | 'footer' | 'footnote' | 'textbox';
-export function storyKind(part: StoryPart): 'header' | 'footer' | 'footnote' | 'textbox' {
-  return footnoteIdOf(part) !== undefined ? 'footnote' : textBoxIdOf(part) !== undefined ? 'textbox' : KIND[splitPart(part).base];
+export function storyKind(part: StoryPart): 'header' | 'footer' | 'footnote' | 'endnote' | 'textbox';
+export function storyKind(part: StoryPart): 'header' | 'footer' | 'footnote' | 'endnote' | 'textbox' {
+  if (footnoteIdOf(part) !== undefined) return 'footnote';
+  if (endnoteIdOf(part) !== undefined) return 'endnote';
+  return textBoxIdOf(part) !== undefined ? 'textbox' : KIND[splitPart(part).base];
 }
 
 const ofFirst = (base: BasePart) => base === 'firstHeader' || base === 'firstFooter';
 
-type WithStories = Pick<Doc, 'header' | 'footer' | 'firstPage' | 'paragraphs' | 'footnotes' | 'textBoxes'>;
+type WithStories = Pick<Doc, 'header' | 'footer' | 'firstPage' | 'paragraphs' | 'footnotes' | 'endnotes' | 'textBoxes'>;
 
 /** The paragraphs that end the sections before the last, in order: the k-th ends section k. */
 export function sectionEnds(doc: Pick<Doc, 'paragraphs'>): number[] {
@@ -58,6 +66,8 @@ function ownerOf(doc: Pick<Doc, 'paragraphs'>, section: number | undefined): { p
 export function storyOf(doc: WithStories, part: StoryPart): Story | undefined {
   const note = footnoteIdOf(part);
   if (note !== undefined) return footnoteOf(doc, note);
+  const end = endnoteIdOf(part);
+  if (end !== undefined) return endnoteOf(doc, end);
   const box = textBoxIdOf(part);
   if (box !== undefined) return textBoxOf(doc, box);
   const { base, section } = splitPart(part);
@@ -88,6 +98,13 @@ export function withStory<T extends WithStories>(doc: T, part: StoryPart, story:
     const { footnotes: _, ...rest } = doc;
     return (footnotes.length ? { ...rest, footnotes } : rest) as T;
   }
+  const end = endnoteIdOf(part);
+  if (end !== undefined) {
+    if (story) return withEndnote(doc, end, story);
+    const endnotes = (doc.endnotes ?? []).filter((other) => other.id !== end);
+    const { endnotes: _, ...rest } = doc;
+    return (endnotes.length ? { ...rest, endnotes } : rest) as T;
+  }
   const box = textBoxIdOf(part);
   if (box !== undefined) return withTextBox(doc, box, story);
   const { base, section } = splitPart(part);
@@ -108,9 +125,14 @@ export function storyParts(doc: WithStories): StoryPart[] {
   return parts;
 }
 
-/** Every part with text of its own: the headers and footers, then the notes at the foot of the page and the text boxes. */
+/** Every part with text of its own: the headers and footers, then the notes at the foot of the page and at the end, and the text boxes. */
 export function textParts(doc: WithStories): StoryPart[] {
-  return [...storyParts(doc), ...(doc.footnotes ?? []).map((note) => footnotePart(note.id)), ...(doc.textBoxes ?? []).map((box) => textBoxPart(box.id))];
+  return [
+    ...storyParts(doc),
+    ...(doc.footnotes ?? []).map((note) => footnotePart(note.id)),
+    ...(doc.endnotes ?? []).map((note) => endnotePart(note.id)),
+    ...(doc.textBoxes ?? []).map((box) => textBoxPart(box.id)),
+  ];
 }
 
 /** The part the header or the footer of a page lives in: its section's own, or the first page's, when it has them. */
@@ -124,6 +146,8 @@ export function storySource(doc: Pick<Doc, 'paragraphs'> & { source?: DocxSource
   if (!source) return undefined;
   const note = footnoteIdOf(part);
   if (note !== undefined) return source.footnoteSources?.get(note);
+  const end = endnoteIdOf(part);
+  if (end !== undefined) return source.endnoteSources?.get(end);
   const box = textBoxIdOf(part);
   if (box !== undefined) return source.textBoxSources?.get(box);
   const { base, section } = splitPart(part);
@@ -135,6 +159,7 @@ export function storySource(doc: Pick<Doc, 'paragraphs'> & { source?: DocxSource
 /** The path in the package of the part a header or a footer was read from. */
 export function storyPath(doc: Pick<Doc, 'paragraphs'> & { source?: DocxSource }, part: StoryPart): string | undefined {
   if (footnoteIdOf(part) !== undefined) return doc.source?.footnotesPath;
+  if (endnoteIdOf(part) !== undefined) return doc.source?.endnotesPath;
   // A text box is in the part its drawing is in; one made here, in the document.
   if (textBoxIdOf(part) !== undefined) return storySource(doc, part)?.path ?? doc.source?.mainPath;
   const { base, section } = splitPart(part);

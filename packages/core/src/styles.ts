@@ -3,15 +3,7 @@
 // so applying a style writes its formatting into the paragraph and remembers
 // its name; the name is what Word shows, and what makes a heading a heading.
 
-import {
-  type Doc,
-  type Paragraph,
-  type ParagraphProps,
-  type ParagraphStyle,
-  type RunProps,
-  DEFAULT_RUN,
-  defined,
-} from './model';
+import { type Doc, type Paragraph, type ParagraphProps, type ParagraphStyle, type RunProps, DEFAULT_RUN, defined } from './model';
 
 const NORMAL: ParagraphStyle = {
   id: 'Normal',

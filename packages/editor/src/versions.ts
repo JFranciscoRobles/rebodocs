@@ -5,7 +5,7 @@
 // out struck through and what was put in underlined, from one change to the
 // next; and the document can be taken back to it, as a step to undo.
 
-import { type Comparison, type Doc, compareDocs, importDocx } from '@rebodocs/core';
+import { type Comparison, type Doc, compareDocs, importDocx } from '@rebodocs/core/internal';
 import { holdFocus } from './a11y';
 import { Editor } from './editor';
 import { getLocale, plural, t } from './i18n';
@@ -72,7 +72,10 @@ export function sortVersions(list: VersionInfo[]): VersionInfo[] {
     const at = info.date ? Date.parse(info.date) : NaN;
     return Number.isNaN(at) ? -Infinity : at;
   };
-  return list.map((info, i) => ({ info, i })).sort((a, b) => time(b.info) - time(a.info) || a.i - b.i).map(({ info }) => info);
+  return list
+    .map((info, i) => ({ info, i }))
+    .sort((a, b) => time(b.info) - time(a.info) || a.i - b.i)
+    .map(({ info }) => info);
 }
 
 /** The versions read so far, by their id: a version does not change once kept. */
@@ -190,7 +193,9 @@ export function createVersionView(editor: Editor, versions: Versions, options: V
   nav.append(prev, count, next);
   bar.append(title, fromLabel, toLabel, nav, el('span', 'dx-vv-gap'), seg, restore, close);
   const legend = el('div', 'dx-vv-legend');
-  legend.innerHTML = t('compare.legend').replace(/^([^.:]+)/, '<s>$1</s>').replace(/\. ([^.:]+)/, '. <u>$1</u>');
+  legend.innerHTML = t('compare.legend')
+    .replace(/^([^.:]+)/, '<s>$1</s>')
+    .replace(/\. ([^.:]+)/, '. <u>$1</u>');
   const docEl = el('div', 'dx-vv-doc');
   root.append(bar, legend, docEl);
 

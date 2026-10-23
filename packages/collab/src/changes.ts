@@ -22,6 +22,7 @@ import {
   type Table,
   STORY_PARTS,
   createDoc,
+  endnotePart,
   footnotePart,
   textBoxPart,
   cellOfTable,
@@ -33,7 +34,7 @@ import {
   sliceRuns,
   storyOf,
   withStory,
-} from '@rebodocs/core';
+} from '@rebodocs/core/internal';
 
 /** Where a paragraph is: the text of the document when there is no part, or one of its headers and footers. */
 interface InFlow {
@@ -121,7 +122,7 @@ export interface SetStory {
 
 export interface SetField {
   t: 'set';
-  key: 'page' | 'compatMode' | 'styles' | 'titlePage' | 'columns' | 'sectionStart' | 'noHeader' | 'noFooter' | 'trackRevisions';
+  key: 'page' | 'compatMode' | 'styles' | 'titlePage' | 'columns' | 'sectionStart' | 'noHeader' | 'noFooter' | 'trackRevisions' | 'endnotesAt' | 'endnoteNumbering' | 'footnoteNumbering';
   value: unknown;
 }
 
@@ -150,9 +151,9 @@ export type Op = Splice | SetParagraph | InsertParagraphs | DeleteParagraph | Sp
 // --- Ids ----------------------------------------------------------------------------
 
 /** The paragraphs of each part of a document, the text first. */
-/** The parts a document, or either of two, has text in besides its body: its headers and footers, and its notes at the foot of the pages. */
+/** The parts a document, or either of two, has text in besides its body: its headers and footers, its notes at the foot of the pages and at the end, and its text boxes. */
 export function storyPartsOf(...docs: Doc[]): StoryPart[] {
-  const notes = new Set(docs.flatMap((doc) => (doc.footnotes ?? []).map((note) => footnotePart(note.id))));
+  const notes = new Set(docs.flatMap((doc) => [...(doc.footnotes ?? []).map((note) => footnotePart(note.id)), ...(doc.endnotes ?? []).map((note) => endnotePart(note.id))]));
   const boxes = new Set(docs.flatMap((doc) => (doc.textBoxes ?? []).map((box) => textBoxPart(box.id))));
   return [...STORY_PARTS, ...notes, ...boxes];
 }
@@ -176,11 +177,124 @@ function flows(doc: Doc): { part?: StoryPart; paragraphs: Paragraph[] }[] {
 export function stampIds(doc: Doc): Doc {
   for (const { part, paragraphs } of flows(doc)) {
     paragraphs.forEach((p, i) => {
-      // A note's id ends in digits: what follows it is kept apart.
-      p.id = part?.startsWith('footnote:') || part?.startsWith('textbox:') ? `${part}#${i}` : `${part ?? 'p'}${i}`;
+      p.id = stamp(part, i);
     });
   }
   return doc;
+}
+
+/** The id `stampIds` gives the paragraph at `i` of a part. A note's id ends in digits: what follows it is kept apart. */
+const stamp = (part: StoryPart | undefined, i: number) => (part?.startsWith('footnote:') || part?.startsWith('endnote:') || part?.startsWith('textbox:') ? `${part}#${i}` : `${part ?? 'p'}${i}`);
+
+/**
+ * The ids the paragraphs of a document would be given if it were written to
+ * a file and read again, where they are not the ones they have: what changes
+ * made to it become once it is.
+ */
+export function restamp(doc: Doc): Map<string, string> {
+  const ids = new Map<string, string>();
+  for (const { part, paragraphs } of flows(doc)) {
+    paragraphs.forEach((p, i) => {
+      const id = stamp(part, i);
+      if (p.id !== undefined && p.id !== id) ids.set(p.id, id);
+    });
+  }
+  return ids;
+}
+
+/**
+ * The paragraphs of `after` that are those of `before`, for two documents
+ * whose ids do not say so: a room's document as an editor last had it, and
+ * the room's file read again after others changed it. Part by part, those
+ * that read the same are the same, in order; between two of them, as many
+ * on each side are taken for the same, one by one, changed by someone. Gives
+ * the id each of `before` is to have: that of its own in `after`, or, for one
+ * that is not there, an id nothing in `after` has.
+ */
+export function matchIds(before: Doc, after: Doc): Map<string, string> {
+  const ids = new Map<string, string>();
+  const theirs = new Map(flows(after).map(({ part, paragraphs }) => [part ?? '', paragraphs]));
+  const taken = new Set(flows(after).flatMap(({ paragraphs }) => paragraphs.map((p) => p.id ?? '')));
+  for (const { part, paragraphs: was } of flows(before)) {
+    const now = theirs.get(part ?? '') ?? [];
+    const same = (i: number, j: number) => paragraphText(was[i]) === paragraphText(now[j]);
+    const pairs: [number, number][] = [];
+    let start = 0;
+    while (start < was.length && start < now.length && same(start, start)) pairs.push([start, start++]);
+    let end = 0;
+    while (end < was.length - start && end < now.length - start && same(was.length - 1 - end, now.length - 1 - end)) end++;
+    // What is between, the longest run that reads the same.
+    const a = was.length - end - start;
+    const b = now.length - end - start;
+    const longest = Array.from({ length: a + 1 }, () => new Uint32Array(b + 1));
+    for (let i = a - 1; i >= 0; i--) for (let j = b - 1; j >= 0; j--) longest[i][j] = same(start + i, start + j) ? longest[i + 1][j + 1] + 1 : Math.max(longest[i + 1][j], longest[i][j + 1]);
+    const middle: [number, number][] = [];
+    for (let i = 0, j = 0; i < a && j < b; ) {
+      if (same(start + i, start + j)) middle.push([start + i++, start + j++]);
+      else if (longest[i + 1][j] >= longest[i][j + 1]) i++;
+      else j++;
+    }
+    for (let k = 0; k < end; k++) middle.push([was.length - end + k, now.length - end + k]);
+    // Between two that read the same, as many on each side: the same ones, changed.
+    let [i0, j0] = pairs.length ? pairs[pairs.length - 1].map((n) => n + 1) : [0, 0];
+    for (const [i, j] of [...middle, [was.length, now.length] as [number, number]]) {
+      if (i - i0 === j - j0) for (let k = 0; k < i - i0; k++) pairs.push([i0 + k, j0 + k]);
+      if (i < was.length) pairs.push([i, j]);
+      [i0, j0] = [i + 1, j + 1];
+    }
+    const matched = new Set<number>();
+    for (const [i, j] of pairs) {
+      matched.add(i);
+      if (was[i].id && now[j].id && was[i].id !== now[j].id) ids.set(was[i].id!, now[j].id!);
+    }
+    was.forEach((p, i) => {
+      if (matched.has(i) || !p.id || !taken.has(p.id)) return;
+      let fresh = `${p.id}~`;
+      while (taken.has(fresh)) fresh += '~';
+      taken.add(fresh);
+      ids.set(p.id, fresh);
+    });
+  }
+  return ids;
+}
+
+/** A document with its paragraphs given other ids. */
+export function relabelDoc(doc: Doc, ids: Map<string, string>): Doc {
+  if (!ids.size) return doc;
+  const relabel = (paragraphs: Paragraph[]) => paragraphs.map((p) => (p.id && ids.has(p.id) ? { ...p, id: ids.get(p.id) } : p));
+  let out: Doc = { ...doc, paragraphs: relabel(doc.paragraphs) };
+  for (const part of storyPartsOf(doc)) {
+    const story = storyOf(doc, part);
+    if (story) out = withStory(out, part, { ...story, paragraphs: relabel(story.paragraphs) });
+  }
+  return out;
+}
+
+/** The fields of a change that name a paragraph. */
+const NAMES = new Set(['id', 'after', 'prev', 'next', 'newId']);
+
+/** Changes, and the paragraphs in them, with the ids of paragraphs given other ones. */
+export function renameIds<T>(value: T, ids: Map<string, string>): T {
+  if (!ids.size) return value;
+  const walk = (v: unknown): unknown => {
+    if (Array.isArray(v)) {
+      let out: unknown[] | undefined;
+      v.forEach((item, i) => {
+        const next = walk(item);
+        if (next !== item) (out ??= v.slice())[i] = next;
+      });
+      return out ?? v;
+    }
+    // Plain objects only: the bytes of a picture are left as they are.
+    if (!v || typeof v !== 'object' || Object.getPrototypeOf(v) !== Object.prototype) return v;
+    let out: Record<string, unknown> | undefined;
+    for (const [key, item] of Object.entries(v)) {
+      const next = NAMES.has(key) && typeof item === 'string' ? (ids.get(item) ?? item) : walk(item);
+      if (next !== item) (out ??= { ...(v as Record<string, unknown>) })[key] = next;
+    }
+    return out ?? v;
+  };
+  return walk(value) as T;
 }
 
 function withIds(before: Paragraph[], after: Paragraph[], mint: () => string): Paragraph[] {
@@ -425,7 +539,7 @@ export function diff(before: Doc, after: Doc): Op[] {
   if (before === after) return out;
   if (before.page !== after.page && !sameProps(before.page, after.page)) out.push({ t: 'set', key: 'page', value: after.page });
   if (before.compatMode !== after.compatMode) out.push({ t: 'set', key: 'compatMode', value: after.compatMode ?? null });
-  for (const key of ['columns', 'sectionStart', 'noHeader', 'noFooter', 'trackRevisions'] as const) {
+  for (const key of ['columns', 'sectionStart', 'noHeader', 'noFooter', 'trackRevisions', 'endnotesAt', 'endnoteNumbering', 'footnoteNumbering'] as const) {
     if (before[key] !== after[key] && JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null)) out.push({ t: 'set', key, value: after[key] ?? null });
   }
   if (before.styles !== after.styles) out.push({ t: 'set', key: 'styles', value: after.styles ?? null });
@@ -452,7 +566,8 @@ export function diff(before: Doc, after: Doc): Op[] {
     if (was === now) continue;
     if (!was || !now) {
       // Without a first page of its own, its header and footer went with it.
-      if (now || part === 'header' || part === 'footer' || part.startsWith('footnote:') || part.startsWith('textbox:') || after.firstPage) out.push({ t: 'story', part, value: now ?? null });
+      if (now || part === 'header' || part === 'footer' || part.startsWith('footnote:') || part.startsWith('endnote:') || part.startsWith('textbox:') || after.firstPage)
+        out.push({ t: 'story', part, value: now ?? null });
       continue;
     }
     diffTables(was.tables, now.tables, part, out);
@@ -721,7 +836,12 @@ function applyToFlow(flow: Flow, op: Exclude<Op, SetStory | SetField | SetNote |
       const at = Math.max(0, Math.min(op.at, length));
       // The mark that ends a section is at the end of the paragraph: it goes with the second half.
       const { section: _, ...head } = p;
-      flow.splice(i, 1, { ...head, runs: someRuns(sliceRuns(p.runs, 0, at), p.runs) }, { ...p, id: op.newId, ...(op.props ? { props: op.props as unknown as Paragraph['props'] } : {}), runs: someRuns(sliceRuns(p.runs, at, length), p.runs) });
+      flow.splice(
+        i,
+        1,
+        { ...head, runs: someRuns(sliceRuns(p.runs, 0, at), p.runs) },
+        { ...p, id: op.newId, ...(op.props ? { props: op.props as unknown as Paragraph['props'] } : {}), runs: someRuns(sliceRuns(p.runs, at, length), p.runs) },
+      );
       return;
     }
     case 'join': {
@@ -1025,7 +1145,10 @@ function trimmed(d: DeleteParagraph, b: TextOp): Op[] {
     case 'split': {
       // Both halves were what it had.
       const [head, tail] = follow(d.para!, b);
-      return [{ ...d, para: head }, { t: 'delete', ...flow, id: b.newId, prev: d.prev, para: tail }];
+      return [
+        { ...d, para: head },
+        { t: 'delete', ...flow, id: b.newId, prev: d.prev, para: tail },
+      ];
     }
     case 'join':
       // Brought up to the end of the one before, what it had is there now; brought another up to its own end, it keeps that.
@@ -1145,8 +1268,12 @@ export function mapAnchor(anchor: Anchor, op: Op): Anchor {
 // again. Only what reads differently counts: how the text is cut into runs,
 // and properties left at nothing, do not.
 
-/** A few letters that are the same for two documents that read the same: their text, paragraph by paragraph, with its formatting and the shape of its tables. */
-export function digest(doc: Doc): string {
+/**
+ * A few letters that are the same for two documents that read the same: their
+ * text, paragraph by paragraph, with its formatting and the shape of its
+ * tables. With `ids`, as if its paragraphs had those (see `restamp`).
+ */
+export function digest(doc: Doc, ids?: Map<string, string>): string {
   const plain = (value: object | undefined) =>
     value
       ? JSON.stringify(
@@ -1166,7 +1293,9 @@ export function digest(doc: Doc): string {
         runs += look === last ? run.text : `\u0001${look}\u0002${run.text}`;
         last = look;
       }
-      parts.push(`${p.id}\u0003${plain(p.props)}\u0003${p.cell ? `${p.cell.table}.${p.cell.row}.${p.cell.cell}` : ''}\u0003${p.section ? JSON.stringify(p.section) : ''}\u0003${runs}`);
+      parts.push(
+        `${(p.id && ids?.get(p.id)) ?? p.id}\u0003${plain(p.props)}\u0003${p.cell ? `${p.cell.table}.${p.cell.row}.${p.cell.cell}` : ''}\u0003${p.section ? JSON.stringify(p.section) : ''}\u0003${runs}`,
+      );
     }
   };
   flow(doc.paragraphs);

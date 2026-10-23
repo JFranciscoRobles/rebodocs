@@ -5,7 +5,22 @@
 // turned into a PDF, a DOCX and Markdown. No browser API takes part in it: the
 // same calls, with the same fonts, give the same pages in Node.
 
-import { type Doc, type FontFile, type TemplateData, applyRunProps, createDoc, exportDocx, exportMarkdown, fillVariables, insertTable, insertText, paragraphText, readFont, renderPdf, setParagraphStyle } from '@rebodocs/core';
+import {
+  type Doc,
+  type FontFile,
+  type TemplateData,
+  applyRunProps,
+  createDoc,
+  exportDocx,
+  exportMarkdown,
+  fillVariables,
+  insertTable,
+  insertText,
+  paragraphText,
+  readFont,
+  renderPdf,
+  setParagraphStyle,
+} from '@rebodocs/core';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { PASTEL_CLASS } from '@/lib/home';
 import { CAPTION } from '../styles';
@@ -24,7 +39,9 @@ function template(family: string): Doc {
   doc = insertTable(doc, { para: 3, offset: 0 }, 3, 2).doc;
   const cells = doc.paragraphs.flatMap((p, i) => (p.cell ? [i] : []));
   // The middle row is written once for each item of "lines".
-  ['Item', 'Amount', '{{#lines}}{{lines.item}}', '{{lines.amount | currency}}{{/lines}}', 'Total', '{{amount | currency}}'].forEach((text, k) => (doc = insertText(doc, { para: cells[k], offset: 0 }, text).doc));
+  ['Item', 'Amount', '{{#lines}}{{lines.item}}', '{{lines.amount | currency}}{{/lines}}', 'Total', '{{amount | currency}}'].forEach(
+    (text, k) => (doc = insertText(doc, { para: cells[k], offset: 0 }, text).doc),
+  );
   const last = doc.paragraphs.length - 1;
   return applyRunProps(doc, { from: { para: 0, offset: 0 }, to: { para: last, offset: paragraphText(doc.paragraphs[last]).length } }, { fontFamily: family });
 }
@@ -55,9 +72,9 @@ export default function RenderDemo() {
 
   useEffect(() => {
     // The files a server would read from its disk; here, from the site.
-    Promise.all(
-      ['CourierPrime-Regular', 'CourierPrime-Bold', 'CourierPrime-Italic'].map(async (name) => readFont(new Uint8Array(await (await fetch(`/fonts/${name}.ttf`)).arrayBuffer()))),
-    ).then((read) => setFonts(read.filter((font): font is FontFile => !!font)));
+    Promise.all(['CourierPrime-Regular', 'CourierPrime-Bold', 'CourierPrime-Italic'].map(async (name) => readFont(new Uint8Array(await (await fetch(`/fonts/${name}.ttf`)).arrayBuffer())))).then(
+      (read) => setFonts(read.filter((font): font is FontFile => !!font)),
+    );
   }, []);
 
   const made = useMemo(() => {
@@ -96,7 +113,8 @@ export default function RenderDemo() {
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   };
 
-  const pill = (on: boolean) => `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.blue}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
+  const pill = (on: boolean) =>
+    `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.blue}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
   const ok = made && !('error' in made) ? made : undefined;
 
   return (
@@ -106,7 +124,13 @@ export default function RenderDemo() {
         <>
           <label className={CAPTION}>
             The data, as JSON
-            <textarea value={values} onChange={(e) => setValues(e.target.value)} rows={14} spellCheck={false} className="mt-2 w-full resize-y rounded-lg border border-border bg-white px-3 py-2 font-code text-[12.5px] normal-case leading-[1.55] tracking-normal text-ink" />
+            <textarea
+              value={values}
+              onChange={(e) => setValues(e.target.value)}
+              rows={14}
+              spellCheck={false}
+              className="mt-2 w-full resize-y rounded-lg border border-border bg-white px-3 py-2 font-code text-[12.5px] normal-case leading-[1.55] tracking-normal text-ink"
+            />
           </label>
           <div>
             <p className={CAPTION}>The fonts</p>
@@ -135,10 +159,20 @@ export default function RenderDemo() {
             }
           />
           <div className="flex flex-wrap gap-1.5">
-            <button type="button" disabled={!ok} onClick={() => ok && download(ok.docx, 'receipt.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')} className="cursor-pointer rounded-lg border border-border bg-white px-2.5 py-1 text-[13px] font-semibold text-ink-soft hover:bg-hover disabled:opacity-50">
+            <button
+              type="button"
+              disabled={!ok}
+              onClick={() => ok && download(ok.docx, 'receipt.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
+              className="cursor-pointer rounded-lg border border-border bg-white px-2.5 py-1 text-[13px] font-semibold text-ink-soft hover:bg-hover disabled:opacity-50"
+            >
               receipt.docx
             </button>
-            <button type="button" disabled={!ok} onClick={() => ok && download(ok.pdf, 'receipt.pdf', 'application/pdf')} className="cursor-pointer rounded-lg border border-border bg-white px-2.5 py-1 text-[13px] font-semibold text-ink-soft hover:bg-hover disabled:opacity-50">
+            <button
+              type="button"
+              disabled={!ok}
+              onClick={() => ok && download(ok.pdf, 'receipt.pdf', 'application/pdf')}
+              className="cursor-pointer rounded-lg border border-border bg-white px-2.5 py-1 text-[13px] font-semibold text-ink-soft hover:bg-hover disabled:opacity-50"
+            >
               receipt.pdf
             </button>
           </div>

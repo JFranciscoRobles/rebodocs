@@ -18,11 +18,9 @@ import {
   setPageNumbering,
   splitParagraph,
   storyOnPage,
-} from '../src';
+} from '../src/internal';
 
-const NS =
-  'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' +
-  'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' + 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 
 const FIELD =
   '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> PAGE </w:instrText></w:r>' +
@@ -38,7 +36,8 @@ const H = {
 };
 const HEADER = `<w:hdr ${NS}>${H.table}${H.title}${H.number}</w:hdr>`;
 const BODY = Array.from({ length: 200 }, (_, i) => `<w:p><w:r><w:t>Line ${i}</w:t></w:r></w:p>`).join('');
-const SECT = '<w:sectPr><w:headerReference w:type="default" r:id="rId1"/><w:pgSz w:w="4000" w:h="4000"/><w:pgMar w:top="1440" w:right="400" w:bottom="400" w:left="400" w:header="200" w:footer="200"/></w:sectPr>';
+const SECT =
+  '<w:sectPr><w:headerReference w:type="default" r:id="rId1"/><w:pgSz w:w="4000" w:h="4000"/><w:pgMar w:top="1440" w:right="400" w:bottom="400" w:left="400" w:header="200" w:footer="200"/></w:sectPr>';
 const DOCUMENT = `<w:document ${NS}><w:body>${BODY}${SECT}</w:body></w:document>`;
 const PARTS: Record<string, string> = {
   '[Content_Types].xml': '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>',
@@ -59,7 +58,13 @@ const inHeader = (doc: Doc, change: (text: Doc) => Doc): Doc => {
   const text = change({ ...doc, paragraphs: story.paragraphs, tables: story.tables, header: undefined });
   return { ...doc, header: { paragraphs: text.paragraphs, tables: text.tables } as Story };
 };
-const textOf = (story: Story) => story.paragraphs.map((p) => p.runs.filter((r) => !r.props.object).map((r) => r.text).join(''));
+const textOf = (story: Story) =>
+  story.paragraphs.map((p) =>
+    p.runs
+      .filter((r) => !r.props.object)
+      .map((r) => r.text)
+      .join(''),
+  );
 const measurer: TextMeasurer = {
   width: (text, font) => text.length * font.size * 0.5,
   metrics: (font) => ({ ascent: font.size * 0.8, descent: font.size * 0.2 }),

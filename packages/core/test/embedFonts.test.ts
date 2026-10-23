@@ -1,7 +1,7 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { type Doc, createDoc, documentLanguage, embeddedFonts, exportDocx, importDocx, parseTrueType, textByFamily } from '../src';
+import { type Doc, createDoc, documentLanguage, embeddedFonts, exportDocx, importDocx, parseTrueType, textByFamily } from '../src/internal';
 
 /**
  * The least a font file needs to be told embeddable or not: the TrueType
@@ -12,7 +12,10 @@ function font(fsType: number, version = 0x00010000): Uint8Array {
   const view = new DataView(bytes.buffer);
   view.setUint32(0, version);
   view.setUint16(4, 1);
-  bytes.set([...'OS/2'].map((c) => c.charCodeAt(0)), 12);
+  bytes.set(
+    [...'OS/2'].map((c) => c.charCodeAt(0)),
+    12,
+  );
   view.setUint32(12 + 8, 28);
   view.setUint32(12 + 12, 100);
   view.setUint16(28 + 8, fsType);
@@ -28,7 +31,12 @@ describe('fonts carried in the DOCX', () => {
   it('puts the fonts given into the file, obfuscated, as Word reads them back', () => {
     const regular = font(0);
     const bold = font(0x0008);
-    const docx = exportDocx(doc, { fonts: [{ family: 'Brand', bold: false, italic: false, bytes: regular }, { family: 'Brand', bold: true, italic: false, bytes: bold }] });
+    const docx = exportDocx(doc, {
+      fonts: [
+        { family: 'Brand', bold: false, italic: false, bytes: regular },
+        { family: 'Brand', bold: true, italic: false, bytes: bold },
+      ],
+    });
     const table = text(docx, 'word/fontTable.xml');
     expect(table).toMatch(/<w:font w:name="Brand"><w:embedRegular r:id="rId\d+" w:fontKey="\{[0-9A-F-]{36}\}"\/><w:embedBold r:id="rId\d+" w:fontKey="\{[0-9A-F-]{36}\}"\/><\/w:font>/);
     expect(text(docx, 'word/settings.xml')).toContain('<w:embedTrueTypeFonts/>');
@@ -38,7 +46,10 @@ describe('fonts carried in the DOCX', () => {
     expect(stored).toHaveLength(2);
     expect(stored.some(([, bytes]) => bytes.slice(0, 32).every((b, i) => b === regular[i]))).toBe(false);
     const back = embeddedFonts(importDocx(docx).source!);
-    expect(back.map((f) => [f.family, f.bold, f.italic])).toEqual([['Brand', false, false], ['Brand', true, false]]);
+    expect(back.map((f) => [f.family, f.bold, f.italic])).toEqual([
+      ['Brand', false, false],
+      ['Brand', true, false],
+    ]);
     expect(back[0].bytes).toEqual(regular);
     expect(back[1].bytes).toEqual(bold);
   });
@@ -59,9 +70,17 @@ describe('fonts carried in the DOCX', () => {
   it('does not put a face in twice when the file carries it already, and keeps what the file had', () => {
     const once = exportDocx(doc, { fonts: [{ family: 'Brand', bold: false, italic: false, bytes: font(0) }] });
     const opened = importDocx(once);
-    const twice = exportDocx(opened, { fonts: [{ family: 'Brand', bold: false, italic: false, bytes: font(0) }, { family: 'Brand', bold: false, italic: true, bytes: font(0) }] });
+    const twice = exportDocx(opened, {
+      fonts: [
+        { family: 'Brand', bold: false, italic: false, bytes: font(0) },
+        { family: 'Brand', bold: false, italic: true, bytes: font(0) },
+      ],
+    });
     expect(Object.keys(parts(twice)).filter((path) => path.endsWith('.odttf'))).toHaveLength(2);
-    expect(embeddedFonts(importDocx(twice).source!).map((f) => [f.bold, f.italic])).toEqual([[false, false], [false, true]]);
+    expect(embeddedFonts(importDocx(twice).source!).map((f) => [f.bold, f.italic])).toEqual([
+      [false, false],
+      [false, true],
+    ]);
     expect(text(twice, 'word/settings.xml').match(/embedTrueTypeFonts/g)).toHaveLength(1);
     // Without fonts given, a file goes as it was.
     expect(parts(exportDocx(doc))['word/fontTable.xml']).toBeUndefined();
@@ -75,7 +94,9 @@ describe('fonts cut down in the DOCX', () => {
   const unobfuscate = (docx: Uint8Array) => {
     const table = text(docx, 'word/fontTable.xml');
     const key = table.match(/w:fontKey="\{([0-9A-F-]+)\}"/)![1].replace(/-/g, '');
-    const bytes = Object.entries(parts(docx)).find(([path]) => path.endsWith('.odttf'))![1].slice();
+    const bytes = Object.entries(parts(docx))
+      .find(([path]) => path.endsWith('.odttf'))![1]
+      .slice();
     for (let i = 0; i < 32; i++) bytes[i] ^= parseInt(key.slice(30 - 2 * (i % 16), 32 - 2 * (i % 16)), 16);
     return bytes;
   };

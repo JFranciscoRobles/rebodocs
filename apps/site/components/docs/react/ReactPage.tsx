@@ -21,27 +21,95 @@ const CHANGE: Record<Change, { label: string; color: 'green' | 'orange' | 'blue'
 
 /** Every prop of DocsEditor, from DocsCoreOptions, DocsOptions and DocsEditorProps. */
 const PROPS: { name: string; type: string; text: string; change: Change; link?: [string, string] }[] = [
-  { name: 'docx', type: 'Uint8Array | ArrayBuffer', text: 'The document to open; an empty one without it. Another one opens in its place. Not read with collab, where the room has the document.', change: 'opens' },
+  {
+    name: 'docx',
+    type: 'Uint8Array | ArrayBuffer',
+    text: 'The document to open; an empty one without it. Another one opens in its place. Not read with collab, where the room has the document.',
+    change: 'opens',
+  },
   { name: 'unsaved', type: 'boolean', text: 'Whether docx has changes not saved yet, as a draft your application kept: dirty from the start, with the dot beside the title.', change: 'withDocx' },
   { name: 'name', type: 'string', text: 'What the document is called: shown in the toolbar, given to onSave and to what is exported.', change: 'follows' },
-  { name: 'author', type: 'string', text: 'Who the person is: what their notes and changes are signed with, and what the others see them as. Without it, the name the person gave last time, kept by the browser.', change: 'follows' },
-  { name: 'locale', type: 'string', text: "The language of the interface: 'en', 'es', or one given in locales. Left out, the first of the browser’s languages it speaks, or English. It is the whole page's, not this editor's alone.", change: 'follows', link: ['Languages', '/docs/languages/'] },
-  { name: 'locales', type: 'Record<string, Texts>', text: 'More languages, or other words for these, as { fr: texts }. What one leaves out is said in English.', change: 'follows', link: ['Languages', '/docs/languages/'] },
+  {
+    name: 'author',
+    type: 'string',
+    text: 'Who the person is: what their notes and changes are signed with, and what the others see them as. Without it, the name the person gave last time, kept by the browser.',
+    change: 'follows',
+  },
+  {
+    name: 'locale',
+    type: 'string',
+    text: "The language of the interface: 'en', 'es', or one given in locales. Left out, the first of the browser’s languages it speaks, or English. It is the whole page's, not this editor's alone.",
+    change: 'follows',
+    link: ['Languages', '/docs/languages/'],
+  },
+  {
+    name: 'locales',
+    type: 'Record<string, Texts>',
+    text: 'More languages, or other words for these, as { fr: texts }. What one leaves out is said in English.',
+    change: 'follows',
+    link: ['Languages', '/docs/languages/'],
+  },
   {
     name: 'language',
     type: 'string',
     text: "The language the text is in, as a tag ('en-US'): written in the DOCX, used for the variables that are dates and amounts, and the one a screen reader reads the text with. Left out, the one the file says, or else the interface's. The person can choose another at the foot of the editor.",
     change: 'follows',
   },
-  { name: 'spellcheck', type: 'SpellChecker', text: 'What marks the words spelled wrong with a red wave and offers what they could be: createSpellChecker with the dictionaries you give, or one of your own.', change: 'follows', link: ['Spelling', '/docs/languages/#spelling'] },
-  { name: 'theme', type: "'light' | 'dark' | 'auto'", text: "The colours of the interface: light as it comes, dark, or 'auto' for the one the system is set to. The pages stay white, as paper.", change: 'follows', link: ['Styling', '/docs/styling/'] },
-  { name: 'fonts', type: 'FontSource[]', text: 'Typefaces of your own, each with its family and its file. For the whole page, and they stay; the same ones in a new array are not loaded again.', change: 'follows', link: ['Fonts', '/docs/fonts/'] },
-  { name: 'embedFonts', type: "boolean | 'subset'", text: "Whether the DOCX carries the fonts of fonts its text is in, when they are TrueType and their licence lets it: whole unless false, or cut down to the characters used with 'subset'.", change: 'follows' },
-  { name: 'letterhead', type: 'Blob | { bytes, type } | string | null', text: 'A PNG or JPG to use as letterhead, whatever the document came with; null for none. Given, the menu no longer offers to change it.', change: 'follows', link: ['Letterheads', '/docs/letterhead/'] },
-  { name: 'versions', type: '{ list, load, save? }', text: 'Where your application keeps the versions. The side panel then lists them, compares the document with one and goes back to it; with save, it keeps one.', change: 'mounts', link: ['Versions', '/docs/versions/'] },
-  { name: 'collab', type: '{ url, room, ticket? }', text: 'The document is a room on your collaboration server, and comes from there.', change: 'opens', link: ['Collaboration', '/docs/collaboration/'] },
+  {
+    name: 'spellcheck',
+    type: 'SpellChecker',
+    text: 'What marks the words spelled wrong with a red wave and offers what they could be: createSpellChecker with the dictionaries you give, or one of your own.',
+    change: 'follows',
+    link: ['Spelling', '/docs/languages/#spelling'],
+  },
+  {
+    name: 'theme',
+    type: "'light' | 'dark' | 'auto'",
+    text: "The colours of the interface: light as it comes, dark, or 'auto' for the one the system is set to. The pages stay white, as paper.",
+    change: 'follows',
+    link: ['Styling', '/docs/styling/'],
+  },
+  {
+    name: 'fonts',
+    type: 'FontSource[]',
+    text: 'Typefaces of your own, each with its family and its file. For the whole page, and they stay; the same ones in a new array are not loaded again.',
+    change: 'follows',
+    link: ['Fonts', '/docs/fonts/'],
+  },
+  {
+    name: 'embedFonts',
+    type: "boolean | 'subset'",
+    text: "Whether the DOCX carries the fonts of fonts its text is in, when they are TrueType and their licence lets it: whole unless false, or cut down to the characters used with 'subset'.",
+    change: 'follows',
+  },
+  {
+    name: 'letterhead',
+    type: 'Blob | { bytes, type } | string | null',
+    text: 'A PNG or JPG to use as letterhead, whatever the document came with; null for none. Given, the menu no longer offers to change it.',
+    change: 'follows',
+    link: ['Letterheads', '/docs/letterhead/'],
+  },
+  {
+    name: 'versions',
+    type: '{ list, load, save? }',
+    text: 'Where your application keeps the versions. The side panel then lists them, compares the document with one and goes back to it; with save, it keeps one.',
+    change: 'mounts',
+    link: ['Versions', '/docs/versions/'],
+  },
+  {
+    name: 'collab',
+    type: '{ url, room, ticket? }',
+    text: 'The document is a room on your collaboration server, and comes from there.',
+    change: 'opens',
+    link: ['Collaboration', '/docs/collaboration/'],
+  },
   { name: 'features', type: 'DocsFeatures', text: 'What is switched on. See below.', change: 'mounts' },
-  { name: 'onSave', type: '(docx, name) => void | Promise', text: 'Given the document when the person saves, from the menu or with ⌘S (Ctrl+S), or when you call save(). Keeping it is yours to do; a promise that fails is told to onError.', change: 'latest' },
+  {
+    name: 'onSave',
+    type: '(docx, name) => void | Promise',
+    text: 'Given the document when the person saves, from the menu or with ⌘S (Ctrl+S), or when you call save(). Keeping it is yours to do; a promise that fails is told to onError.',
+    change: 'latest',
+  },
   { name: 'onChange', type: '(editor) => void', text: 'Called when the document changes.', change: 'latest' },
   { name: 'onCollab', type: '(state, peers) => void', text: 'Called when the connection, or who is on the document, changes.', change: 'latest' },
   { name: 'onError', type: '(message) => void', text: 'Told what went wrong, in the language of the interface. Without it, an alert.', change: 'latest' },
@@ -53,9 +121,17 @@ const PROPS: { name: string; type: string; text: string; change: Change; link?: 
 /** Every feature, from DocsFeatures in mount.ts. */
 const FEATURES: { name: string; on: boolean; text: string }[] = [
   { name: 'menu', on: true, text: "The document menu: the file, export, the page, the letterhead. A screen of its own over the editor, or 'card' for a card that drops from its button." },
-  { name: 'panel', on: true, text: "The side panel: outline, variables, notes, tracked changes, and versions when given. On the right of the pages; 'left', or 'rail' for a rail of icons always there, with counts." },
+  {
+    name: 'panel',
+    on: true,
+    text: "The side panel: outline, variables, notes, tracked changes, and versions when given. On the right of the pages; 'left', or 'rail' for a rail of icons always there, with counts.",
+  },
   { name: 'ruler', on: true, text: 'The ruler, with margins, indents and tab stops.' },
-  { name: 'statusBar', on: true, text: "Pages, words, the language of the text, the view, the zoom, and who is on the document, as pills floating over the pages; 'chips' or 'bar' to set them under them." },
+  {
+    name: 'statusBar',
+    on: true,
+    text: "Pages, words, the language of the text, the view, the zoom, and who is on the document, as pills floating over the pages; 'chips' or 'bar' to set them under them.",
+  },
   { name: 'toolbar', on: true, text: "The document above and the formatting under it; 'tabs' for tabs of tools (Format, Insert, Page), or 'row' for one row." },
   { name: 'find', on: true, text: 'Find and replace, from the toolbar or ⌘F (Ctrl+F).' },
   { name: 'focus', on: true, text: 'The pages alone, full screen, from the status bar or ⌘⇧. (Ctrl+Shift+.). Escape leaves.' },
@@ -74,7 +150,10 @@ const HANDLE: { name: string; text: string }[] = [
   { name: 'save()', text: 'Gives the document to onSave, as ⌘S does, and once it is kept, dirty is false. What an application that saves on its own calls, a moment after each change.' },
   { name: 'dirty', text: 'Whether it changed since it was opened or last saved.' },
   { name: 'name', text: 'What the document is called now: the name given, or the one of a file the person opened.' },
-  { name: 'showPanel(tab?)', text: "Opens the side panel on a tab ('outline', 'variables', 'notes', 'changes', or 'history' with versions), or on the one it was on. false when the panel is turned off." },
+  {
+    name: 'showPanel(tab?)',
+    text: "Opens the side panel on a tab ('outline', 'variables', 'notes', 'changes', or 'history' with versions), or on the one it was on. false when the panel is turned off.",
+  },
   { name: 'hidePanel()', text: 'Closes it.' },
   { name: 'focus()', text: 'Gives the keyboard to the document.' },
   { name: 'setName · setAuthor · setLocale · setTheme · setLetterhead', text: 'Change what the props set, for whoever keeps them outside React.' },
@@ -128,7 +207,9 @@ docs.destroy();`,
     ),
   ]);
 
-  const chip = (change: Change) => <span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${PASTEL_CLASS[CHANGE[change].color]}`}>{CHANGE[change].label}</span>;
+  const chip = (change: Change) => (
+    <span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${PASTEL_CLASS[CHANGE[change].color]}`}>{CHANGE[change].label}</span>
+  );
 
   return (
     <>
@@ -142,8 +223,8 @@ docs.destroy();`,
 
       <section aria-labelledby="try" className="mt-16">
         <SectionHead id="try" badge="Live" color="green" title="Switch it on and off">
-          A real <code className={mono}>DocsEditor</code> with the agreement of the demo. The features are read when it is made, so each switch makes it again, with the document as it is: type something,
-          then switch one. The buttons above it use the handle, through a <code className={mono}>ref</code>.
+          A real <code className={mono}>DocsEditor</code> with the agreement of the demo. The features are read when it is made, so each switch makes it again, with the document as it is: type
+          something, then switch one. The buttons above it use the handle, through a <code className={mono}>ref</code>.
         </SectionHead>
         <LazyFeaturesDemo />
       </section>
@@ -177,9 +258,10 @@ docs.destroy();`,
 
       <section aria-labelledby="props" className="mt-24">
         <SectionHead id="props" badge="Props" color="purple" title="Props">
-          Each with what happens when it changes. <strong className="font-semibold text-ink">Follows</strong>: the editor takes the new one as it is. <strong className="font-semibold text-ink">Last one called</strong>: a
-          new function in each render is fine. <strong className="font-semibold text-ink">Made again</strong>: the editor is made again with the document as it is, unsaved changes
-          and all, but without what there was to undo. <strong className="font-semibold text-ink">Opens it</strong>: another document, or another room, takes the place of this one.
+          Each with what happens when it changes. <strong className="font-semibold text-ink">Follows</strong>: the editor takes the new one as it is.{' '}
+          <strong className="font-semibold text-ink">Last one called</strong>: a new function in each render is fine. <strong className="font-semibold text-ink">Made again</strong>: the editor is made
+          again with the document as it is, unsaved changes and all, but without what there was to undo. <strong className="font-semibold text-ink">Opens it</strong>: another document, or another
+          room, takes the place of this one.
         </SectionHead>
         <dl className="m-0 mt-6 max-w-[920px] rounded-2xl border border-border px-5">
           {PROPS.map((prop) => (
@@ -205,8 +287,8 @@ docs.destroy();`,
           ))}
         </dl>
         <p className={prose}>
-          With <code className={mono}>onSave</code> and <code className={mono}>versions</code>, the functions are always the last given; only giving one where there was none, or taking it away, makes the
-          editor again.
+          With <code className={mono}>onSave</code> and <code className={mono}>versions</code>, the functions are always the last given; only giving one where there was none, or taking it away, makes
+          the editor again.
         </p>
       </section>
 
@@ -266,7 +348,11 @@ docs.destroy();`,
         <div className="mt-6 grid max-w-[920px] gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,280px),1fr))' }}>
           {[
             { title: 'The person saves', text: 'Pass onSave. The menu shows Save, ⌘S works, and the dot beside the title says there are changes not saved.', color: 'blue' as const },
-            { title: 'You save', text: 'Call exportDocx() whenever you like: on a timer, on leaving the page, from your own button. Or save(), to go through onSave and clear dirty.', color: 'green' as const },
+            {
+              title: 'You save',
+              text: 'Call exportDocx() whenever you like: on a timer, on leaving the page, from your own button. Or save(), to go through onSave and clear dirty.',
+              color: 'green' as const,
+            },
             { title: 'The room saves', text: 'With collab, the collaboration server keeps the document through your backend, and neither is needed.', color: 'purple' as const },
           ].map((card) => (
             <div key={card.title} className="rounded-2xl border border-border p-5">
@@ -277,8 +363,8 @@ docs.destroy();`,
         </div>
         <div className="mt-6 max-w-[760px]">
           <Callout title="Saving on its own">
-            Call <code className={mono}>save()</code> a moment after the last change, from <code className={mono}>onChange</code>, and on leaving the page when <code className={mono}>dirty</code> is true. The person never has to think of it, and nothing is sent while
-            nothing changed.
+            Call <code className={mono}>save()</code> a moment after the last change, from <code className={mono}>onChange</code>, and on leaving the page when <code className={mono}>dirty</code> is
+            true. The person never has to think of it, and nothing is sent while nothing changed.
           </Callout>
         </div>
       </section>

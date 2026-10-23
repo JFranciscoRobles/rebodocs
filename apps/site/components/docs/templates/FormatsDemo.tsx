@@ -127,7 +127,9 @@ export default function FormatsDemo() {
           return (
             <li key={i} className="flex items-baseline gap-3 border-t border-[#f0eee9] py-2 text-[14px]">
               <span className="w-[150px] shrink-0 truncate font-code text-[12.5px] text-muted">| {step.format}</span>
-              <span className={`font-code ${bad ? 'text-[#b4690e]' : 'text-ink'}`}>{bad ? `${step.problems[step.problems.length - 1].kind === 'format' ? 'no such format' : 'cannot write this value'}: left as it was` : step.text}</span>
+              <span className={`font-code ${bad ? 'text-[#b4690e]' : 'text-ink'}`}>
+                {bad ? `${step.problems[step.problems.length - 1].kind === 'format' ? 'no such format' : 'cannot write this value'}: left as it was` : step.text}
+              </span>
             </li>
           );
         })}

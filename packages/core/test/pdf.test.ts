@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { unzlibSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type TextMeasurer, FontMeasurer, createDoc, exportPdf, insertTable, insertText, layoutDocument, parseTrueType, readFont, setCellProps } from '../src';
+import { type TextMeasurer, FontMeasurer, createDoc, exportPdf, insertTable, insertText, layoutDocument, parseTrueType, readFont, setCellProps } from '../src/internal';
 
 const measurer: TextMeasurer = {
   width: (text, font) => text.length * font.size * 0.5,
@@ -47,7 +47,13 @@ function cffFont(): Uint8Array {
   // A format 4 cmap of one segment, 'A' and 'B' to glyphs 1 and 2, and the one that ends every such map.
   const sub = [...u16(4), ...u16(32), 0, 0, ...u16(4), ...u16(4), ...u16(1), 0, 0, ...u16(66), ...u16(0xffff), 0, 0, ...u16(65), ...u16(0xffff), ...u16(-64 & 0xffff), ...u16(1), 0, 0, 0, 0];
   const cmap = [0, 0, ...u16(1), ...u16(3), ...u16(1), 0, 0, 0, 12, ...sub];
-  const tables: [string, number[]][] = [['CFF ', cff], ['cmap', cmap], ['head', headTable], ['hhea', hhea], ['hmtx', hmtx]];
+  const tables: [string, number[]][] = [
+    ['CFF ', cff],
+    ['cmap', cmap],
+    ['head', headTable],
+    ['hhea', hhea],
+    ['hmtx', hmtx],
+  ];
   const out: number[] = [0x4f, 0x54, 0x54, 0x4f, ...u16(tables.length), 0, 0, 0, 0, 0, 0];
   let at = 12 + tables.length * 16;
   const body: number[] = [];
@@ -83,7 +89,15 @@ describe('PDF export', () => {
   });
 
   it('places each word where the layout measured it, in the letters of the fonts every reader has', () => {
-    const doc = createDoc([{ props: {}, runs: [{ text: 'Hola mundo ', props: {} }, { text: 'año', props: { underline: true, color: 'FF0000', highlight: 'FFFF00' } }] }]);
+    const doc = createDoc([
+      {
+        props: {},
+        runs: [
+          { text: 'Hola mundo ', props: {} },
+          { text: 'año', props: { underline: true, color: 'FF0000', highlight: 'FFFF00' } },
+        ],
+      },
+    ]);
     const layout = layoutDocument(doc, measurer);
     const [content] = streams(exportPdf(layout, { measurer }));
     const line = layout.pages[0].lines[0];
@@ -147,7 +161,15 @@ describe('PDF export', () => {
     const regular = file('CourierPrime-Regular.ttf');
     const bold = file('CourierPrime-Bold.ttf');
     expect([regular.bold, bold.bold]).toEqual([false, true]);
-    const doc = createDoc([{ props: {}, runs: [{ text: 'Bold', props: { fontFamily: 'Courier Prime', bold: true } }, { text: ' slanted', props: { fontFamily: 'Courier Prime', italic: true } }] }]);
+    const doc = createDoc([
+      {
+        props: {},
+        runs: [
+          { text: 'Bold', props: { fontFamily: 'Courier Prime', bold: true } },
+          { text: ' slanted', props: { fontFamily: 'Courier Prime', italic: true } },
+        ],
+      },
+    ]);
     const draw = (fonts: (typeof regular)[]) => {
       const measure = new FontMeasurer(fonts);
       const pick = (spec: { bold: boolean; italic: boolean }) => (fonts.find((f) => f.bold === spec.bold && f.italic === spec.italic) ?? fonts[0]).bytes;

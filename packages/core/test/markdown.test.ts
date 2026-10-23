@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type Paragraph, createDoc, exportMarkdown, insertTable, insertText, setParagraphStyle, shiftListLevel, toggleList, trackEdit } from '../src';
+import { type Paragraph, createDoc, exportMarkdown, insertTable, insertText, setParagraphStyle, shiftListLevel, toggleList, trackEdit } from '../src/internal';
 
 const p = (text: string, props: Paragraph['runs'][0]['props'] = {}): Paragraph => ({ props: {}, runs: [{ text, props }] });
 
@@ -8,22 +8,31 @@ describe('Markdown export', () => {
     let doc = createDoc([
       p('The title'),
       p('A chapter', { bold: true }),
-      { props: {}, runs: [{ text: 'Plain, ', props: {} }, { text: 'bold ', props: { bold: true } }, { text: 'both', props: { bold: true, italic: true } }, { text: ' and ', props: {} }, { text: 'gone', props: { strike: true } }, { text: '.', props: {} }] },
+      {
+        props: {},
+        runs: [
+          { text: 'Plain, ', props: {} },
+          { text: 'bold ', props: { bold: true } },
+          { text: 'both', props: { bold: true, italic: true } },
+          { text: ' and ', props: {} },
+          { text: 'gone', props: { strike: true } },
+          { text: '.', props: {} },
+        ],
+      },
       p(''),
       p('First line\nsecond line\ttabbed\f'),
     ]);
     doc = setParagraphStyle(doc, 0, 0, 'Title');
-    doc = { ...setParagraphStyle(doc, 1, 1, 'Heading2'), paragraphs: setParagraphStyle(doc, 1, 1, 'Heading2').paragraphs.map((para, i) => (i === 1 ? { ...para, runs: [{ text: 'A chapter', props: { bold: true } }] } : para)) };
-    expect(exportMarkdown(doc)).toBe(
-      ['# The title', '## A chapter', 'Plain, **bold** ***both*** and ~~gone~~.', 'First line\\\nsecond line    tabbed'].join('\n\n') + '\n',
-    );
+    doc = {
+      ...setParagraphStyle(doc, 1, 1, 'Heading2'),
+      paragraphs: setParagraphStyle(doc, 1, 1, 'Heading2').paragraphs.map((para, i) => (i === 1 ? { ...para, runs: [{ text: 'A chapter', props: { bold: true } }] } : para)),
+    };
+    expect(exportMarkdown(doc)).toBe(['# The title', '## A chapter', 'Plain, **bold** ***both*** and ~~gone~~.', 'First line\\\nsecond line    tabbed'].join('\n\n') + '\n');
   });
 
   it('keeps as text what Markdown would read as marks', () => {
     const doc = createDoc([p('2 * 3 = 6, a_b, [x] <tag> `code` a|b'), p('# not a heading'), p('- not a list'), p('1. not numbered'), p('> not a quote')]);
-    expect(exportMarkdown(doc)).toBe(
-      ['2 \\* 3 = 6, a\\_b, \\[x\\] \\<tag\\> \\`code\\` a\\|b', '\\# not a heading', '\\- not a list', '1\\. not numbered', '\\> not a quote'].join('\n\n') + '\n',
-    );
+    expect(exportMarkdown(doc)).toBe(['2 \\* 3 = 6, a\\_b, \\[x\\] \\<tag\\> \\`code\\` a\\|b', '\\# not a heading', '\\- not a list', '1\\. not numbered', '\\> not a quote'].join('\n\n') + '\n');
   });
 
   it('writes lists with their levels, items together', () => {
@@ -54,4 +63,3 @@ describe('Markdown export', () => {
     expect(exportMarkdown(tracked, { changes: 'marked' })).toBe('Paid within [-15-]{+30+} days{+, in writing+}.\n');
   });
 });
-

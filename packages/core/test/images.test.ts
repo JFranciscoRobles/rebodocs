@@ -1,9 +1,28 @@
 import { strFromU8, unzipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type Doc, OBJECT_CHAR, altText, createDoc, docImage, exportDocx, importDocx, insertImage, insertImageGrid, insertText, movePicture, pictureAt, resizePicture, setAltText } from '../src';
+import {
+  type Doc,
+  OBJECT_CHAR,
+  altText,
+  createDoc,
+  docImage,
+  exportDocx,
+  importDocx,
+  insertImage,
+  insertImageGrid,
+  insertText,
+  movePicture,
+  pictureAt,
+  resizePicture,
+  setAltText,
+} from '../src/internal';
 
 const PNG = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);
-const base = () => createDoc([{ props: {}, runs: [{ text: 'Hello world', props: {} }] }, { props: {}, runs: [{ text: 'Second', props: {} }] }]);
+const base = () =>
+  createDoc([
+    { props: {}, runs: [{ text: 'Hello world', props: {} }] },
+    { props: {}, runs: [{ text: 'Second', props: {} }] },
+  ]);
 const texts = (doc: Doc) => doc.paragraphs.map((p) => p.runs.map((r) => (r.props.object ? '#' : r.text)).join(''));
 
 describe('pictures', () => {
@@ -42,7 +61,11 @@ describe('pictures', () => {
     // A second picture put in a document that came from a file goes next to the first.
     const two = insertImage(insertText(back, { para: 1, offset: 0 }, 'x').doc, { para: 1, offset: 1 }, { bytes: new Uint8Array([255, 216, 9]), type: 'image/jpeg', width: 10, height: 10 }).doc;
     const again = unzipSync(exportDocx(two));
-    expect(Object.keys(again).filter((path) => path.includes('media/')).sort()).toEqual(['word/media/dx1.jpg', 'word/media/dx1.png']);
+    expect(
+      Object.keys(again)
+        .filter((path) => path.includes('media/'))
+        .sort(),
+    ).toEqual(['word/media/dx1.jpg', 'word/media/dx1.png']);
     expect(texts(importDocx(exportDocx(two)))).toEqual(['Hello# world', 'x#Second']);
   });
 
@@ -88,7 +111,13 @@ describe('pictures', () => {
     const side = table.columns[0] - table.padLeft - table.padRight;
     const sizes = [1, 2, 3, 4, 5].map((i) => pictureAt(doc, { para: i, offset: 0 })!.props);
     expect(sizes.map((p) => [Math.round(p.objectWidth!), Math.round(p.objectHeight!)])).toEqual(
-      [[1, 0.5], [1 / 3, 1], [1, 1], [1, 1], [1, 1 / 3]].map(([w, h]) => [Math.round(side * w), Math.round(side * h)]),
+      [
+        [1, 0.5],
+        [1 / 3, 1],
+        [1, 1],
+        [1, 1],
+        [1, 1 / 3],
+      ].map(([w, h]) => [Math.round(side * w), Math.round(side * h)]),
     );
     expect(doc.paragraphs.slice(1, 6).every((p) => p.props.align === 'center')).toBe(true);
     expect(Object.keys(doc.media!)).toHaveLength(5);

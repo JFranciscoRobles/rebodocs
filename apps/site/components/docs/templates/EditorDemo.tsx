@@ -63,7 +63,12 @@ export default function EditorDemo() {
         <button type="button" className={button} disabled={!seen?.names.length} onClick={() => run((e) => e.fillVariables(SAMPLE))}>
           editor.fillVariables(form)
         </button>
-        <button type="button" aria-pressed={!!seen?.tracking} onClick={() => run((e) => e.setTrackChanges(!e.trackChanges))} className={`${button} ${seen?.tracking ? `border-transparent ${PASTEL_CLASS.green}` : ''}`}>
+        <button
+          type="button"
+          aria-pressed={!!seen?.tracking}
+          onClick={() => run((e) => e.setTrackChanges(!e.trackChanges))}
+          className={`${button} ${seen?.tracking ? `border-transparent ${PASTEL_CLASS.green}` : ''}`}
+        >
           setTrackChanges({String(!seen?.tracking)})
         </button>
         <button type="button" className={button} disabled={!seen?.canUndo} onClick={() => run((e) => e.undo())}>
@@ -80,13 +85,19 @@ export default function EditorDemo() {
         <Readout
           label="What the editor says"
           lines={[
-            ['editor.variables', seen ? (seen.names.length ? `${seen.names.length}: ${seen.names.slice(0, 4).join(', ')}${seen.names.length > 4 ? ', …' : ''}` : '[] — all filled') : '…', seen?.names.length ? undefined : 'good'],
+            [
+              'editor.variables',
+              seen ? (seen.names.length ? `${seen.names.length}: ${seen.names.slice(0, 4).join(', ')}${seen.names.length > 4 ? ', …' : ''}` : '[] — all filled') : '…',
+              seen?.names.length ? undefined : 'good',
+            ],
             ['editor.activeVariable', seen?.active ? `'${seen.active}'` : 'undefined', seen?.active ? undefined : 'dim'],
             ['variableUses(active)', seen?.active ? String(seen.uses) : '—', seen?.active ? undefined : 'dim'],
           ]}
         />
         <p className="m-0 max-w-[760px] text-[13.5px] leading-normal text-muted">
-          The values of the form are the page’s: <code className="font-code text-[12.5px]">clientName</code> is “ana pérez”, written “Ana Pérez” by <code className="font-code text-[12.5px]">capital</code> and in capitals in the signature. The header and the note at the foot of the page are filled too. Track changes first, and the filling is a change to accept or reject.
+          The values of the form are the page’s: <code className="font-code text-[12.5px]">clientName</code> is “ana pérez”, written “Ana Pérez” by{' '}
+          <code className="font-code text-[12.5px]">capital</code> and in capitals in the signature. The header and the note at the foot of the page are filled too. Track changes first, and the
+          filling is a change to accept or reject.
         </p>
       </div>
     </DemoBox>

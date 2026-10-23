@@ -5,6 +5,7 @@ import { CodeTabs } from '@/components/CodeTabs';
 import { LiveDemo } from '@/components/LiveDemo';
 import { FeatureGrid } from '@/components/home/FeatureGrid';
 import { HeroEditor } from '@/components/home/HeroEditor';
+import { Metrics } from '@/components/home/Metrics';
 import { InstallPicker } from '@/components/home/InstallPicker';
 import { SiteFooter, SiteHeader, primary } from '@/components/home/SiteChrome';
 import { LIGHT_THEME, highlight } from '@/lib/docs';
@@ -93,15 +94,9 @@ await storage.put('receipt.docx', exportDocx(doc));`,
 
 const secondary = 'rounded-xl border border-border-strong bg-white font-semibold text-ink transition-colors hover:bg-hover';
 
-const Pill = ({ color, children }: { color: Pastel; children: ReactNode }) => (
-  <span className={`rounded-full px-3 py-[5px] text-[13px] font-semibold ${PASTEL_CLASS[color]}`}>{children}</span>
-);
+const Pill = ({ color, children }: { color: Pastel; children: ReactNode }) => <span className={`rounded-full px-3 py-[5px] text-[13px] font-semibold ${PASTEL_CLASS[color]}`}>{children}</span>;
 const Title = ({ children, small }: { children: ReactNode; small?: boolean }) => (
-  <h2
-    className={`mt-4.5 font-display font-extrabold leading-[1.08] tracking-[-0.03em] ${small ? 'text-[clamp(34px,4.2vw,52px)]' : 'text-[clamp(36px,4.6vw,56px)]'}`}
-  >
-    {children}
-  </h2>
+  <h2 className={`mt-4.5 font-display font-extrabold leading-[1.08] tracking-[-0.03em] ${small ? 'text-[clamp(34px,4.2vw,52px)]' : 'text-[clamp(36px,4.6vw,56px)]'}`}>{children}</h2>
 );
 
 const doodle = 'absolute hidden md:block';
@@ -137,8 +132,7 @@ function Hero() {
         your app.
       </h1>
       <p className="mx-auto mt-7 max-w-[640px] text-[19px] leading-[1.6] text-muted">
-        A word processor for the browser, compatible with Word files. Open, edit and save .docx with tracked changes, versions, collaboration, templates and PDF — in packages you take
-        one at a time.
+        A word processor for the browser, compatible with Word files. Open, edit and save .docx with tracked changes, versions, collaboration, templates and PDF — in packages you take one at a time.
       </p>
       <p className="mt-8 flex flex-wrap justify-center gap-2.5 text-base">
         <Link href="/docs/getting-started/" className={`rounded-xl px-5.5 py-3.5 ${primary}`}>
@@ -170,13 +164,14 @@ export default async function Home() {
           ))}
         </ul>
 
+        <Metrics />
+
         <section id="demo" className="mx-auto max-w-[1180px] px-6 pb-15 pt-25">
           <div className="reveal mx-auto max-w-[720px] text-center">
             <Pill color="blue">Live demo</Pill>
             <Title>This is the editor. Type in it.</Title>
             <p className="mt-4.5 text-lg leading-[1.6] text-muted">
-              Open your own .docx from the menu, fill the template from the side panel, track changes from Review, save a version and compare it, export to PDF. Nothing leaves the
-              browser.
+              Open your own .docx from the menu, fill the template from the side panel, track changes from Review, save a version and compare it, export to PDF. Nothing leaves the browser.
             </p>
           </div>
           <div className="reveal mt-11 rounded-3xl border border-border bg-surface p-3.5">
@@ -277,8 +272,8 @@ export default async function Home() {
             <div className="min-w-0 flex-[1_1_380px]">
               <p className="font-display text-[clamp(24px,2.6vw,32px)] font-bold leading-[1.3] tracking-[-0.03em]">Tested, measured, and published on npm.</p>
               <p className="mt-4 text-[17px] leading-[1.6] text-[#5c4a1e]">
-                Its own word processor, with its own engine, that opens and saves .docx files. In the {AGAINST_WORD.length} documents measured against Word, {linesLikeWord()}% of the lines fall where Word
-                puts them, and the work goes on to reach all of them. Open source under MIT.
+                Its own word processor, with its own engine, that opens and saves .docx files. In the {AGAINST_WORD.length} documents measured against Word, {linesLikeWord()}% of the lines fall where
+                Word puts them, and the work goes on to reach all of them. Open source under MIT.
               </p>
               <p className="mt-6.5 flex flex-wrap gap-2.5">
                 <Link href="/docs/getting-started/" className={`rounded-xl px-5 py-[13px] ${primary}`}>

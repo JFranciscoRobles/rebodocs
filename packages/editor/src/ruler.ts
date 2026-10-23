@@ -4,7 +4,7 @@
 // sets a tab stop of the kind the button at the corner shows, and a stop dragged
 // off the ruler goes. Like the toolbar, it only uses the public methods of the editor.
 
-import type { TabStop } from '@rebodocs/core';
+import type { TabStop } from '@rebodocs/core/internal';
 import { installRegionKeys, markRegion } from './a11y';
 import type { Editor } from './editor';
 import { paragraphDialog } from './paragraphdialog';

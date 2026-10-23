@@ -62,11 +62,7 @@ export default function TrackEditDemo() {
           <Readout
             label="revisionsOf(doc)"
             live={false}
-            lines={
-              changes.length
-                ? changes.slice(0, 6).map((r, i) => [`${i + 1}. ${r.type}`, `«${r.text}»`, r.type === 'insert' ? 'good' : 'warn'])
-                : [['—', 'no change', 'dim']]
-            }
+            lines={changes.length ? changes.slice(0, 6).map((r, i) => [`${i + 1}. ${r.type}`, `«${r.text}»`, r.type === 'insert' ? 'good' : 'warn']) : [['—', 'no change', 'dim']]}
           />
           {changes.length > 6 && <p className="m-0 -mt-2 text-[13px] text-muted">and {changes.length - 6} more</p>}
           <Readout

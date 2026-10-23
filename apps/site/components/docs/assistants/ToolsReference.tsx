@@ -51,7 +51,12 @@ function Row({ tool, server = false }: { tool: ToolDoc; server?: boolean }) {
         {file && !server && <span className={`${badge} bg-hover text-muted`}>server only: reads a file</span>}
         <span className="ml-auto flex gap-1.5">
           {tool.params.length > 0 && (
-            <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="cursor-pointer rounded-full border border-border bg-white px-2.5 py-0.5 text-xs text-ink-soft hover:bg-hover">
+            <button
+              type="button"
+              aria-expanded={open}
+              onClick={() => setOpen(!open)}
+              className="cursor-pointer rounded-full border border-border bg-white px-2.5 py-0.5 text-xs text-ink-soft hover:bg-hover"
+            >
               {open ? 'Hide' : 'Arguments'} ({tool.params.length})
             </button>
           )}
@@ -78,7 +83,13 @@ export function ToolsReference({ tools }: { tools: ToolDoc[] }) {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const hit = (text: string) => words.every((word) => text.toLowerCase().includes(word));
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
-  const files = FILE_TOOLS.map((t) => ({ name: t.name, description: t.description, writes: false, areas: false, params: t.params.map(([name, type, required, description]) => ({ name, type, required, description })) }));
+  const files = FILE_TOOLS.map((t) => ({
+    name: t.name,
+    description: t.description,
+    writes: false,
+    areas: false,
+    params: t.params.map(([name, type, required, description]) => ({ name, type, required, description })),
+  }));
   const groups = [
     { id: 'files', title: 'Files', color: 'green' as const, list: files, note: 'The server’s own: a chat in your application has no files, so it has none of these.' },
     ...TOOL_GROUPS.map((group) => ({ ...group, list: group.tools.map((name) => byName.get(name)!), note: undefined })),

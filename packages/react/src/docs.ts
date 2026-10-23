@@ -9,8 +9,25 @@
 // lie on, their shadow, the colour of the selection.
 
 import { type CollabState, type Peer, type Session, createRoom, joinRoom, pingServer } from '@rebodocs/collab/browser';
-import { type Doc, letterheadImage } from '@rebodocs/core';
-import { type Bubble, type ChangesView, type EditArea, type FontSource, type SpellChecker, type Theme, type ViewMode, type ZoomFit, Editor, IS_MAC, addFonts, fontFamilies, createBubble, recallAuthor, setAuthor, t } from '@rebodocs/editor';
+import { type Doc, letterheadImage } from '@rebodocs/core/internal';
+import {
+  type Bubble,
+  type ChangesView,
+  type EditArea,
+  type FontSource,
+  type SpellChecker,
+  type Theme,
+  type ViewMode,
+  type ZoomFit,
+  Editor,
+  IS_MAC,
+  addFonts,
+  fontFamilies,
+  createBubble,
+  recallAuthor,
+  setAuthor,
+  t,
+} from '@rebodocs/editor';
 import { type AssistantLink, type AssistantOptions, connectAssistant } from '@rebodocs/mcp/browser';
 
 export interface DocsCoreOptions {
@@ -169,6 +186,7 @@ const COMMANDS = [
   'continueNumbering',
   'shiftIndent',
   'insertText',
+  'insertLineBreak',
   'insertPageBreak',
   'insertTable',
   'insertTableRow',
@@ -204,6 +222,7 @@ const COMMANDS = [
   'moveSection',
   'insertSignatures',
   'insertFootnote',
+  'insertEndnote',
   'insertTextBox',
   'restoreVersion',
   'setTrackChanges',
@@ -218,6 +237,8 @@ const COMMANDS = [
   'setPageNumbering',
   'setFirstPageDifferent',
   'setOwnHeaders',
+  'setEndnotesAt',
+  'setNoteNumbering',
   'setLetterhead',
   'setLetterheadFile',
   'fitLetterheadMargins',

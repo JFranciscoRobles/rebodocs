@@ -10,7 +10,19 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename, extname } from 'node:path';
-import { type FormatOptions, type TemplateData, exportDocx, exportMarkdown, fillVariables, flattenValues, importDocx, renderPdf, templateBlocks, variableNames, variableProblems } from '@rebodocs/core';
+import {
+  type FormatOptions,
+  type TemplateData,
+  exportDocx,
+  exportMarkdown,
+  fillVariables,
+  flattenValues,
+  importDocx,
+  renderPdf,
+  templateBlocks,
+  variableNames,
+  variableProblems,
+} from '@rebodocs/core/internal';
 import { fontsFor } from './fonts';
 
 const USAGE = `Usage: rebodocs-generate template.docx [data.json] -o out.(docx|pdf|md) [--fonts folder] [--locale en-US] [--currency EUR]
@@ -55,7 +67,11 @@ const doc = fillVariables(template, values, options);
 const left = [...new Set([...variableNames(doc), ...templateBlocks(doc).map((block) => `#${block.name}`)])];
 if (left.length) console.warn(`Variables without a value, left as they are: ${left.join(', ')}`);
 for (const { name, format, kind } of variableProblems(template, values, options)) {
-  console.warn(kind === 'format' ? `{{${name}}} asks for a format there is not, "${format}": it was ignored.` : `The value of {{${name}}} ("${flat[name]}") is not one "${format}" can write: it was put as given.`);
+  console.warn(
+    kind === 'format'
+      ? `{{${name}}} asks for a format there is not, "${format}": it was ignored.`
+      : `The value of {{${name}}} ("${flat[name]}") is not one "${format}" can write: it was put as given.`,
+  );
 }
 
 const kind = extname(output).toLowerCase();

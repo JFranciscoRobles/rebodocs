@@ -4,7 +4,21 @@
 // the application keeps them, its versions. It only uses the public methods
 // of the editor.
 
-import { type ActiveFormat, type Block, type FormatId, type RevisionView, type TemplateData, flattenValues, valueAt, NOTE_COLORS, defined, formatText, formatValue, isVariableName, revisionColor } from '@rebodocs/core';
+import {
+  type ActiveFormat,
+  type Block,
+  type FormatId,
+  type RevisionView,
+  type TemplateData,
+  flattenValues,
+  valueAt,
+  NOTE_COLORS,
+  defined,
+  formatText,
+  formatValue,
+  isVariableName,
+  revisionColor,
+} from '@rebodocs/core/internal';
 import { recallAuthor, setAuthor } from './author';
 import type { Editor } from './editor';
 import { type MessageKey, getLocale, plural, t } from './i18n';
@@ -208,13 +222,17 @@ const ICON_SLIDERS = icon('<path d="M2.5 4.5h5M10.5 4.5h3M2.5 11.5h2M7.5 11.5h6"
 const ICON_CARET = icon('<path d="m4.5 6 3.5 3.5L11.5 6"/>', 12);
 
 /** Without accents or capitals, to find "Dirección" by "direccion". */
-const plain = (text: string) => text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+const plain = (text: string) =>
+  text
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 /** `clienteFechaNacimiento`, `cliente_fecha` or `cliente.fecha` in its words: ["cliente", "fecha", …]. */
 const wordsOf = (name: string) =>
   name
     .replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, '$1 $2')
-    .split(/[\s_.\-]+/u)
+    .split(/[\s_.-]+/u)
     .filter(Boolean)
     .map((word) => word.toLowerCase());
 
@@ -265,7 +283,16 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
   tabs.addEventListener('keydown', (e) => {
     const at = tabButtons.indexOf(e.target as HTMLButtonElement);
     if (at < 0) return;
-    const to = e.key === 'ArrowRight' || (rail && e.key === 'ArrowDown') ? at + 1 : e.key === 'ArrowLeft' || (rail && e.key === 'ArrowUp') ? at - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? tabButtons.length - 1 : undefined;
+    const to =
+      e.key === 'ArrowRight' || (rail && e.key === 'ArrowDown')
+        ? at + 1
+        : e.key === 'ArrowLeft' || (rail && e.key === 'ArrowUp')
+          ? at - 1
+          : e.key === 'Home'
+            ? 0
+            : e.key === 'End'
+              ? tabButtons.length - 1
+              : undefined;
     if (to === undefined) return;
     const next = tabButtons[(to + tabButtons.length) % tabButtons.length];
     // Along the rail the arrows only move: Enter or a click opens.
@@ -815,11 +842,12 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
     const row = el('div', 'dx-pn-dots');
     row.setAttribute('role', 'radiogroup');
     row.setAttribute('aria-label', t('note.color'));
-    const mark = () => row.querySelectorAll<HTMLElement>('.dx-pn-dot').forEach((dot) => {
-      const on = dot.dataset.color === current();
-      dot.classList.toggle('dx-on', on);
-      dot.setAttribute('aria-checked', String(on));
-    });
+    const mark = () =>
+      row.querySelectorAll<HTMLElement>('.dx-pn-dot').forEach((dot) => {
+        const on = dot.dataset.color === current();
+        dot.classList.toggle('dx-on', on);
+        dot.setAttribute('aria-checked', String(on));
+      });
     for (const color of NOTE_COLORS) {
       const dot = el('button', 'dx-pn-dot');
       dot.type = 'button';
@@ -838,7 +866,10 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
     return row;
   };
   const noteAdder = el('div', 'dx-pn-add');
-  const nextColor = dots(() => editor.noteColor, (color) => (editor.noteColor = color));
+  const nextColor = dots(
+    () => editor.noteColor,
+    (color) => (editor.noteColor = color),
+  );
   nextColor.dataset.name = 'note-color';
   noteAdder.append(noteText, nextColor, noteAdd);
 
@@ -900,7 +931,10 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
         editor.focus();
       });
       by.append(el('span', '', [note.author, day(note.date)].filter(Boolean).join(' · ')), remove);
-      const colors = dots(() => note.color, (color) => editor.setNoteColor(note.id, color));
+      const colors = dots(
+        () => note.color,
+        (color) => editor.setNoteColor(note.id, color),
+      );
       colors.style.paddingTop = '6px';
       card.append(quote, text, colors, by);
       body.appendChild(card);
@@ -946,6 +980,7 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
   const where = (r: RevisionView) => {
     if (!r.part) return '';
     if (r.part.startsWith('footnote:')) return t('area.footnote');
+    if (r.part.startsWith('endnote:')) return t('area.endnote');
     return t(r.part.startsWith('header') || r.part.startsWith('firstHeader') ? 'area.header' : 'area.footer');
   };
   /** The names of what a change of formatting changes, as the toolbar calls them. */
@@ -1007,7 +1042,10 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
     for (const r of list) {
       const card = el('div', `dx-pn-chg${sameRevision(active, r) ? ' dx-on' : ''}`);
       card.style.borderLeftColor = `#${revisionColor(r.author)}`;
-      const text = r.text.replace(/[\u2060\uFFFC]/g, '').replace(/¶$/, '').trim();
+      const text = r.text
+        .replace(/[\u2060\uFFFC]/g, '')
+        .replace(/¶$/, '')
+        .trim();
       const quote = el('button', 'dx-pn-quote');
       quote.type = 'button';
       quote.title = t('changes.goTo');
@@ -1211,8 +1249,7 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
     if (tab === 'outline') {
       renderOutline();
       renderToc();
-    }
-    else if (tab === 'variables') renderVariables();
+    } else if (tab === 'variables') renderVariables();
     else if (tab === 'notes') renderNotes();
     else if (tab === 'changes') renderChanges();
   };

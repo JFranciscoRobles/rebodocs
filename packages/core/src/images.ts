@@ -238,7 +238,9 @@ function rewrapped(xml: string, wrap: Exclude<PictureWrap, 'inline'>): string {
   // the size of the picture and what its effects add to it.
   const out = was.test(xml) ? xml.replace(was, element) : xml.replace(/(<wp:effectExtent\b[^>]*\/>|<wp:extent\b[^>]*\/>)(?!\s*<wp:effectExtent)/, (found) => found + element);
   const behind = wrap === 'behind' ? '1' : '0';
-  return out.replace(/<wp:anchor\b[^>]*>/, (open) => (/\bbehindDoc="/.test(open) ? open.replace(/\bbehindDoc="[^"]*"/, `behindDoc="${behind}"`) : open.replace('<wp:anchor', `<wp:anchor behindDoc="${behind}"`)));
+  return out.replace(/<wp:anchor\b[^>]*>/, (open) =>
+    /\bbehindDoc="/.test(open) ? open.replace(/\bbehindDoc="[^"]*"/, `behindDoc="${behind}"`) : open.replace('<wp:anchor', `<wp:anchor behindDoc="${behind}"`),
+  );
 }
 
 /** The namespaces an element declares for itself, which what takes its place has to declare too. */

@@ -8,7 +8,27 @@
 // language. What every document needs is on unless switched off.
 
 import type { Session } from '@rebodocs/collab/browser';
-import { type Editor, type PanelTab, type Texts, type Theme, type Versions, addLocale, applyTheme, createBubble, createFindBar, createFocusMode, createPanel, createResponsive, createRuler, createSidebar, createStatusBar, createToolbar, onLocaleChange, setLocale, speaks } from '@rebodocs/editor';
+import {
+  type Editor,
+  type PanelTab,
+  type Texts,
+  type Theme,
+  type Versions,
+  addLocale,
+  applyTheme,
+  createBubble,
+  createFindBar,
+  createFocusMode,
+  createPanel,
+  createResponsive,
+  createRuler,
+  createSidebar,
+  createStatusBar,
+  createToolbar,
+  onLocaleChange,
+  setLocale,
+  speaks,
+} from '@rebodocs/editor';
 import { type DocsCoreOptions, type LetterheadSource, createDocs } from './docs';
 
 export interface DocsFeatures {

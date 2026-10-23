@@ -16,6 +16,7 @@ const out = join(here, 'dist');
 /** Where each name another package is imported by lives, from the folder of the packages. */
 const FILES = {
   '@rebodocs/core': 'core/src/index',
+  '@rebodocs/core/internal': 'core/src/internal',
   '@rebodocs/editor': 'editor/src/index',
   '@rebodocs/collab': 'collab/src/changes',
   '@rebodocs/collab/browser': 'collab/src/session',

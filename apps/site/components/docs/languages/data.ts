@@ -92,8 +92,13 @@ export const WHAT: { title: string; answer: string; text: string; color: 'blue' 
 
 /** Every function of the languages, as @rebodocs/react exports them. */
 export const FUNCTIONS: { name: string; signature: string; returns: string; text: string }[] = [
-  { name: 't', signature: 't(key: MessageKey, values?: Record<string, string | number>)', returns: 'string', text: 'The text in the language of the interface, each {name} replaced by its value. A name with no value stays as it is written.' },
-  { name: 'getLocale', signature: 'getLocale()', returns: 'string', text: 'The language of the interface: \'es\' until another is set.' },
+  {
+    name: 't',
+    signature: 't(key: MessageKey, values?: Record<string, string | number>)',
+    returns: 'string',
+    text: 'The text in the language of the interface, each {name} replaced by its value. A name with no value stays as it is written.',
+  },
+  { name: 'getLocale', signature: 'getLocale()', returns: 'string', text: "The language of the interface: 'es' until another is set." },
   {
     name: 'setLocale',
     signature: 'setLocale(locale: string)',

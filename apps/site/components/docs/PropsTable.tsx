@@ -90,7 +90,8 @@ export function PropsTable({ target }: { target?: { name: string; at: number } }
           The document is made again — and what was typed and not saved is gone — when <code className="font-code text-[13px]">docx</code> changes, when the room of{' '}
           <code className="font-code text-[13px]">collab</code> does (its <code className="font-code text-[13px]">url</code>, <code className="font-code text-[13px]">room</code> or{' '}
           <code className="font-code text-[13px]">ticket</code>), or when there is an <code className="font-code text-[13px]">onSave</code> where there was none, or the other way round. Keep{' '}
-          <code className="font-code text-[13px]">docx</code> the same value between renders: a <code className="font-code text-[13px]">Uint8Array</code> held in state, not one built in the body of the component. The functions you pass may be new at each render; the last one given is the one called.
+          <code className="font-code text-[13px]">docx</code> the same value between renders: a <code className="font-code text-[13px]">Uint8Array</code> held in state, not one built in the body of
+          the component. The functions you pass may be new at each render; the last one given is the one called.
         </p>
       </details>
     </>

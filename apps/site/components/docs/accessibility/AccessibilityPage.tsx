@@ -56,8 +56,8 @@ const bytes = await editor.exportPdf('Lease of the flat');            // in the 
     <>
       <h1 className="m-0 mt-3 font-display text-[clamp(36px,4vw,48px)] font-extrabold leading-[1.08] tracking-[-0.03em]">Accessibility</h1>
       <p className="m-0 mt-3.5 max-w-[700px] text-lg leading-[1.6] text-muted">
-        The pages are drawn as positioned pieces of text a screen reader cannot follow. So the editor tells the screen reader what happens instead, and every part around the pages works from the keyboard. It
-        follows WCAG 2.2 at level AA, with the exceptions said below.
+        The pages are drawn as positioned pieces of text a screen reader cannot follow. So the editor tells the screen reader what happens instead, and every part around the pages works from the
+        keyboard. It follows WCAG 2.2 at level AA, with the exceptions said below.
       </p>
       <div className="mt-4">
         <HandTip>tip: move with the arrows in the document below, and read what a screen reader would say</HandTip>
@@ -103,12 +103,12 @@ const bytes = await editor.exportPdf('Lease of the flat');            // in the 
 
       <section aria-labelledby="screen-reader-mode" className="mt-24">
         <SectionHead id="screen-reader-mode" badge="Mode" color="purple" title="Screen reader mode">
-          <strong>⌘⌥Z</strong> (Ctrl+Alt+Z on Windows and Linux) turns it on and off, as in Google Docs. The hidden field then holds the paragraph the caret is in, with the caret and the selection where
-          they are.
+          <strong>⌘⌥Z</strong> (Ctrl+Alt+Z on Windows and Linux) turns it on and off, as in Google Docs. The hidden field then holds the paragraph the caret is in, with the caret and the selection
+          where they are.
         </SectionHead>
         <p className={prose}>
-          The screen reader reads it with its own commands (the current line, the word, spelling it out), and a braille display shows it. The editor stops saying the text, so it is not heard twice, and
-          says only where the caret is: the page, the table, the heading. Turn it on in the demo above and watch the hidden field.
+          The screen reader reads it with its own commands (the current line, the word, spelling it out), and a braille display shows it. The editor stops saying the text, so it is not heard twice,
+          and says only where the caret is: the page, the table, the heading. Turn it on in the demo above and watch the hidden field.
         </p>
         <div className={`mt-5 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: mode }} />
         <p className={prose}>
@@ -157,9 +157,9 @@ const bytes = await editor.exportPdf('Lease of the flat');            // in the 
         <Cards rows={PDF_TAGS} />
         <div className={`mt-7 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: pdf }} />
         <p className={prose}>
-          The language is the one given, or the one chosen at the foot of the editor, or the one the file says (in the editor, for a document that says none, the interface’s when it was opened). When the PDF has a title and a language, every font is inside it and every picture
-          has a description, it says it is PDF/UA, the standard for PDFs anyone can read, and veraPDF, its checker, finds nothing in it. A font the browser has no file for is not inside it, so a PDF
-          exported from the editor in that font does not say so; on a server, give{' '}
+          The language is the one given, or the one chosen at the foot of the editor, or the one the file says (in the editor, for a document that says none, the interface’s when it was opened). When
+          the PDF has a title and a language, every font is inside it and every picture has a description, it says it is PDF/UA, the standard for PDFs anyone can read, and veraPDF, its checker, finds
+          nothing in it. A font the browser has no file for is not inside it, so a PDF exported from the editor in that font does not say so; on a server, give{' '}
           <a href="/docs/fonts/" className={LINK}>
             the font files
           </a>
@@ -181,9 +181,7 @@ const bytes = await editor.exportPdf('Lease of the flat');            // in the 
             and colour swatches a name.
           </li>
           <li>The document keeps saying what the caret meets, as it does in the editor’s own interface: that is the editor’s, not the bars’.</li>
-          <li>
-            Say what your buttons do that cannot be seen from the document, through the editor’s live regions:
-          </li>
+          <li>Say what your buttons do that cannot be seen from the document, through the editor’s live regions:</li>
         </ul>
         <div className={`mt-5 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: own }} />
       </section>

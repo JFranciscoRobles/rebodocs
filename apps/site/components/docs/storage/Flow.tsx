@@ -175,14 +175,7 @@ function Drawing({ layout, steps }: { layout: Layout; steps: Step[] }) {
         const [x1, y1, x2, y2] = layout.edges[edge]!;
         const live = numbers(edge).length > 0;
         return (
-          <path
-            key={edge}
-            d={`M${x1} ${y1}L${x2} ${y2}`}
-            fill="none"
-            strokeWidth="1.6"
-            markerEnd={`url(#${arrow(live)})`}
-            className={`${smooth} ${live ? 'stroke-brand' : 'stroke-[#e4e1da]'}`}
-          />
+          <path key={edge} d={`M${x1} ${y1}L${x2} ${y2}`} fill="none" strokeWidth="1.6" markerEnd={`url(#${arrow(live)})`} className={`${smooth} ${live ? 'stroke-brand' : 'stroke-[#e4e1da]'}`} />
         );
       })}
       {(Object.keys(BOXES) as Who[]).map((who) => {
@@ -191,7 +184,15 @@ function Drawing({ layout, steps }: { layout: Layout; steps: Step[] }) {
         const keys = who === 'backend';
         return (
           <g key={who}>
-            <rect x={x} y={y} width={w} height={h} rx="10" strokeWidth="1.6" className={`${smooth} ${on ? (keys ? 'fill-pastel-blue stroke-brand' : 'fill-white stroke-brand') : 'fill-hover stroke-border-strong'}`} />
+            <rect
+              x={x}
+              y={y}
+              width={w}
+              height={h}
+              rx="10"
+              strokeWidth="1.6"
+              className={`${smooth} ${on ? (keys ? 'fill-pastel-blue stroke-brand' : 'fill-white stroke-brand') : 'fill-hover stroke-border-strong'}`}
+            />
             <text x={x + w / 2} y={y + h / 2 - 4} textAnchor="middle" className={`${smooth} font-text text-[15px] font-semibold ${on ? 'fill-ink' : 'fill-faint'}`}>
               {BOXES[who].name}
             </text>

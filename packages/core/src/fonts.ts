@@ -2,7 +2,7 @@
 // server, a document is laid out with the fonts it is given. The numbers are
 // the ones a browser gets from the same files, so the pages come out the same.
 
-import { type FontMetrics, type FontSpec, type TextMeasurer } from './layout';
+import type { FontMetrics, FontSpec, TextMeasurer } from './layout';
 import { type Doc, type Story, resolveRun } from './model';
 import { type TrueType, parseTrueType } from './pdf';
 import { storyOf, storyParts } from './stories';
@@ -69,8 +69,7 @@ function collectionFaces(bytes: Uint8Array): Uint8Array[] {
   return faces;
 }
 
-const kind = (family: string) =>
-  /courier|consolas|mono/i.test(family) ? 'mono' : /times|georgia|garamond|cambria|palatino|book|serif/i.test(family) && !/sans/i.test(family) ? 'serif' : 'sans';
+const kind = (family: string) => (/courier|consolas|mono/i.test(family) ? 'mono' : /times|georgia|garamond|cambria|palatino|book|serif/i.test(family) && !/sans/i.test(family) ? 'serif' : 'sans');
 /** The families that stand in for one that is missing, by its kind, in the order they are tried. */
 const STAND_INS = {
   mono: ['courier new', 'liberation mono', 'dejavu sans mono'],
@@ -101,12 +100,7 @@ export class FontMeasurer implements TextMeasurer {
     const pick = (family: string) => {
       const faces = this.byFamily.get(family.toLowerCase());
       // The style asked for, or the nearest the family has: the plain one before any other.
-      return (
-        faces?.find((f) => f.bold === spec.bold && f.italic === spec.italic) ??
-        faces?.find((f) => f.bold === spec.bold && !f.italic) ??
-        faces?.find((f) => !f.bold && !f.italic) ??
-        faces?.[0]
-      );
+      return faces?.find((f) => f.bold === spec.bold && f.italic === spec.italic) ?? faces?.find((f) => f.bold === spec.bold && !f.italic) ?? faces?.find((f) => !f.bold && !f.italic) ?? faces?.[0];
     };
     let font = pick(spec.family);
     if (!font) {
@@ -121,18 +115,32 @@ export class FontMeasurer implements TextMeasurer {
   }
 
   width(text: string, spec: FontSpec): number {
-    const key = `${spec.family}|${spec.bold}|${spec.italic}|${spec.size}\n${text}`;
+    const key = `${spec.family}|${spec.bold}|${spec.italic}|${spec.size}|${spec.kern ? 'k' : ''}\n${text}`;
     let width = this.widths.get(key);
     if (width === undefined) {
       const font = this.fontFor(spec);
       if (!font) return text.length * spec.size * 0.5;
       let units = 0;
-      for (const ch of text) units += font.advance(font.glyph(ch.codePointAt(0)!) || font.glyph(0x20));
+      let before = -1;
+      for (const ch of text) {
+        const glyph = font.glyph(ch.codePointAt(0)!) || font.glyph(0x20);
+        units += font.advance(glyph);
+        // Kerned, each pair as the font has it.
+        if (spec.kern && before >= 0 && font.kerning) units += font.kerning(before, glyph);
+        before = glyph;
+      }
       width = (units * spec.size) / font.unitsPerEm;
       if (this.widths.size > 100_000) this.widths.clear();
       this.widths.set(key, width);
     }
     return width;
+  }
+
+  pair(left: string, right: string, spec: FontSpec): number {
+    const font = this.fontFor(spec);
+    if (!spec.kern || !font?.kerning || !left || !right) return 0;
+    const glyph = (ch: string) => font.glyph(ch.codePointAt(0)!) || font.glyph(0x20);
+    return (font.kerning(glyph(left), glyph(right)) * spec.size) / font.unitsPerEm;
   }
 
   metrics(spec: FontSpec): FontMetrics {
@@ -141,7 +149,7 @@ export class FontMeasurer implements TextMeasurer {
     const scale = spec.size / font.unitsPerEm;
     // The line gap goes half above and half below, as in the browser.
     const gap = (Math.max(0, font.lineGap) * scale) / 2;
-    return { ascent: font.ascent * scale + gap, descent: -font.descent * scale + gap };
+    return { ascent: font.ascent * scale + gap, descent: -font.descent * scale + gap, lineGap: gap * 2 };
   }
 }
 
@@ -158,7 +166,7 @@ export function textByFamily(doc: Doc): Map<string, string> {
     if (!set) text.set(key, (set = new Set()));
     for (const ch of chars) set.add(ch);
   };
-  const stories: (Story | undefined)[] = [doc, ...storyParts(doc).map((part) => storyOf(doc, part)), ...(doc.footnotes ?? []), ...(doc.textBoxes ?? [])];
+  const stories: (Story | undefined)[] = [doc, ...storyParts(doc).map((part) => storyOf(doc, part)), ...(doc.footnotes ?? []), ...(doc.endnotes ?? []), ...(doc.textBoxes ?? [])];
   for (const story of stories) for (const para of story?.paragraphs ?? []) for (const run of para.runs) add(resolveRun(run.props).fontFamily, run.text);
   for (const style of doc.styles ?? []) if (style.run.fontFamily) add(style.run.fontFamily, '');
   return new Map([...text].map(([family, chars]) => [family, [...chars].join('')]));

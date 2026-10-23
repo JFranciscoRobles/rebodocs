@@ -93,7 +93,15 @@ export function decodePng(bytes: Uint8Array): Required<Pick<PdfImage, 'width' | 
     } else {
       // An interlaced picture comes in seven passes, each a coarser grid of the whole: where it starts and how it steps.
       let at = 0;
-      for (const [x0, y0, dx, dy] of [[0, 0, 8, 8], [4, 0, 8, 8], [0, 4, 4, 8], [2, 0, 4, 4], [0, 2, 2, 4], [1, 0, 2, 2], [0, 1, 1, 2]]) {
+      for (const [x0, y0, dx, dy] of [
+        [0, 0, 8, 8],
+        [4, 0, 8, 8],
+        [0, 4, 4, 8],
+        [2, 0, 4, 4],
+        [0, 2, 2, 4],
+        [1, 0, 2, 2],
+        [0, 1, 1, 2],
+      ]) {
         const columns = Math.ceil((width - x0) / dx);
         const rows = Math.ceil((height - y0) / dy);
         if (columns <= 0 || rows <= 0) continue;
@@ -211,7 +219,13 @@ export function decodeGif(bytes: Uint8Array): Required<Pick<PdfImage, 'width' | 
 /** The rows of an interlaced GIF in the order they come: every eighth from 0, from 4, every fourth from 2, every other from 1. */
 function interlacedRows(height: number): number[] {
   const rows: number[] = [];
-  for (const [start, step] of [[0, 8], [4, 8], [2, 4], [1, 2]]) for (let y = start; y < height; y += step) rows.push(y);
+  for (const [start, step] of [
+    [0, 8],
+    [4, 8],
+    [2, 4],
+    [1, 2],
+  ])
+    for (let y = start; y < height; y += step) rows.push(y);
   return rows;
 }
 

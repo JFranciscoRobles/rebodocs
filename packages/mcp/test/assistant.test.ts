@@ -2,10 +2,10 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, describe, expect, it } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
-import { type Doc, type Paragraph, createDoc, exportDocx, plainText } from '@rebodocs/core';
+import { type Doc, type Paragraph, createDoc, exportDocx, plainText } from '@rebodocs/core/internal';
 import type { AssistantHost } from '../src/browser';
 import { createAssistantChat } from '../src/chat';
-import { assistantRoute, assistantTools } from '../src/claude';
+import { ALWAYS_LOADED, assistantHandler, assistantRoute, assistantTools } from '../src/claude';
 
 const p = (text: string): Paragraph => ({ props: {}, runs: [{ text, props: {} }] });
 
@@ -92,7 +92,13 @@ describe('the assistant in the page', () => {
 
   it('runs on the document what Claude asks, sends back what came of it, and goes on until Claude is done', async () => {
     const { client, asked } = scripted([
-      { content: [{ type: 'thinking', thinking: '', signature: 'x' }, { type: 'tool_use', id: 't1', name: 'replace_text', input: { find: 'Hola', replace: 'Hello' } }], stop_reason: 'tool_use' },
+      {
+        content: [
+          { type: 'thinking', thinking: '', signature: 'x' },
+          { type: 'tool_use', id: 't1', name: 'replace_text', input: { find: 'Hola', replace: 'Hello' } },
+        ],
+        stop_reason: 'tool_use',
+      },
       { content: [{ type: 'tool_use', id: 't2', name: 'delete_paragraphs', input: { from: 9 } }], stop_reason: 'tool_use' },
       { content: [{ type: 'text', text: 'I translated the greeting.' }], stop_reason: 'end_turn' },
     ]);
@@ -177,5 +183,65 @@ describe('the assistant in the page', () => {
     // The question after the stop goes with a result for the tool that was not run.
     expect(sent.at(-1)!.role).toBe('user');
     expect(JSON.stringify(sent)).toContain('stopped the assistant');
+  });
+
+  it('counts the steps of each user, not of the address of the proxy', async () => {
+    const endpoint = await serve(assistantRoute({ client: scripted([]).client, perMinute: 1, key: (request) => String(request.headers['x-user'] ?? '') }));
+    const ask = (user: string) => fetch(endpoint, { method: 'POST', headers: { 'x-user': user }, body: JSON.stringify({ messages: [{ role: 'user', content: 'hola' }] }) });
+    expect((await ask('ana')).status).toBe(200);
+    expect((await ask('luis')).status).toBe(200);
+    expect((await ask('ana')).status).toBe(429);
+  });
+
+  it('tells Claude what the application knows, after its instructions', async () => {
+    const { client, asked } = scripted([{ content: [{ type: 'text', text: 'Listo.' }], stop_reason: 'end_turn' }]);
+    const endpoint = await serve(assistantRoute({ client, context: () => 'El cliente es Ana Pérez, del inmueble 7766.' }));
+    await createAssistantChat(host(createDoc([p('a')])), { endpoint }).send('¿Para quién es?');
+    const system = asked[0].system as { text: string; cache_control?: unknown }[];
+    expect(system).toHaveLength(2);
+    expect(system[0].cache_control).toEqual({ type: 'ephemeral' });
+    expect(system[1]).toEqual({ type: 'text', text: 'El cliente es Ana Pérez, del inmueble 7766.' });
+  });
+
+  it('answers as a handler of Request and Response, for Next.js and the like', async () => {
+    const { client } = scripted([{ content: [{ type: 'text', text: 'Un contrato.' }], stop_reason: 'end_turn' }]);
+    const handler = assistantHandler({ client, key: () => 'ana', perMinute: 1 });
+    const request = () => new Request('http://crm.local/api/assistant', { method: 'POST', body: JSON.stringify({ messages: [{ role: 'user', content: '¿Qué es?' }] }) });
+    const answer = await handler(request());
+    expect(answer.status).toBe(200);
+    expect(answer.headers.get('content-type')).toContain('application/x-ndjson');
+    const lines = (await answer.text())
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(lines.at(-1)).toMatchObject({ type: 'done', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Un contrato.' }] });
+    expect(
+      lines
+        .filter((line) => line.type === 'text')
+        .map((line) => line.text)
+        .join(''),
+    ).toBe('Un contrato.');
+    expect((await handler(request())).status).toBe(429);
+    const refused = await assistantHandler({ client, allow: () => false })(request());
+    expect(refused.status).toBe(403);
+    expect((await refused.json()).error).toBe('You may not use the assistant.');
+    expect((await assistantHandler({ client })(new Request('http://crm.local/api/assistant', { method: 'GET' }))).status).toBe(405);
+    expect((await assistantHandler({ client })(new Request('http://crm.local/api/assistant', { method: 'POST', body: 'nope' }))).status).toBe(400);
+  });
+
+  it('can have Claude search for the tools it does not use often', async () => {
+    const tools = assistantTools({ search: true });
+    expect(
+      tools
+        .filter((tool) => !tool.defer_loading)
+        .map((tool) => tool.name)
+        .sort(),
+    ).toEqual([...ALWAYS_LOADED].sort());
+    expect(tools.find((tool) => tool.name === 'insert_table')!.defer_loading).toBe(true);
+    const { client, asked } = scripted([{ content: [{ type: 'text', text: 'Hecho.' }], stop_reason: 'end_turn' }]);
+    const endpoint = await serve(assistantRoute({ client, toolSearch: true }));
+    await createAssistantChat(host(createDoc([p('a')])), { endpoint }).send('Pon una tabla');
+    expect((asked[0].tools as { type?: string; name: string }[])[0]).toEqual({ type: 'tool_search_tool_bm25_20251119', name: 'tool_search_tool_bm25' });
+    expect(assistantTools().some((tool) => tool.defer_loading)).toBe(false);
   });
 });

@@ -1,6 +1,27 @@
 import { strFromU8, unzipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type Doc, type Paragraph, LINK_COLOR, autoformat, cleanHref, createDoc, exportDocx, exportPdf, importDocx, insertLink, insertText, insertToc, layoutDocument, linkAt, linkHref, plainText, removeLink, setLink, setParagraphStyle, updateToc } from '../src';
+import {
+  type Doc,
+  type Paragraph,
+  LINK_COLOR,
+  autoformat,
+  cleanHref,
+  createDoc,
+  exportDocx,
+  exportPdf,
+  importDocx,
+  insertLink,
+  insertText,
+  insertToc,
+  layoutDocument,
+  linkAt,
+  linkHref,
+  plainText,
+  removeLink,
+  setLink,
+  setParagraphStyle,
+  updateToc,
+} from '../src/internal';
 
 const p = (text: string): Paragraph => ({ props: {}, runs: [{ text, props: {} }] });
 const at = (para: number, from: number, to: number) => ({ from: { para, offset: from }, to: { para, offset: to } });
@@ -30,7 +51,10 @@ describe('links', () => {
     expect(linkAt(made, { para: 0, offset: 3 })).toBeUndefined();
     // Part of it sent elsewhere is a link of its own.
     const two = setLink(made, at(0, 7, 14), 'https://otro.mx');
-    expect(links(two)).toEqual([['nuestro', 'https://otro.mx'], [' sitio', 'https://ejemplo.com']]);
+    expect(links(two)).toEqual([
+      ['nuestro', 'https://otro.mx'],
+      [' sitio', 'https://ejemplo.com'],
+    ]);
     const plain = removeLink(two, at(0, 0, 24));
     expect(links(plain)).toEqual([]);
     expect(plain.paragraphs[0].runs).toEqual([{ text: 'Visita nuestro sitio hoy', props: {} }]);
@@ -59,7 +83,11 @@ describe('links', () => {
     expect(xml.match(new RegExp(`<w:hyperlink r:id="${id}" w:history="1">`, 'g'))).toHaveLength(2);
 
     const back = importDocx(bytes);
-    expect(links(back)).toEqual([['nuestro sitio', href], ['este', href], ['otro', 'mailto:ana@ejemplo.com']]);
+    expect(links(back)).toEqual([
+      ['nuestro sitio', href],
+      ['este', href],
+      ['otro', 'mailto:ana@ejemplo.com'],
+    ]);
     // Untouched, it is written as it was; edited, its links keep the relationships they had.
     expect(part(exportDocx(back), 'word/document.xml')).toBe(xml);
     const edited = exportDocx(insertText(back, { para: 0, offset: 0 }, '¡').doc);

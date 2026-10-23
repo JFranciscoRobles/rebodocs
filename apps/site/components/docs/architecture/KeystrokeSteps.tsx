@@ -46,7 +46,11 @@ export function KeystrokeSteps({ code }: { code: string[] }) {
                 onClick={() => setAt(i)}
                 className={`flex cursor-pointer items-start gap-3 rounded-[10px] border-0 px-3 py-2.5 text-left transition-colors ${on ? 'bg-pastel-blue' : 'bg-transparent hover:bg-hover'}`}
               >
-                <span className={`flex size-6 flex-none items-center justify-center rounded-full text-xs font-bold ${on ? 'bg-brand text-white' : i < at ? 'bg-[#bfd3f7] text-brand' : 'bg-hover text-muted'}`}>{i + 1}</span>
+                <span
+                  className={`flex size-6 flex-none items-center justify-center rounded-full text-xs font-bold ${on ? 'bg-brand text-white' : i < at ? 'bg-[#bfd3f7] text-brand' : 'bg-hover text-muted'}`}
+                >
+                  {i + 1}
+                </span>
                 <span className={`pt-0.5 text-[15px] ${on ? 'font-semibold text-brand' : 'text-ink'}`}>{s.title}</span>
               </button>
             );
@@ -54,7 +58,9 @@ export function KeystrokeSteps({ code }: { code: string[] }) {
         </div>
 
         <div key={at} className="flex min-w-0 flex-[1.5_1_380px] animate-enter flex-col gap-4 border-[#f0eee9] px-7 py-6 lg:border-l">
-          <p className={CAPTION}>Step {at + 1} of {STEPS.length}</p>
+          <p className={CAPTION}>
+            Step {at + 1} of {STEPS.length}
+          </p>
           <p className="m-0 font-display text-xl font-bold tracking-[-0.01em]">{step.title}</p>
           <p className="m-0 text-base leading-[1.6] text-ink-soft">{step.text}</p>
           <div className={CODE} dangerouslySetInnerHTML={{ __html: code[at] }} />

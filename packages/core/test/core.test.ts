@@ -21,7 +21,7 @@ import {
   selectionRects,
   setParagraphProps,
   splitParagraph,
-} from '../src';
+} from '../src/internal';
 
 // Monospace fake: every character is half the font size wide.
 const measurer: TextMeasurer = {
@@ -190,9 +190,15 @@ describe('layout', () => {
       doc.paragraphs[0].props = { ...PARA, align: 'justify' };
       return doc;
     };
-    expect(layoutDocument(justified(text), measurer).lines.map((l) => [l.start, l.end])).toEqual([[0, 15], [15, 26]]);
+    expect(layoutDocument(justified(text), measurer).lines.map((l) => [l.start, l.end])).toEqual([
+      [0, 15],
+      [15, 26],
+    ]);
     const modern = layoutDocument({ ...justified(text), compatMode: 15 }, measurer);
-    expect(modern.lines.map((l) => [l.start, l.end])).toEqual([[0, 22], [22, 26]]);
+    expect(modern.lines.map((l) => [l.start, l.end])).toEqual([
+      [0, 22],
+      [22, 26],
+    ]);
     expect(modern.lines[0].fragments[0].wordSpacing).toBeCloseTo(-1);
     expect(modern.lines[0].width).toBeCloseTo(100);
     // Not when leaving the word out would loosen the line about as little as taking it tightens it.
@@ -298,13 +304,23 @@ describe('docx', () => {
   });
 
   it('writes highlights with the names Word has for them', () => {
-    const doc = createDoc([{ props: {}, runs: [{ text: 'plain ', props: {} }, { text: 'marked', props: { highlight: 'FFFF00' } }] }]);
+    const doc = createDoc([
+      {
+        props: {},
+        runs: [
+          { text: 'plain ', props: {} },
+          { text: 'marked', props: { highlight: 'FFFF00' } },
+        ],
+      },
+    ]);
     const back = importDocx(exportDocx(doc));
     expect(back.paragraphs[0].runs.map((r) => r.props.highlight)).toEqual([undefined, 'FFFF00']);
     // In an opened document only the run that changed is touched, and a highlight can be taken off again.
     const marked = applyRunProps(back, { from: { para: 0, offset: 0 }, to: { para: 0, offset: 5 } }, { highlight: '00FFFF' });
     expect(importDocx(exportDocx(marked)).paragraphs[0].runs.map((r) => [r.text, r.props.highlight])).toEqual([
-      ['plain', '00FFFF'], [' ', undefined], ['marked', 'FFFF00'],
+      ['plain', '00FFFF'],
+      [' ', undefined],
+      ['marked', 'FFFF00'],
     ]);
     const cleared = applyRunProps(back, { from: { para: 0, offset: 6 }, to: { para: 0, offset: 12 } }, { highlight: '' });
     expect(importDocx(exportDocx(cleared)).paragraphs[0].runs.every((r) => !r.props.highlight)).toBe(true);
@@ -330,9 +346,7 @@ describe('docx', () => {
       '<w:tbl><w:tr><w:tc><w:p><w:hyperlink><w:r><w:t>cell</w:t></w:r></w:hyperlink></w:p></w:tc></w:tr></w:tbl>' +
       '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>' +
       '</w:body></w:document>';
-    const doc = importDocx(
-      zipSync({ 'word/document.xml': strToU8(document), 'word/styles.xml': strToU8(styles) }),
-    );
+    const doc = importDocx(zipSync({ 'word/document.xml': strToU8(document), 'word/styles.xml': strToU8(styles) }));
     // What a tracked change took out is still in the text, marked as taken out.
     expect(docText(doc)).toBe('Head inggone\ncell');
     expect(doc.paragraphs[0].runs.at(-1)!.props.revision).toBe('delete');

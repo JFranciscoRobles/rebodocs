@@ -122,19 +122,15 @@ function PageMaker() {
         </button>
       </div>
       <figure className="m-0 flex flex-[0_0_auto] flex-col items-center justify-center gap-2">
-        <svg width={width * scale + 2} height={height * scale + 2} role="img" aria-label={`${name}, ${landscape ? 'landscape' : 'portrait'}, margins of ${side} points`} className="transition-all duration-300">
+        <svg
+          width={width * scale + 2}
+          height={height * scale + 2}
+          role="img"
+          aria-label={`${name}, ${landscape ? 'landscape' : 'portrait'}, margins of ${side} points`}
+          className="transition-all duration-300"
+        >
           <rect x="1" y="1" width={width * scale} height={height * scale} fill="#fff" stroke="#c9c6bf" />
-          {fits && (
-            <rect
-              x={1 + side * scale}
-              y={1 + side * scale}
-              width={(width - side * 2) * scale}
-              height={(height - side * 2) * scale}
-              fill="#eef3fd"
-              stroke="#8db4f5"
-              strokeDasharray="3 3"
-            />
-          )}
+          {fits && <rect x={1 + side * scale} y={1 + side * scale} width={(width - side * 2) * scale} height={(height - side * 2) * scale} fill="#eef3fd" stroke="#8db4f5" strokeDasharray="3 3" />}
           {fits &&
             [0, 1, 2, 3, 4, 5, 6].map((i) => (
               <rect key={i} x={1 + side * scale + 6} y={1 + side * scale + 8 + i * 10} width={Math.max(0, (width - side * 2) * scale - 12 - (i === 6 ? 30 : 0))} height="3" rx="1.5" fill="#c3d5f7" />

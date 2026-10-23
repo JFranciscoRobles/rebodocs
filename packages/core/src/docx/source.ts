@@ -1,7 +1,7 @@
 // The DOCX package a document was read from, kept so export can reuse it.
 
 import { strFromU8 } from 'fflate';
-import type { Border, Columns, Note, PageSetup, SectionStart, Paragraph, ParagraphProps, RunProps, Story, Table } from '../model';
+import type { Border, Columns, Note, NoteNumbering, PageSetup, SectionStart, Paragraph, ParagraphProps, RunProps, Story, Table } from '../model';
 import type { Numbering } from '../numbering';
 import { type XmlNode, child, childrenOf, parseXml } from './xml';
 
@@ -80,6 +80,9 @@ export interface DocxSource {
   /** The columns of the last section as read, to tell whether they changed. */
   columns?: Columns;
   sectionStart?: SectionStart;
+  /** How the last section numbered its notes at the end, to tell whether that changed. */
+  endnoteNumbering?: NoteNumbering;
+  footnoteNumbering?: NoteNumbering;
   /** Whether the last section gives the first page a header and a footer of its own. */
   titlePage?: boolean;
   /**
@@ -110,6 +113,8 @@ export interface DocxSource {
   /** The part the notes at the foot of the pages were read from, and what each was read as, by its id. */
   footnotesPath?: string;
   footnoteSources?: Map<string, StorySource>;
+  endnotesPath?: string;
+  endnoteSources?: Map<string, StorySource>;
   /** The part the notes were read from, and the notes as they were read: export writes it again when they are not the same. */
   notesPath?: string;
   notes?: Note[];
@@ -171,20 +176,18 @@ export type BasePart = 'header' | 'footer' | 'firstHeader' | 'firstFooter';
  * document's, or with `@` and the index of a section that has its own, that section's;
  * or the text of a note at the foot of the page.
  */
-export type StoryPart = BasePart | `${BasePart}@${number}` | FootnotePart | TextBoxPart;
+export type StoryPart = BasePart | `${BasePart}@${number}` | FootnotePart | EndnotePart | TextBoxPart;
 
 /** The text of a text box, by the id of its drawing. */
 export type TextBoxPart = `textbox:${string}`;
 
 /** The text of a note at the foot of the page, by its id. */
 export type FootnotePart = `footnote:${string}`;
+/** The text of a note at the end of the document, by its id. */
+export type EndnotePart = `endnote:${string}`;
 
 /** The picture an object embeds, when it is in a format browsers can show. `part` is where the object lives. */
-export function objectImage(
-  source: DocxSource,
-  xml: string,
-  part?: BasePart,
-): { bytes: Uint8Array; type: string } | undefined {
+export function objectImage(source: DocxSource, xml: string, part?: BasePart): { bytes: Uint8Array; type: string } | undefined {
   return imageInPart(source, xml, part ? source[`${part}Path`] : source.mainPath);
 }
 

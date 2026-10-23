@@ -54,7 +54,10 @@ export default function PhoneDemo() {
       width: box.clientWidth,
       narrow: !!box.querySelector('.dx-narrow'),
       zoom: editor.zoom,
-      gap: getComputedStyle(box.querySelector('.dx-pages') ?? box).getPropertyValue('--dx-gap').trim() || '24px',
+      gap:
+        getComputedStyle(box.querySelector('.dx-pages') ?? box)
+          .getPropertyValue('--dx-gap')
+          .trim() || '24px',
       ruler: !!ruler && ruler.offsetParent !== null,
       view: editor.view,
       touch: editor.byTouch,
@@ -86,7 +89,8 @@ export default function PhoneDemo() {
     if (reading && seen?.narrow) editor.setFit('width');
   };
 
-  const pill = (on: boolean) => `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
+  const pill = (on: boolean) =>
+    `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
 
   return (
     <div className="mt-7 overflow-hidden rounded-[18px] border border-border">
@@ -107,7 +111,11 @@ export default function PhoneDemo() {
         </button>
       </div>
       <div className="flex flex-wrap items-start justify-center gap-6 bg-[#ebe9e4] px-4 py-6">
-        <div ref={frame} className="h-[640px] max-w-full overflow-hidden rounded-[22px] border-[6px] border-[#2f2e2b] bg-white shadow-lg transition-[width] duration-300" style={{ width: width ? width + 12 : '100%' }}>
+        <div
+          ref={frame}
+          className="h-[640px] max-w-full overflow-hidden rounded-[22px] border-[6px] border-[#2f2e2b] bg-white shadow-lg transition-[width] duration-300"
+          style={{ width: width ? width + 12 : '100%' }}
+        >
           {file ? (
             <DocsEditor docx={file} name="lease.docx" locale="en" author="Ana" onReady={ready} features={{ panel: false }} />
           ) : (

@@ -35,9 +35,7 @@ function StateView() {
           </div>
         ))}
       </div>
-      <p className="m-0 mt-3 text-[13px] leading-normal text-ink-soft">
-        A new object {seen.times} times. Moving the caret in the same paragraph, with nothing else changing, makes none.
-      </p>
+      <p className="m-0 mt-3 text-[13px] leading-normal text-ink-soft">A new object {seen.times} times. Moving the caret in the same paragraph, with nothing else changing, makes none.</p>
     </div>
   );
 }
@@ -65,4 +63,3 @@ export default function StateDemo() {
     </div>
   );
 }
-

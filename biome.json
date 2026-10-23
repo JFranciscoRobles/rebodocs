@@ -1,0 +1,59 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": ["**", "!**/dist", "!**/out", "!**/.next", "!**/src-tauri/target", "!**/src-tauri/gen", "!package-lock.json", "!**/spellcheck.worker.code.ts", "!test-documents"]
+  },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 200 },
+  "javascript": {
+    "formatter": { "quoteStyle": "single", "jsxQuoteStyle": "double", "trailingCommas": "all", "semicolons": "always", "arrowParentheses": "always" }
+  },
+  "css": { "parser": { "tailwindDirectives": true } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        "noNonNullAssertion": "off",
+        "noDescendingSpecificity": "warn"
+      },
+      "suspicious": {
+        "noAssignInExpressions": "off",
+        "useIterableCallbackReturn": "off",
+        "noArrayIndexKey": "warn"
+      },
+      "complexity": {
+        "noCommaOperator": "off",
+        "useSimpleNumberKeys": "off",
+        "noImportantStyles": "off"
+      },
+      "correctness": {
+        "useExhaustiveDependencies": "warn"
+      },
+      "a11y": {
+        "useButtonType": "warn",
+        "useSemanticElements": "warn",
+        "useFocusableInteractive": "warn",
+        "noNoninteractiveTabindex": "warn",
+        "noSvgWithoutTitle": "warn",
+        "useKeyWithClickEvents": "warn",
+        "useAriaPropsSupportedByRole": "warn",
+        "noStaticElementInteractions": "warn",
+        "noAutofocus": "warn",
+        "noRedundantRoles": "warn"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["apps/site/**"],
+      "linter": {
+        "rules": {
+          "security": { "noDangerouslySetInnerHtml": "off" },
+          "performance": { "noImgElement": "off" }
+        }
+      }
+    }
+  ],
+  "assist": { "enabled": false }
+}

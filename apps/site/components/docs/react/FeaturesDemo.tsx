@@ -63,7 +63,8 @@ export default function FeaturesDemo() {
   }, []);
 
   const toggle = (name: Feature) => setFeatures((was) => ({ ...was, [name]: !was[name] }));
-  const pill = (active: boolean) => `cursor-pointer rounded-full border px-3 py-1 font-code text-[12.5px] font-semibold ${active ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
+  const pill = (active: boolean) =>
+    `cursor-pointer rounded-full border px-3 py-1 font-code text-[12.5px] font-semibold ${active ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
   const button = 'cursor-pointer rounded-lg border border-border bg-white px-2.5 py-1 font-code text-[12.5px] font-semibold text-ink-soft hover:bg-hover disabled:cursor-default disabled:opacity-50';
 
   const call = (what: string, fn: (handle: DocsHandle) => unknown) => {

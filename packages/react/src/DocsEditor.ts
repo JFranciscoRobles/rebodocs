@@ -3,7 +3,7 @@
 // component. On the server it draws the empty element and nothing else.
 
 import { type CSSProperties, type ForwardedRef, createElement, forwardRef, useEffect, useRef } from 'react';
-import { type Doc, exportDocx } from '@rebodocs/core';
+import { type Doc, exportDocx } from '@rebodocs/core/internal';
 import { addFonts, addLocale } from '@rebodocs/editor';
 import { fontsKey } from './docs';
 import { type DocsHandle, type DocsOptions, mountDocs } from './mount';
@@ -72,7 +72,8 @@ export const DocsEditor = forwardRef<DocsHandle | undefined, DocsEditorProps>(fu
     const from = options.docx;
     const opened = mounted.editor.doc;
     return () => {
-      if (!options.collab && (carry || mounted.dirty || mounted.editor.doc !== opened)) carried.current = { from, doc: mounted.editor.doc, language: mounted.editor.textLanguage, name: mounted.name, unsaved: mounted.dirty };
+      if (!options.collab && (carry || mounted.dirty || mounted.editor.doc !== opened))
+        carried.current = { from, doc: mounted.editor.doc, language: mounted.editor.textLanguage, name: mounted.name, unsaved: mounted.dirty };
       handle.current = undefined;
       give(latestRef.current, undefined);
       latest.current.onReady?.(undefined);

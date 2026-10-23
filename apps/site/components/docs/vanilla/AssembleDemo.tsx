@@ -28,7 +28,17 @@ type Piece = (typeof PIECES)[number][0];
 /** The code that makes the pieces chosen, wired as they are here. */
 function codeFor(on: Set<Piece>): string {
   const has = (piece: Piece) => on.has(piece);
-  const imports = ['Editor', has('toolbar') && 'createToolbar', has('ruler') && 'createRuler', has('panel') && 'createPanel', has('status') && 'createStatusBar', has('bubble') && 'createBubble', has('find') && 'createFindBar', has('menu') && 'createSidebar', has('focus') && 'createFocusMode'].filter(Boolean);
+  const imports = [
+    'Editor',
+    has('toolbar') && 'createToolbar',
+    has('ruler') && 'createRuler',
+    has('panel') && 'createPanel',
+    has('status') && 'createStatusBar',
+    has('bubble') && 'createBubble',
+    has('find') && 'createFindBar',
+    has('menu') && 'createSidebar',
+    has('focus') && 'createFocusMode',
+  ].filter(Boolean);
   const lines = [`import { ${imports.join(', ')} } from '@rebodocs/editor';`, '', `const editor = new Editor(document.querySelector('#pages')!);`, 'editor.loadDocx(bytes);'];
   if (has('menu')) lines.push(`const menu = createSidebar(editor, {\n  fileName: () => 'lease.docx',\n  within: document.querySelector('#app')!,   // over the editor, not the whole page\n});`);
   if (has('find')) lines.push('const find = createFindBar(editor);');
@@ -36,7 +46,12 @@ function codeFor(on: Set<Piece>): string {
   if (has('bubble')) lines.push('const bubble = createBubble(editor);', `editor.onLinkKey = () => bubble.ask('link');     // ⌘K`);
   if (has('focus')) lines.push('const focus = createFocusMode(editor);');
   if (has('toolbar')) {
-    const options = [has('menu') && 'onMenu: menu.toggle', has('panel') && 'onPanel: panel.toggle', has('find') && 'onFind: () => find.open()', has('bubble') && `onInsertLink: () => bubble.ask('link')`].filter(Boolean);
+    const options = [
+      has('menu') && 'onMenu: menu.toggle',
+      has('panel') && 'onPanel: panel.toggle',
+      has('find') && 'onFind: () => find.open()',
+      has('bubble') && `onInsertLink: () => bubble.ask('link')`,
+    ].filter(Boolean);
     lines.push(`createToolbar(document.querySelector('#toolbar')!, editor${options.length ? `, {\n  ${options.join(',\n  ')},\n}` : ''});`);
   }
   if (has('ruler')) lines.push(`createRuler(document.querySelector('#ruler')!, editor);`);
@@ -48,7 +63,14 @@ export default function AssembleDemo() {
   const [on, setOn] = useState<Set<Piece>>(() => new Set(['toolbar', 'ruler', 'status', 'bubble', 'find']));
   const [ready, setReady] = useState(false);
   const editorRef = useRef<Editor | undefined>(undefined);
-  const box = { app: useRef<HTMLDivElement>(null), toolbar: useRef<HTMLDivElement>(null), ruler: useRef<HTMLDivElement>(null), panel: useRef<HTMLDivElement>(null), pages: useRef<HTMLDivElement>(null), status: useRef<HTMLDivElement>(null) };
+  const box = {
+    app: useRef<HTMLDivElement>(null),
+    toolbar: useRef<HTMLDivElement>(null),
+    ruler: useRef<HTMLDivElement>(null),
+    panel: useRef<HTMLDivElement>(null),
+    pages: useRef<HTMLDivElement>(null),
+    status: useRef<HTMLDivElement>(null),
+  };
 
   // The editor, once: the pieces come and go around it, and the document and its history stay.
   useEffect(() => {
@@ -97,13 +119,15 @@ export default function AssembleDemo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [on, ready]);
 
-  const toggle = (piece: Piece) => setOn((was) => {
-    const next = new Set(was);
-    if (next.has(piece)) next.delete(piece);
-    else next.add(piece);
-    return next;
-  });
-  const pill = (active: boolean) => `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${active ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
+  const toggle = (piece: Piece) =>
+    setOn((was) => {
+      const next = new Set(was);
+      if (next.has(piece)) next.delete(piece);
+      else next.add(piece);
+      return next;
+    });
+  const pill = (active: boolean) =>
+    `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${active ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
 
   return (
     <div className="mt-7 overflow-hidden rounded-[18px] border border-border">

@@ -1,6 +1,28 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type FontSpec, type Paragraph, type Run, adjacentLine, createDoc, floatAt, insertImage, moveFloat, pictureAt, pictureWrap, reanchorFloat, resizeFloat, setPictureWrap, exportDocx, hitTest, importDocx, insertText, layoutDocument, plainText, storyOf, withStory } from '../src';
+import {
+  type FontSpec,
+  type Paragraph,
+  type Run,
+  adjacentLine,
+  createDoc,
+  floatAt,
+  insertImage,
+  moveFloat,
+  pictureAt,
+  pictureWrap,
+  reanchorFloat,
+  resizeFloat,
+  setPictureWrap,
+  exportDocx,
+  hitTest,
+  importDocx,
+  insertText,
+  layoutDocument,
+  plainText,
+  storyOf,
+  withStory,
+} from '../src/internal';
 import { anchoredObject } from '../src/docx/source';
 
 /** Every character as wide as half its font size: enough to see where things land. */
@@ -8,7 +30,8 @@ const measurer = {
   width: (text: string, font: FontSpec) => text.length * font.size * 0.5,
   metrics: (font: FontSpec) => ({ ascent: font.size * 0.8, descent: font.size * 0.2 }),
 };
-const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+const W =
+  'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
 const EMU = 12700;
 
 /** A floating picture `width` by `height` points, `x` from the column and `y` below its paragraph. */
@@ -23,11 +46,47 @@ const p = (text: string, ...more: Run[]): Paragraph => ({ props: {}, runs: [...m
 
 describe('floating pictures', () => {
   it('reads where one goes and what the text does about it', () => {
-    expect(anchoredObject(drawing('wrapSquare wrapText="bothSides"', 10, 20, 100, 50, 9))).toMatchObject({ width: 100, height: 50, x: 10, y: 20, fromX: 'column', fromY: 'paragraph', wrap: 'square', gap: { top: 9, bottom: 9, left: 9, right: 9 } });
+    expect(anchoredObject(drawing('wrapSquare wrapText="bothSides"', 10, 20, 100, 50, 9))).toMatchObject({
+      width: 100,
+      height: 50,
+      x: 10,
+      y: 20,
+      fromX: 'column',
+      fromY: 'paragraph',
+      wrap: 'square',
+      gap: { top: 9, bottom: 9, left: 9, right: 9 },
+    });
     expect(anchoredObject(drawing('wrapTopAndBottom', 0, 0, 100, 50))!.wrap).toBe('topBottom');
     expect(anchoredObject(drawing('wrapTight', 0, 0, 100, 50))!.wrap).toBe('square');
     expect(anchoredObject(drawing('wrapNone', 0, 0, 100, 50))).toMatchObject({ wrap: 'none', gap: { top: 0, bottom: 0, left: 0, right: 0 } });
     expect(anchoredObject('<w:drawing><wp:inline><wp:extent cx="1" cy="1"/></wp:inline></w:drawing>')).toBeUndefined();
+  });
+
+  it('sets the lines above a picture round it too when the room it keeps reaches up into them, the picture staying put', () => {
+    // A line of 10 above, then a paragraph whose banner starts at its top with 4 of room above: the room covers the foot of the line.
+    const short = (text: string): Paragraph => ({ props: { spacingAfter: 2 }, runs: [{ text, props: {} }] });
+    const banner = floating(drawing('wrapTopAndBottom', 0, 0, 200, 40, 4));
+    const layout = layoutDocument(createDoc([short('arriba'), short('subtitulo'), { ...p(words(10), banner), props: { spacingAfter: 0 } }]), measurer);
+    const [box] = layout.pages[0].floats;
+    const subtitle = layout.lines.find((l) => l.fragments.some((f) => f.text === 'subtitulo'))!;
+    // Measured against Word: the subtitle goes below the banner, which stays where its paragraph first put it, under the first line.
+    const first = layout.lines.find((l) => l.fragments.some((f) => f.text === 'arriba'))!;
+    expect(first.y).toBeCloseTo(layout.page.marginTop);
+    expect(box.y).toBeGreaterThan(first.y + first.height);
+    expect(subtitle.y).toBeGreaterThanOrEqual(box.y + 40 + 4 - 0.01);
+    expect(layout.lines.find((l) => l.para === 2)!.y).toBeGreaterThan(subtitle.y);
+  });
+
+  it('breaks again the lines that go on to the next page from beside a picture, for the room there', () => {
+    // A picture at the foot of the first page, taller than what is left of it, and a long paragraph beside it.
+    const filler = Array.from({ length: 25 }, (_, i) => p(`linea ${i}`));
+    const doc = createDoc([...filler, p(words(200), floating(drawing('wrapSquare', 300, 0, 168, 200, 0)))]);
+    const layout = layoutDocument(doc, measurer);
+    expect(layout.pages[0].lines.some((l) => l.para === 25)).toBe(true);
+    const next = layout.pages[1].lines.filter((l) => l.para === 25);
+    expect(next.length).toBeGreaterThan(0);
+    // On the next page nothing is beside it: the lines are as wide as the column.
+    for (const line of next.slice(0, -1)) expect(line.width).toBeGreaterThan(300);
   });
 
   it('sends the text down the side of a picture it goes round, and back to its whole width below it', () => {
@@ -47,7 +106,12 @@ describe('floating pictures', () => {
     }
     for (const line of below) expect(line.x).toBe(marginLeft);
     // No text is lost to the picture: every word is on some line.
-    expect(layout.lines.map((line) => line.fragments.map((f) => f.text).join('')).join('').replace(/⁠/g, '')).toBe(`${words(60)}${words(30)}`);
+    expect(
+      layout.lines
+        .map((line) => line.fragments.map((f) => f.text).join(''))
+        .join('')
+        .replace(/⁠/g, ''),
+    ).toBe(`${words(60)}${words(30)}`);
     // The paragraph after it goes round it too, while it reaches that far.
     const tall = layoutDocument(createDoc([p('Uno', floating(drawing('wrapSquare', 0, 0, 200, 60))), p('Dos'), p(words(40))]), measurer);
     expect(tall.lines.filter((line) => line.para === 1)[0].x).toBe(marginLeft + 200);
@@ -84,7 +148,12 @@ describe('floating pictures', () => {
     expect(below.length).toBeGreaterThan(1);
     for (const [, row] of below) expect(row).toHaveLength(1);
     expect(below[0][0]).toBeCloseTo(beside[beside.length - 1][0] + beside[0][1][0].height, 5);
-    expect(layout.lines.map((line) => line.fragments.map((f) => f.text).join('')).join('').replace(/⁠/g, '')).toBe(words(80));
+    expect(
+      layout.lines
+        .map((line) => line.fragments.map((f) => f.text).join(''))
+        .join('')
+        .replace(/⁠/g, ''),
+    ).toBe(words(80));
     // A point on the right of the picture is in the stretch that is there, and the arrows keep to their side.
     const [, [left, right]] = beside[0];
     expect(hitTest(layout, measurer, 0, right.x + 5, right.y + 2).offset).toBeGreaterThanOrEqual(right.start);
@@ -99,7 +168,10 @@ describe('floating pictures', () => {
   it('counts a whole line as beside a picture, but only the text of the last line of a paragraph', () => {
     // Lines 20 tall whose text is the first 10 of each.
     // The mark of the picture is in the size of the text, or its line would be the taller for it.
-    const spaced = (text: string, ...more: Run[]): Paragraph => ({ props: { lineHeight: 2, spacingAfter: 0 }, runs: [...more.map((run) => ({ ...run, props: { ...run.props, fontSize: 10 } })), { text, props: { fontSize: 10 } }] });
+    const spaced = (text: string, ...more: Run[]): Paragraph => ({
+      props: { lineHeight: 2, spacingAfter: 0 },
+      runs: [...more.map((run) => ({ ...run, props: { ...run.props, fontSize: 10 } })), { text, props: { fontSize: 10 } }],
+    });
     const { marginLeft, marginTop } = createDoc().page;
     const narrowed = (count: number, y: number, height: number) => {
       const layout = layoutDocument(createDoc([spaced(words(count), floating(drawing('wrapSquare', 300, y, 168, height)))]), measurer);
@@ -112,16 +184,32 @@ describe('floating pictures', () => {
     // A paragraph of two lines whose second ends it: the room under its text is not its own, so a picture
     // that starts there is not beside it, and the line keeps its whole width.
     const short = layoutDocument(createDoc([spaced(words(18), floating(drawing('wrapSquare', 300, 35, 168, 46))), p('Después')]), measurer);
-    const said = (lines: typeof short.lines) => lines.map((line) => line.fragments.map((f) => f.text).join('').replace(/\u2060/g, ''));
+    const said = (lines: typeof short.lines) =>
+      lines.map((line) =>
+        line.fragments
+          .map((f) => f.text)
+          .join('')
+          .replace(/\u2060/g, ''),
+      );
     expect(said(short.lines.filter((line) => line.para === 0))).toEqual(said(layoutDocument(createDoc([spaced(words(18))]), measurer).lines));
   });
 
   it('sends a word that fits on neither side of a picture below it, whole', () => {
     // 80 of room on the left and 108 on the right of a picture in the column; a word of 150 fits neither.
-    const doc = createDoc([{ props: {}, runs: [floating(drawing('wrapSquare wrapText="bothSides"', 80, 0, 280, 30)), { text: 'a ', props: {} }, { text: 'palabralarguisima', props: { fontSize: 18 } }, { text: ' fin', props: {} }] }]);
+    const doc = createDoc([
+      {
+        props: {},
+        runs: [floating(drawing('wrapSquare wrapText="bothSides"', 80, 0, 280, 30)), { text: 'a ', props: {} }, { text: 'palabralarguisima', props: { fontSize: 18 } }, { text: ' fin', props: {} }],
+      },
+    ]);
     const layout = layoutDocument(doc, measurer);
     const word = layout.lines.find((line) => line.fragments.some((f) => f.text.includes('palabralarguisima')))!;
-    expect(layout.lines.flatMap((line) => line.fragments).filter((f) => /palabra|larguisima/.test(f.text)).map((f) => f.text)).toEqual(['palabralarguisima']);
+    expect(
+      layout.lines
+        .flatMap((line) => line.fragments)
+        .filter((f) => /palabra|larguisima/.test(f.text))
+        .map((f) => f.text),
+    ).toEqual(['palabralarguisima']);
     expect(word.x).toBe(doc.page.marginLeft);
     expect(word.y).toBeGreaterThanOrEqual(layout.pages[0].floats[0].y + 30 - 0.01);
   });
@@ -203,20 +291,30 @@ describe('the text of a line', () => {
     // Lines 20 tall whose text is 10: Word puts the text first and the room after.
     const layout = layoutDocument(createDoc([{ props: { lineHeight: 2, spacingAfter: 0 }, runs: [{ text: 'x\nx', props: { fontSize: 10 } }] }]), measurer);
     const { marginTop } = createDoc().page;
-    expect(layout.lines.map((line) => [line.y - marginTop, line.height, line.baseline - line.y])).toEqual([[0, 20, 8], [20, 20, 8]]);
+    expect(layout.lines.map((line) => [line.y - marginTop, line.height, line.baseline - line.y])).toEqual([
+      [0, 20, 8],
+      [20, 20, 8],
+    ]);
     // A spacing under single takes from above and below alike.
     const tight = layoutDocument(createDoc([{ props: { lineHeight: 0.8 }, runs: [{ text: 'x', props: { fontSize: 10 } }] }]), measurer);
     expect(tight.lines[0].baseline - tight.lines[0].y).toBeCloseTo(7, 5);
   });
 
-  it('fits on a page when it ends within a point or so of its foot', () => {
+  it('fits on a page when its text does, the room its line spacing leaves under it past the foot', () => {
     const para: Paragraph = { props: { lineHeight: 2, spacingAfter: 0, widowControl: false }, runs: [{ text: Array.from({ length: 8 }, () => 'x').join('\n'), props: { fontSize: 10 } }] };
     const fits = (height: number) => layoutDocument({ ...createDoc([para]), page: { ...createDoc().page, height: 72 + height + 72, marginTop: 72, marginBottom: 72 } }, measurer).pages[0].lines.length;
-    // Five lines of 20 need 100: with 99 they are in, with 98 the fifth goes to the next page, though its text ends at 90.
+    // Lines of 20, double spacing of text 10 tall: the fifth starts at 80 and its text ends at 90, so it is in from 90 on. Measured against Word, which sets 26 lines of double spacing on a page with room for 25.6.
     expect(fits(100)).toBe(5);
-    expect(fits(99)).toBe(5);
-    expect(fits(98)).toBe(4);
-    expect(fits(92)).toBe(4);
+    expect(fits(90)).toBe(5);
+    expect(fits(89.9)).toBe(4);
+  });
+
+  it('fits a single-spaced line only when the whole of it does', () => {
+    const para: Paragraph = { props: { lineHeight: 1, spacingAfter: 0, widowControl: false }, runs: [{ text: Array.from({ length: 8 }, () => 'x').join('\n'), props: { fontSize: 10 } }] };
+    const fits = (height: number) => layoutDocument({ ...createDoc([para]), page: { ...createDoc().page, height: 72 + height + 72, marginTop: 72, marginBottom: 72 } }, measurer).pages[0].lines.length;
+    // Five lines of 10 need 50; a fifth that runs a fifth of a point past goes on, as in Word.
+    expect(fits(50)).toBe(5);
+    expect(fits(49.8)).toBe(4);
   });
 });
 
@@ -268,7 +366,9 @@ describe('a first page with a header of its own', () => {
   const part = (root: string, body: string) => strToU8(`<w:${root} ${W}>${body}</w:${root}>`);
   const para = (text: string) => `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`;
   const rels = (...targets: [string, string, string][]) =>
-    strToU8(`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${targets.map(([id, type, target]) => `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"/>`).join('')}</Relationships>`);
+    strToU8(
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${targets.map(([id, type, target]) => `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"/>`).join('')}</Relationships>`,
+    );
   const file = (titlePg: string) =>
     zipSync({
       'word/document.xml': part(
@@ -276,13 +376,24 @@ describe('a first page with a header of its own', () => {
         `<w:body>${Array.from({ length: 140 }, (_, i) => para(`Línea ${i}`)).join('')}<w:sectPr><w:headerReference w:type="first" r:id="rId1"/><w:headerReference w:type="default" r:id="rId2"/><w:footerReference w:type="default" r:id="rId3"/>${titlePg}</w:sectPr></w:body>`,
       ),
       'word/_rels/document.xml.rels': rels(['rId1', 'header', 'header2.xml'], ['rId2', 'header', 'header1.xml'], ['rId3', 'footer', 'footer1.xml']),
-      'word/header1.xml': part('hdr', '<w:p><w:r><w:t>Página </w:t></w:r><w:r><w:fldChar w:fldCharType="begin"/><w:instrText>PAGE</w:instrText><w:fldChar w:fldCharType="separate"/><w:fldChar w:fldCharType="end"/></w:r></w:p>'),
+      'word/header1.xml': part(
+        'hdr',
+        '<w:p><w:r><w:t>Página </w:t></w:r><w:r><w:fldChar w:fldCharType="begin"/><w:instrText>PAGE</w:instrText><w:fldChar w:fldCharType="separate"/><w:fldChar w:fldCharType="end"/></w:r></w:p>',
+      ),
       'word/header2.xml': part('hdr', `<w:p><w:r><w:t>Portada</w:t></w:r><w:r>${drawing('wrapSquare', 300, 0, 50, 50)}</w:r></w:p>`),
       'word/_rels/header2.xml.rels': rels(['rId1', 'image', 'media/logo.png']),
       'word/media/logo.png': new Uint8Array([1, 2, 3]),
       'word/footer1.xml': part('ftr', para('Pie')),
     });
-  const band = (lines: { fragments: { text: string }[] }[] | undefined) => (lines ?? []).map((line) => line.fragments.map((f) => f.text).join('').replace(/⁠/g, '')).join('|');
+  const band = (lines: { fragments: { text: string }[] }[] | undefined) =>
+    (lines ?? [])
+      .map((line) =>
+        line.fragments
+          .map((f) => f.text)
+          .join('')
+          .replace(/⁠/g, ''),
+      )
+      .join('|');
 
   it('shows it on the first page, and the usual one on the others', () => {
     const bytes = file('<w:titlePg/>');
@@ -331,7 +442,11 @@ describe('a first page with a header of its own', () => {
     const again = importDocx(exportDocx(footed));
     expect(plainText(again.firstPage!.footer!.paragraphs[0].runs)).toBe('Pie de portada');
     expect(plainText(again.footer!.paragraphs[0].runs)).toBe('Pie');
-    expect(layoutDocument(again, measurer).pages.slice(0, 2).map((page) => band(page.footer?.lines))).toEqual(['Pie de portada', 'Pie']);
+    expect(
+      layoutDocument(again, measurer)
+        .pages.slice(0, 2)
+        .map((page) => band(page.footer?.lines)),
+    ).toEqual(['Pie de portada', 'Pie']);
   });
 
   it('can be given to a document, and taken from it', () => {
@@ -352,7 +467,9 @@ describe('a first page with a header of its own', () => {
     expect(strFromU8(files['word/header2.xml'])).toBe(strFromU8(unzipSync(file('<w:titlePg/>'))['word/header2.xml']));
     expect(importDocx(exportDocx(taken)).firstPage).toBeUndefined();
     // A new document says it too.
-    expect(strFromU8(unzipSync(exportDocx({ ...createDoc([p('Uno')]), firstPage: { header: { paragraphs: [p('Portada')] } } }))['word/document.xml'])).toMatch(/<w:headerReference w:type="first"[^>]*\/>.*<w:titlePg\/>/);
+    expect(strFromU8(unzipSync(exportDocx({ ...createDoc([p('Uno')]), firstPage: { header: { paragraphs: [p('Portada')] } } }))['word/document.xml'])).toMatch(
+      /<w:headerReference w:type="first"[^>]*\/>.*<w:titlePg\/>/,
+    );
   });
 
   it('is the usual one when the document does not ask for another', () => {

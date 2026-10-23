@@ -47,7 +47,15 @@ function marked(text: string, words: string[]): ReactNode {
   for (let i = 0; i < text.length; ) {
     let j = i;
     while (j < text.length && on[j] === on[i]) j++;
-    parts.push(on[i] ? <mark key={i} className="rounded-[3px] bg-pastel-yellow px-px text-inherit">{text.slice(i, j)}</mark> : text.slice(i, j));
+    parts.push(
+      on[i] ? (
+        <mark key={i} className="rounded-[3px] bg-pastel-yellow px-px text-inherit">
+          {text.slice(i, j)}
+        </mark>
+      ) : (
+        text.slice(i, j)
+      ),
+    );
     i = j;
   }
   return parts;
@@ -188,7 +196,11 @@ export function SearchCommand({ index }: { index: SearchEntry[] }) {
               className="min-w-0 flex-1 border-0 bg-transparent py-4.5 text-[17px] text-ink placeholder:text-faint"
             />
             {query && (
-              <button type="button" onClick={() => (setQuery(''), setAt(0), input.current?.focus())} className="cursor-pointer rounded-md px-1.5 py-0.5 text-[13px] text-muted hover:bg-hover hover:text-ink">
+              <button
+                type="button"
+                onClick={() => (setQuery(''), setAt(0), input.current?.focus())}
+                className="cursor-pointer rounded-md px-1.5 py-0.5 text-[13px] text-muted hover:bg-hover hover:text-ink"
+              >
                 Clear
               </button>
             )}
@@ -197,7 +209,10 @@ export function SearchCommand({ index }: { index: SearchEntry[] }) {
           <div id="search-results" role="listbox" aria-label="Results" className="max-h-[min(460px,62vh)] overflow-y-auto overscroll-contain px-2 pb-2">
             {groups.map((group, g) => (
               <div key={group.title} role="group" aria-labelledby={`search-group-${g}`}>
-                <div id={`search-group-${g}`} className="sticky top-0 z-[1] flex items-center justify-between bg-white/95 px-3 pb-1.5 pt-3.5 text-[11.5px] font-semibold uppercase tracking-[0.05em] text-muted backdrop-blur-sm">
+                <div
+                  id={`search-group-${g}`}
+                  className="sticky top-0 z-[1] flex items-center justify-between bg-white/95 px-3 pb-1.5 pt-3.5 text-[11.5px] font-semibold uppercase tracking-[0.05em] text-muted backdrop-blur-sm"
+                >
                   <span>{group.title}</span>
                   <span className="font-code font-normal normal-case tracking-normal text-faint">{group.entries.length}</span>
                 </div>
@@ -219,7 +234,9 @@ export function SearchCommand({ index }: { index: SearchEntry[] }) {
                         <Icon path={kind.icon} />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className={`block truncate text-[14.5px] font-medium ${CODE_KINDS.has(entry.kind) ? 'font-code text-[13.5px]' : ''} ${on ? 'text-brand' : 'text-ink'}`}>{marked(entry.title, words)}</span>
+                        <span className={`block truncate text-[14.5px] font-medium ${CODE_KINDS.has(entry.kind) ? 'font-code text-[13.5px]' : ''} ${on ? 'text-brand' : 'text-ink'}`}>
+                          {marked(entry.title, words)}
+                        </span>
                         {entry.detail && (words.length || entry.kind !== 'Page') && <span className="block truncate text-[12.5px] text-muted">{entry.detail}</span>}
                       </span>
                       <span aria-hidden="true" className={`flex-none text-[13px] text-brand transition-opacity ${on ? 'opacity-100' : 'opacity-0'}`}>

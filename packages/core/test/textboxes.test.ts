@@ -1,18 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import {
-  type Doc,
-  type TextMeasurer,
-  createDoc,
-  exportDocx,
-  importDocx,
-  insertTextBox,
-  layoutDocument,
-  paragraphText,
-  storyOf,
-  textBoxLook,
-  withStory,
-} from '../src';
+import { type Doc, type TextMeasurer, createDoc, exportDocx, importDocx, insertTextBox, layoutDocument, paragraphText, storyOf, textBoxLook, withStory } from '../src/internal';
 
 // Monospace fake: every character is half the font size wide; a 10pt line is 10pt tall.
 const measurer: TextMeasurer = {
@@ -55,7 +43,10 @@ describe('text boxes', () => {
     expect(laid.frame).toEqual({ x: 172, y: 172, width: 200, height: 100 });
     expect(laid.look).toMatchObject({ fill: 'FFFFFF', line: { color: 'FF0000', width: 1 }, inset: { top: 10.5, left: 10.5 }, grows: false });
     // Inside its insets and half its line: 179 wide, 35 letters of 5 a line.
-    expect(laid.lines.map((l) => [l.x, l.y])).toEqual([[182.5, 182.5], [182.5, 192.5]]);
+    expect(laid.lines.map((l) => [l.x, l.y])).toEqual([
+      [182.5, 182.5],
+      [182.5, 192.5],
+    ]);
     expect(laid.lines[0].fragments.map((f) => f.text).join('')).toMatch(/^Inside the box/);
     expect(laid.lines.every((l) => l.y + l.height <= 262)).toBe(true);
   });

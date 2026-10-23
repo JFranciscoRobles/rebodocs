@@ -3,7 +3,7 @@
 // across is chosen there, and they are dragged into the order wanted. It
 // only uses the public methods of the editor.
 
-import { MAX_GRID_COLUMNS } from '@rebodocs/core';
+import { MAX_GRID_COLUMNS } from '@rebodocs/core/internal';
 import { holdFocus } from './a11y';
 import type { Editor } from './editor';
 import { plural, t } from './i18n';
@@ -152,7 +152,9 @@ export function openImageGrid(editor: Editor, files: File[]): Promise<number> {
           // Moved with a button as well as by dragging: from the keyboard, and by a hand that cannot drag.
           const move = (by: -1 | 1) => {
             const mover = el('button', `dx-ig-mv ${by < 0 ? 'dx-ig-earlier' : 'dx-ig-later'}`, by < 0 ? '‹' : '›');
-            mover.title = t(by < 0 ? 'grid.earlier' : 'grid.later', { name: '' }).replace(/\s+/g, ' ').trim();
+            mover.title = t(by < 0 ? 'grid.earlier' : 'grid.later', { name: '' })
+              .replace(/\s+/g, ' ')
+              .trim();
             mover.setAttribute('aria-label', t(by < 0 ? 'grid.earlier' : 'grid.later', { name: item.file.name }));
             mover.disabled = i + by < 0 || i + by >= items.length;
             mover.addEventListener('click', () => {
@@ -213,7 +215,12 @@ export function openImageGrid(editor: Editor, files: File[]): Promise<number> {
     const insert = async () => {
       if (!items.length) return;
       accept.disabled = true;
-      close(await editor.insertImageGrid(items.map((item) => item.file), columns));
+      close(
+        await editor.insertImageGrid(
+          items.map((item) => item.file),
+          columns,
+        ),
+      );
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {

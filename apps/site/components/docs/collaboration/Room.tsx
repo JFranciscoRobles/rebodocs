@@ -102,7 +102,9 @@ const placeOf = (doc: Doc, mark: Mark) => {
 function useRoom() {
   const [, setTick] = useState(0);
   const redraw = useCallback(() => setTick((n) => n + 1), []);
-  const clients = useRef<Client[]>(PEOPLE.map(({ who, color }) => ({ who, color, confirmed: START, rev: 0, buffer: [], shadow: START, applying: false, minted: 0, outbox: [], undo: [], redo: [], seenCommits: 0, seenSteps: 0 })));
+  const clients = useRef<Client[]>(
+    PEOPLE.map(({ who, color }) => ({ who, color, confirmed: START, rev: 0, buffer: [], shadow: START, applying: false, minted: 0, outbox: [], undo: [], redo: [], seenCommits: 0, seenSteps: 0 })),
+  );
   const room = useRef<{ doc: Doc; log: Logged[] }>({ doc: START, log: [] });
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(paused);
@@ -451,9 +453,13 @@ export default function Room() {
             </button>
           </>
         ) : (
-          <span className="text-[13px] text-muted">{r.paused ? 'Held: what either types waits here until you let it through.' : 'Type in either one. Hold the network to make changes at the same time.'}</span>
+          <span className="text-[13px] text-muted">
+            {r.paused ? 'Held: what either types waits here until you let it through.' : 'Type in either one. Hold the network to make changes at the same time.'}
+          </span>
         )}
-        <span className={`ml-auto rounded-full px-2.5 py-1 text-xs font-semibold ${!ready ? 'bg-hover text-muted' : pending ? 'bg-pastel-yellow text-pastel-yellow-fg' : same ? 'bg-pastel-green text-pastel-green-fg' : 'bg-pastel-pink text-pastel-pink-fg'}`}>
+        <span
+          className={`ml-auto rounded-full px-2.5 py-1 text-xs font-semibold ${!ready ? 'bg-hover text-muted' : pending ? 'bg-pastel-yellow text-pastel-yellow-fg' : same ? 'bg-pastel-green text-pastel-green-fg' : 'bg-pastel-pink text-pastel-pink-fg'}`}
+        >
           {!ready ? 'Opening…' : pending ? `${pending} not sent yet` : same ? 'digest ✓ the same document for all three' : 'digests differ: the editor would load the room again'}
         </span>
       </div>
@@ -462,9 +468,12 @@ export default function Room() {
         {r.room.log.length ? (
           r.room.log.map((entry, i) => (
             <div key={i}>
-              <span className="text-[#a8a49a]">{i + 1}.</span> <span style={{ color: entry.by === 'Ana' ? '#f5a35c' : '#8fb8f5' }}>{entry.by}</span>{' '}
-              {entry.ops.map(said).join('; ')}
-              {entry.sent && <div className="pl-5 text-[#9ee0b0]">↳ moved over {entry.over} it had not seen: it said “{entry.sent.map(said).join('; ')}”</div>}
+              <span className="text-[#a8a49a]">{i + 1}.</span> <span style={{ color: entry.by === 'Ana' ? '#f5a35c' : '#8fb8f5' }}>{entry.by}</span> {entry.ops.map(said).join('; ')}
+              {entry.sent && (
+                <div className="pl-5 text-[#9ee0b0]">
+                  ↳ moved over {entry.over} it had not seen: it said “{entry.sent.map(said).join('; ')}”
+                </div>
+              )}
             </div>
           ))
         ) : (

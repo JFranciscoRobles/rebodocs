@@ -83,6 +83,10 @@ export async function loadDoc(slug: string): Promise<DocPage> {
   const title = /^# (.+)$/m.exec(source)?.[1] ?? slug;
   const body = source.replace(/^# .+\n+/, '');
   // What the page is about: its first paragraph, as plain text.
-  const description = (body.split(/\n\s*\n/)[0] ?? '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[`*_]/g, '').replace(/\s+/g, ' ').trim();
+  const description = (body.split(/\n\s*\n/)[0] ?? '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[`*_]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   return { title, description, html: md.render(body), headings: headingsOf(body) };
 }

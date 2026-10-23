@@ -19,7 +19,7 @@ import {
   storyOf,
   storyPart,
   withStory,
-} from '../src';
+} from '../src/internal';
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -68,7 +68,7 @@ const pages = (doc: Doc) => {
 };
 
 describe('the headers and footers of each section', () => {
-  it('reads what each section shows: its own, the one of the section before it, or the last one\'s', () => {
+  it("reads what each section shows: its own, the one of the section before it, or the last one's", () => {
     const doc = threeSections();
     const [first, second] = sectionMarks(doc).map((i) => doc.paragraphs[i].section!);
     expect(text(doc.header)).toBe('TWO');
@@ -83,7 +83,7 @@ describe('the headers and footers of each section', () => {
     expect(doc.firstPage).toBeUndefined();
   });
 
-  it('lays out each page of the size of its section, with its section\'s header and footer', () => {
+  it("lays out each page of the size of its section, with its section's header and footer", () => {
     const doc = threeSections();
     expect(pages(doc)).toEqual(['612 ONE FOOT', '842 FIRST TWO -', '595 TWO FOOT']);
     const layout = layoutDocument(doc, measurer);

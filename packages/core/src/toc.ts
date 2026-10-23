@@ -131,10 +131,12 @@ function entries(doc: Doc, skip: { first: number; last: number } | undefined, li
   const top = Math.min(...headings.map((item) => item.level));
   const right = doc.page.width - doc.page.marginLeft - doc.page.marginRight;
   const text: RunProps = defined({ fontFamily: like.fontFamily, fontSize: like.fontSize, color: like.color });
-  const paragraphs = headings.map((item): Paragraph => ({
-    props: { align: 'left', indentLeft: (item.level - top) * LEVEL_INDENT, indentFirstLine: 0, spacingBefore: 0, spacingAfter: ENTRY_SPACE, leaderTab: right },
-    runs: [{ text: `${item.text}\t${options.pageOf(item.para)}`, props: { ...text, wrap: `<w:hyperlink w:anchor="${names.get(item.para)}" w:history="1">${WRAP_SEPARATOR}</w:hyperlink>` } }],
-  }));
+  const paragraphs = headings.map(
+    (item): Paragraph => ({
+      props: { align: 'left', indentLeft: (item.level - top) * LEVEL_INDENT, indentFirstLine: 0, spacingBefore: 0, spacingAfter: ENTRY_SPACE, leaderTab: right },
+      runs: [{ text: `${item.text}\t${options.pageOf(item.para)}`, props: { ...text, wrap: `<w:hyperlink w:anchor="${names.get(item.para)}" w:history="1">${WRAP_SEPARATOR}</w:hyperlink>` } }],
+    }),
+  );
   if (!paragraphs.length) paragraphs.push({ props: { spacingBefore: 0, spacingAfter: ENTRY_SPACE }, runs: [{ text: options.emptyText ?? '', props: { ...text, italic: true } }] });
   const firstRuns = paragraphs[0].runs;
   paragraphs[0] = { ...paragraphs[0], runs: [mark(BEGIN, like), ...firstRuns] };
@@ -163,7 +165,10 @@ export function updateToc(doc: Doc, options: TocOptions): Doc {
   const range = tocRange(doc);
   if (!range) return doc;
   // Each heading gets a bookmark for its entry to lead to; that changes no index.
-  const marked = bookmarked(doc, listed(doc, range).map((item) => item.para));
+  const marked = bookmarked(
+    doc,
+    listed(doc, range).map((item) => item.para),
+  );
   const next = entries(doc, range, entryProps(doc, range.first), options, marked.names);
   const old = doc.paragraphs.slice(range.first, range.last + 1);
   if (said(old) === said(next) && marked.paragraphs === doc.paragraphs) return doc;
@@ -185,9 +190,7 @@ export function insertToc(doc: Doc, pos: Position, options: TocOptions & { title
   const split = paragraphLength(here) > 0 ? splitParagraph(doc, pos).doc : doc;
   const at = paragraphLength(here) > 0 ? pos.para + 1 : pos.para;
   const base: RunProps = { fontFamily: like.fontFamily, fontSize: resolveRun({}).fontSize, color: resolveRun({}).color };
-  const heading: Paragraph[] = options.title
-    ? [{ props: { spacingBefore: 0, spacingAfter: 8, keepNext: true }, runs: [{ text: options.title, props: { ...base, bold: true, fontSize: 16 } }] }]
-    : [];
+  const heading: Paragraph[] = options.title ? [{ props: { spacingBefore: 0, spacingAfter: 8, keepNext: true }, runs: [{ text: options.title, props: { ...base, bold: true, fontSize: 16 } }] }] : [];
   // The entries are numbered against the document they are going into, where the headings below have moved down.
   const placeholder: Paragraph = { props: {}, runs: [mark(BEGIN, base), { text: ' ', props: base }, mark(END, base)] };
   const paragraphs = split.paragraphs.slice();

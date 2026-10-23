@@ -29,8 +29,8 @@ export interface Bridge {
   /** Why there is no way to an editor at all, when there is none. */
   readonly problem: string | undefined;
   readonly port: number;
-  /** Asks an editor to run `tool`, and gives what it answered. Rejects when it is not there, or takes too long. */
-  call(editor: number, tool: string, args: Record<string, unknown>): Promise<Answer>;
+  /** Asks an editor to run `tool`, and gives what it answered. Rejects when it is not there, takes too long, or `signal` stops the wait. */
+  call(editor: number, tool: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<Answer>;
   close(): void;
 }
 
@@ -80,18 +80,32 @@ export function createBridge(options: BridgeOptions): Bridge {
 
   // --- Asking an editor that is connected here ------------------------------------
 
-  const ask = (editor: number, tool: string, args: Record<string, unknown>): Promise<Answer> =>
+  const ask = (editor: number, tool: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<Answer> =>
     new Promise((done, fail) => {
       const listener = listeners.get(editor);
       if (!listener) {
         fail(new Error(`Editor ${editor} is not connected.`));
         return;
       }
+      if (signal?.aborted) {
+        fail(new Error('The call was cancelled.'));
+        return;
+      }
       const id = ++seq;
       const timer = setTimeout(() => {
         waiting.delete(id);
-        fail(new Error('The editor did not answer in time.'));
+        fail(new Error(`The editor did not answer in ${Math.round(timeout / 1000)} seconds.`));
       }, timeout);
+      // No longer waited for: what the editor answers later finds no one, and is let go.
+      signal?.addEventListener(
+        'abort',
+        () => {
+          if (!waiting.delete(id)) return;
+          clearTimeout(timer);
+          fail(new Error('The call was cancelled.'));
+        },
+        { once: true },
+      );
       waiting.set(id, { editor, done, fail, timer });
       listener.stream.write(`data: ${JSON.stringify({ id, tool, args })}\n\n`);
     });
@@ -149,7 +163,15 @@ export function createBridge(options: BridgeOptions): Bridge {
     }
     const cors = { 'Access-Control-Allow-Origin': origin!, Vary: 'Origin' };
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, { ...cors, 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Private-Network': 'true', 'Access-Control-Max-Age': '600' }).end();
+      res
+        .writeHead(204, {
+          ...cors,
+          'Access-Control-Allow-Methods': 'GET, POST',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Private-Network': 'true',
+          'Access-Control-Max-Age': '600',
+        })
+        .end();
       return;
     }
     if (req.method === 'GET' && url.pathname === '/events') {
@@ -226,7 +248,8 @@ export function createBridge(options: BridgeOptions): Bridge {
     let response: Response;
     try {
       response = await fetch(`${leader}${path}`, init);
-    } catch {
+    } catch (error) {
+      if (init?.signal?.aborted) throw error;
       if (!closed) {
         ready = listen();
         await ready;
@@ -248,10 +271,10 @@ export function createBridge(options: BridgeOptions): Bridge {
       if (following) return fromLeader<EditorInfo[]>('/peers').catch(() => []);
       return [...listeners.values()].map(({ id, name }) => ({ id, name }));
     },
-    async call(editor, tool, args) {
+    async call(editor, tool, args, signal) {
       await ready;
-      if (following) return fromLeader<Answer>('/call', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ editor, tool, args }) });
-      return ask(editor, tool, args);
+      if (following) return fromLeader<Answer>('/call', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ editor, tool, args }), signal });
+      return ask(editor, tool, args, signal);
     },
     close() {
       closed = true;

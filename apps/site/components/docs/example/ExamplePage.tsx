@@ -26,7 +26,10 @@ const FILES: { file: string; text: string }[] = [
 
 /** Which piece of the interface is made with what, from HeadlessEditor.tsx and Panels.tsx. */
 const USES: { piece: string; with: string }[] = [
-  { piece: 'Name, unsaved mark, save, export to Word, PDF and Markdown, print', with: 'useDocs: state.name, state.dirty, docs.save(), docs.download(), editor.exportPdf(), editor.exportMarkdown(), commands.print()' },
+  {
+    piece: 'Name, unsaved mark, save, export to Word, PDF and Markdown, print',
+    with: 'useDocs: state.name, state.dirty, docs.save(), docs.download(), editor.exportPdf(), editor.exportMarkdown(), commands.print()',
+  },
   { piece: 'Undo, style, font, size, bold…, colour, alignment, lists, indent, zoom', with: 'useDocs, useDocsStyles, fontFamilies, useDocsValue for the indent' },
   { piece: 'Table, pictures, signatures, page break', with: 'commands.insertTable, insertImageFile, insertImageGrid, insertSignatures, insertPageBreak' },
   { piece: 'Link, variable and note buttons, and ⌘K', with: 'useDocsBubble: bubble.ask(…), with <DocsProvider bubble>; useDocsLink, useDocsVariables and useDocsNotes say when each is on' },
@@ -36,18 +39,36 @@ const USES: { piece: string; with: string }[] = [
   { piece: 'Page tab: size, margins, columns, letterhead, header and footer, page number', with: 'useDocsPage, useDocsValue for the columns, commands.setArea' },
   { piece: 'Content tab: table of contents, outline to drag, variables with a type', with: 'useDocsOutline, useDocsVariables, commands.insertToc' },
   { piece: 'Notes tab', with: 'useDocsNotes, NOTE_COLORS, docs.setAuthor' },
-  { piece: 'Status bar: page, style and font, words and characters, saved, language, view, notes, zoom', with: 'useDocs, useDocsStyles, useDocsCount, setLocale, commands.setView, setShowNotes, setZoom' },
+  {
+    piece: 'Status bar: page, style and font, words and characters, saved, language, view, notes, zoom',
+    with: 'useDocs, useDocsStyles, useDocsCount, setLocale, commands.setView, setShowNotes, setZoom',
+  },
   { piece: 'A narrow window', with: 'useDocsResponsive, and a media query for the layout' },
 ];
 
 /** What it had to get right. */
 const RIGHT: { title: string; text: string }[] = [
   { title: 'One value for docx', text: 'App keeps the bytes in state and gives the same Uint8Array at every render. A new array each time would open the document again and lose what was typed.' },
-  { title: 'Buttons that keep the selection', text: 'Every command gives the keyboard back to the document, so buttons need nothing. A select or an input takes it while it is used, and the command it ends in gives it back.' },
-  { title: 'Colours as the editor has them', text: 'state.color is hex without #; a colour input wants one with it: options.ts has the line between them. A highlight is one of Word’s fifteen, so it is offered as swatches.' },
-  { title: 'The list, with what is there now', text: 'A document may use a size or a zoom that is not in the list offered. withCurrent adds the present one, so a select never shows something it is not.' },
-  { title: 'Indent or level', text: 'The two indent buttons change the level of an item in a list (shiftListLevel) and the indent of a paragraph outside one (shiftIndent), as the included toolbar does.' },
-  { title: 'Language', text: 'The selector calls setLocale: the library’s own words change (the bar, the ruler, the names of styles), and useTexts draws the demo’s again. The ruler is made again, with a key, to take its words.' },
+  {
+    title: 'Buttons that keep the selection',
+    text: 'Every command gives the keyboard back to the document, so buttons need nothing. A select or an input takes it while it is used, and the command it ends in gives it back.',
+  },
+  {
+    title: 'Colours as the editor has them',
+    text: 'state.color is hex without #; a colour input wants one with it: options.ts has the line between them. A highlight is one of Word’s fifteen, so it is offered as swatches.',
+  },
+  {
+    title: 'The list, with what is there now',
+    text: 'A document may use a size or a zoom that is not in the list offered. withCurrent adds the present one, so a select never shows something it is not.',
+  },
+  {
+    title: 'Indent or level',
+    text: 'The two indent buttons change the level of an item in a list (shiftListLevel) and the indent of a paragraph outside one (shiftIndent), as the included toolbar does.',
+  },
+  {
+    title: 'Language',
+    text: 'The selector calls setLocale: the library’s own words change (the bar, the ruler, the names of styles), and useTexts draws the demo’s again. The ruler is made again, with a key, to take its words.',
+  },
 ];
 
 /**
@@ -89,8 +110,8 @@ npm run demo        # http://localhost:5175, and /#headless for the second tab`,
         <a href={REPO} className={LINK}>
           apps/demo
         </a>
-        . It shows a document two ways: the editor as it comes (<code className={mono}>DocsEditor</code>), and an interface built from nothing on the hooks, dark and laid out like a design tool.
-        The second does everything the first does, so it is the place to copy from.
+        . It shows a document two ways: the editor as it comes (<code className={mono}>DocsEditor</code>), and an interface built from nothing on the hooks, dark and laid out like a design tool. The
+        second does everything the first does, so it is the place to copy from.
       </p>
       <div className="mt-4">
         <HandTip>tip: this is the second one, running: try the panels at its right</HandTip>
@@ -98,8 +119,8 @@ npm run demo        # http://localhost:5175, and /#headless for the second tab`,
 
       <section aria-labelledby="try" className="mt-16">
         <SectionHead id="try" badge="Live" color="green" title="Your own interface, running">
-          The component of <code className={mono}>apps/demo/src/HeadlessEditor.tsx</code>, imported here as it is, on the contract it opens with: a template in English with headings, variables with a type, a
-          table, text in two columns, places to sign, a header and a page number. The interface opens in English; the selector in its status bar puts it in Spanish.
+          The component of <code className={mono}>apps/demo/src/HeadlessEditor.tsx</code>, imported here as it is, on the contract it opens with: a template in English with headings, variables with a
+          type, a table, text in two columns, places to sign, a header and a page number. The interface opens in English; the selector in its status bar puts it in Spanish.
         </SectionHead>
         <LazyLiveDemo />
         <p className={prose}>
@@ -113,8 +134,8 @@ npm run demo        # http://localhost:5175, and /#headless for the second tab`,
 
       <section aria-labelledby="run" className="mt-24">
         <SectionHead id="run" badge="Run" color="blue" title="Run it">
-          It runs the package from its source, so a change in <code className={mono}>packages/react</code> shows at once. That is the one line of its <code className={mono}>vite.config.ts</code> a copy in
-          a project of yours leaves out: there, <code className={mono}>@rebodocs/react</code> comes from npm.
+          It runs the package from its source, so a change in <code className={mono}>packages/react</code> shows at once. That is the one line of its <code className={mono}>vite.config.ts</code> a
+          copy in a project of yours leaves out: there, <code className={mono}>@rebodocs/react</code> comes from npm.
         </SectionHead>
         <div className={`mt-6 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: run }} />
         <p className={prose}>
@@ -135,18 +156,21 @@ npm run demo        # http://localhost:5175, and /#headless for the second tab`,
           </a>
           , with what it takes and gives.
         </SectionHead>
-        {rows(USES.map((one) => [one.piece, one.with]), 300)}
+        {rows(
+          USES.map((one) => [one.piece, one.with]),
+          300,
+        )}
       </section>
 
       <section aria-labelledby="the-skeleton" className="mt-24">
         <SectionHead id="the-skeleton" badge="Skeleton" color="pink" title="The skeleton">
-          Everything hangs from one provider. What a key must reach (⌘F opens the find bar) is above it; the rest is inside. This is the end of <code className={mono}>HeadlessEditor.tsx</code>, read from
-          the file.
+          Everything hangs from one provider. What a key must reach (⌘F opens the find bar) is above it; the rest is inside. This is the end of <code className={mono}>HeadlessEditor.tsx</code>, read
+          from the file.
         </SectionHead>
         <div className={`mt-6 max-w-[920px] ${CODE}`} dangerouslySetInnerHTML={{ __html: skeleton }} />
         <p className={prose}>
-          The column the pages are in is <code className={mono}>display: flex; flex-direction: column; min-width: 0</code>, and the surface <code className={mono}>flex: 1; min-height: 0</code>: that is
-          what gives it the height it needs and lets it scroll. Under 900 pixels of window a media query lays it out again: the bars become one row each that slides, the insert rail lies down, the
+          The column the pages are in is <code className={mono}>display: flex; flex-direction: column; min-width: 0</code>, and the surface <code className={mono}>flex: 1; min-height: 0</code>: that
+          is what gives it the height it needs and lets it scroll. Under 900 pixels of window a media query lays it out again: the bars become one row each that slides, the insert rail lies down, the
           panels open over the document from a button, and the ruler goes.
         </p>
       </section>
@@ -163,7 +187,8 @@ npm run demo        # http://localhost:5175, and /#headless for the second tab`,
         </div>
         <p className={prose}>
           The library’s own pieces take its colours from variables, not from rules that reach into their classes: the ruler from <code className={mono}>--dx-ruler…</code> set on{' '}
-          <code className={mono}>.hd</code>; the bar beside the selection, and the rest the library puts in <code className={mono}>document.body</code> outside <code className={mono}>.hd</code>, from the{' '}
+          <code className={mono}>.hd</code>; the bar beside the selection, and the rest the library puts in <code className={mono}>document.body</code> outside <code className={mono}>.hd</code>, from
+          the{' '}
           <a href="/docs/styling/#the-included-interface" className={LINK}>
             --dx-ui-… variables
           </a>{' '}

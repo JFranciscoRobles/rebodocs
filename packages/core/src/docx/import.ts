@@ -22,6 +22,7 @@ import {
   type ParagraphStyle,
   type Run,
   type RunProps,
+  type NoteNumbering,
   type Section,
   type SectionStart,
   type Story,
@@ -36,15 +37,7 @@ import {
   WRAP_SEPARATOR,
   defined,
 } from '../model';
-import {
-  type ListInstance,
-  type ListLevel,
-  type NumFormat,
-  type Numbering,
-  MAX_LIST_LEVEL,
-  levelOf,
-  listLevelOfStyle,
-} from '../numbering';
+import { type ListInstance, type ListLevel, type NumFormat, type Numbering, MAX_LIST_LEVEL, levelOf, listLevelOfStyle } from '../numbering';
 import { noteKey } from '../notes';
 import { normalizeRuns } from '../ops';
 import { STORY_PARTS } from '../stories';
@@ -96,9 +89,23 @@ function twips(value: string | undefined): number | undefined {
 
 // The colours Word's highlighter has, by the name the file gives them.
 export const HIGHLIGHTS: Record<string, string> = {
-  yellow: 'FFFF00', green: '00FF00', cyan: '00FFFF', magenta: 'FF00FF', blue: '0000FF', red: 'FF0000',
-  darkBlue: '000080', darkCyan: '008080', darkGreen: '008000', darkMagenta: '800080', darkRed: '800000',
-  darkYellow: '808000', darkGray: '808080', lightGray: 'C0C0C0', black: '000000', white: 'FFFFFF', none: '',
+  yellow: 'FFFF00',
+  green: '00FF00',
+  cyan: '00FFFF',
+  magenta: 'FF00FF',
+  blue: '0000FF',
+  red: 'FF0000',
+  darkBlue: '000080',
+  darkCyan: '008080',
+  darkGreen: '008000',
+  darkMagenta: '800080',
+  darkRed: '800000',
+  darkYellow: '808000',
+  darkGray: '808080',
+  lightGray: 'C0C0C0',
+  black: '000000',
+  white: 'FFFFFF',
+  none: '',
 };
 
 export function parseRunProps(rPr: XmlNode | undefined): RunProps {
@@ -114,6 +121,7 @@ export function parseRunProps(rPr: XmlNode | undefined): RunProps {
     strike: toggle(rPr, 'w:strike'),
     underline: underline === undefined ? undefined : underline !== 'none',
     fontSize: size > 0 ? size / 2 : undefined,
+    kern: child(rPr, 'w:kern') ? Math.max(0, Number(val(child(rPr, 'w:kern'))) || 0) / 2 : undefined,
     color: color === undefined ? undefined : /^[0-9a-fA-F]{6}$/.test(color) ? color.toUpperCase() : '000000',
     fontFamily: fonts?.attrs['w:ascii'] ?? fonts?.attrs['w:hAnsi'],
   });
@@ -205,9 +213,7 @@ export function parseParagraphProps(pPr: XmlNode | undefined): ParagraphProps {
   });
 }
 
-const NUM_FORMATS = new Set<string>([
-  'decimal', 'decimalZero', 'lowerLetter', 'upperLetter', 'lowerRoman', 'upperRoman', 'bullet', 'none',
-]);
+const NUM_FORMATS = new Set<string>(['decimal', 'decimalZero', 'lowerLetter', 'upperLetter', 'lowerRoman', 'upperRoman', 'bullet', 'none']);
 const LABEL_ALIGN: Record<string, ListLevel['align']> = { center: 'center', right: 'right', end: 'right' };
 const LABEL_SUFFIX: Record<string, ListLevel['suffix']> = { space: 'space', nothing: 'nothing' };
 
@@ -273,9 +279,20 @@ function shadeOf(shd: XmlNode | undefined): string | undefined {
 
 /** The kinds of line Word has, by the four the layout draws. */
 const BORDER_STYLES: Record<string, BorderStyle> = {
-  double: 'double', triple: 'double', thinThickSmallGap: 'double', thickThinSmallGap: 'double', thinThickMediumGap: 'double',
-  thickThinMediumGap: 'double', thinThickLargeGap: 'double', thickThinLargeGap: 'double', doubleWave: 'double',
-  dashed: 'dashed', dashSmallGap: 'dashed', dashDotStroked: 'dashed', dotDash: 'dashed', dotDotDash: 'dashed',
+  double: 'double',
+  triple: 'double',
+  thinThickSmallGap: 'double',
+  thickThinSmallGap: 'double',
+  thinThickMediumGap: 'double',
+  thickThinMediumGap: 'double',
+  thinThickLargeGap: 'double',
+  thickThinLargeGap: 'double',
+  doubleWave: 'double',
+  dashed: 'dashed',
+  dashSmallGap: 'dashed',
+  dashDotStroked: 'dashed',
+  dotDash: 'dashed',
+  dotDotDash: 'dashed',
   dotted: 'dotted',
 };
 
@@ -362,7 +379,10 @@ function parseStyles(xml: string | undefined): StyleSheet {
   if (!xml) return sheet;
   const root = child(parseXml(xml), 'w:styles');
   const defaults = child(root, 'w:docDefaults');
-  Object.assign(sheet.runDefaults, parseRunProps(child(child(defaults, 'w:rPrDefault'), 'w:rPr')));
+  const runDefault = child(child(defaults, 'w:rPrDefault'), 'w:rPr');
+  // Defaults of its own for text kern only when they say so; Word's, from 1 point, are for a file that gives none. Measured against Word.
+  if (runDefault) sheet.runDefaults.kern = 0;
+  Object.assign(sheet.runDefaults, parseRunProps(runDefault));
   Object.assign(sheet.paragraphDefaults, parseParagraphProps(child(child(defaults, 'w:pPrDefault'), 'w:pPr')));
   for (const node of childrenOf(root, 'w:style')) {
     const id = node.attrs['w:styleId'];
@@ -429,10 +449,7 @@ function styleCatalog(sheet: StyleSheet, used: Set<string>): ParagraphStyle[] | 
 }
 
 /** Merges a style with everything it is based on, base first. */
-export function resolveStyle(
-  sheet: StyleSheet,
-  id: string | undefined,
-): Required<Pick<Style, 'pPr' | 'rPr' | 'padding'>> & Pick<Style, 'borders' | 'shade' | 'parts'> {
+export function resolveStyle(sheet: StyleSheet, id: string | undefined): Required<Pick<Style, 'pPr' | 'rPr' | 'padding'>> & Pick<Style, 'borders' | 'shade' | 'parts'> {
   const chain: Style[] = [];
   const seen = new Set<string>();
   while (id && !seen.has(id)) {
@@ -475,6 +492,7 @@ export function resolveStyle(
 /** Reading state shared by everything inside one paragraph. */
 interface InlineContext {
   xml: string;
+  moves: Moves;
   sheet: StyleSheet;
   /** Formatting the paragraph style gives to its runs. */
   base: RunProps;
@@ -513,17 +531,20 @@ function revisionOf(node: XmlNode, type: 'insert' | 'delete'): Pick<RunProps, 'r
 const REVISIONS: Record<string, 'insert' | 'delete'> = { 'w:ins': 'insert', 'w:moveTo': 'insert', 'w:del': 'delete', 'w:moveFrom': 'delete' };
 
 /**
- * The moves being read: the name of each, from where its range starts to
- * where it ends, which may be paragraphs later. A move without its range is
- * named by who made it and when, which its two halves share.
+ * The moves being read in one file: the name of each, from where its range
+ * starts to where it ends, which may be paragraphs later. A move without its
+ * range is named by who made it and when, which its two halves share.
  */
-let moveRanges = new Map<string, string>();
-const unnamedMoves = new Map<string, string>();
-function moveName(kind: 'From' | 'To', change: XmlNode): string {
-  for (const [key, name] of moveRanges) if (key.startsWith(kind)) return name;
+interface Moves {
+  ranges: Map<string, string>;
+  unnamed: Map<string, string>;
+}
+const newMoves = (): Moves => ({ ranges: new Map(), unnamed: new Map() });
+function moveName(moves: Moves, kind: 'From' | 'To', change: XmlNode): string {
+  for (const [key, name] of moves.ranges) if (key.startsWith(kind)) return name;
   const key = `${change.attrs['w:author'] ?? ''}\u0000${change.attrs['w:date'] ?? ''}`;
-  if (!unnamedMoves.has(key)) unnamedMoves.set(key, `dxmove${unnamedMoves.size + 1}`);
-  return unnamedMoves.get(key)!;
+  if (!moves.unnamed.has(key)) moves.unnamed.set(key, `dxmove${moves.unnamed.size + 1}`);
+  return moves.unnamed.get(key)!;
 }
 
 /** The fields whose result changes from page to page. */
@@ -625,14 +646,7 @@ function joinWrap(outer: string, prefix: string, suffix: string): string {
 }
 
 // Elements that only wrap runs; their runs are part of the visible text.
-const INLINE_WRAPPERS = new Set([
-  'w:hyperlink',
-  'w:smartTag',
-  'w:fldSimple',
-  'w:customXml',
-  'w:dir',
-  'w:bdo',
-]);
+const INLINE_WRAPPERS = new Set(['w:hyperlink', 'w:smartTag', 'w:fldSimple', 'w:customXml', 'w:dir', 'w:bdo']);
 
 function collectInline(node: XmlNode, wrap: string, ctx: InlineContext): void {
   const { xml } = ctx;
@@ -647,7 +661,7 @@ function collectInline(node: XmlNode, wrap: string, ctx: InlineContext): void {
     if (revision) {
       const outer = ctx.revision;
       let own: InlineContext['revision'] = revisionOf(c, revision);
-      if (c.name === 'w:moveFrom' || c.name === 'w:moveTo') own = { ...own, revisionMove: moveName(c.name === 'w:moveFrom' ? 'From' : 'To', c) };
+      if (c.name === 'w:moveFrom' || c.name === 'w:moveTo') own = { ...own, revisionMove: moveName(ctx.moves, c.name === 'w:moveFrom' ? 'From' : 'To', c) };
       // Taken out of what someone put in: two changes, each to decide on its own.
       if (revision === 'delete' && outer?.revision === 'insert') own = defined({ ...own, insertedBy: outer.revisionAuthor ?? '', insertedDate: outer.revisionDate });
       ctx.revision = own;
@@ -673,8 +687,8 @@ function collectInline(node: XmlNode, wrap: string, ctx: InlineContext): void {
     const range = /^w:move(From|To)Range(Start|End)$/.exec(c.name);
     if (range) {
       const key = `${range[1]}\u0000${c.attrs['w:id'] ?? ''}`;
-      if (range[2] === 'Start') moveRanges.set(key, c.attrs['w:name'] ?? `dxmove-${c.attrs['w:id'] ?? ''}`);
-      else moveRanges.delete(key);
+      if (range[2] === 'Start') ctx.moves.ranges.set(key, c.attrs['w:name'] ?? `dxmove-${c.attrs['w:id'] ?? ''}`);
+      else ctx.moves.ranges.delete(key);
       continue;
     }
     // Bookmarks, comment ranges, math... carried as anchors, part of the change they are inside, if any.
@@ -699,13 +713,7 @@ function collectInline(node: XmlNode, wrap: string, ctx: InlineContext): void {
  * direct formatting, except when it is the style that puts the paragraph in
  * the list: then the style's own indents win over the level's, as in Word.
  */
-function resolveParagraphProps(
-  sheet: StyleSheet,
-  numbering: Numbering | undefined,
-  styleId: string | undefined,
-  styled: ParagraphProps,
-  direct: ParagraphProps,
-): ParagraphProps {
+function resolveParagraphProps(sheet: StyleSheet, numbering: Numbering | undefined, styleId: string | undefined, styled: ParagraphProps, direct: ParagraphProps): ParagraphProps {
   const tabs = mergeTabs(mergeTabs(sheet.paragraphDefaults.tabs, styled.tabs), direct.tabs);
   const props = defined({ ...sheet.paragraphDefaults, ...styled, ...direct, tabs });
   if (!numbering || !props.numId) return props;
@@ -727,6 +735,7 @@ function resolveParagraphProps(
 /** Reading state shared by the blocks of a document. */
 interface BlockContext {
   xml: string;
+  moves: Moves;
   sheet: StyleSheet;
   numbering: Numbering | undefined;
   slots: SourceSlot[];
@@ -777,7 +786,7 @@ function parseParagraph(p: XmlNode, ctx: BlockContext): Paragraph {
   const styled = defined({ ...ctx.tableStyle?.pPr, ...style.pPr, tabs: mergeTabs(ctx.tableStyle?.pPr.tabs, style.pPr.tabs) });
   const props = resolveParagraphProps(sheet, ctx.numbering, styleId, styled, parseParagraphProps(pPr));
   const base = { ...sheet.runDefaults, ...ctx.tableStyle?.rPr, ...style.rPr };
-  const inline: InlineContext = { xml, sheet, base, last: base, out: [], links: ctx.links, box: ctx.boxes && ((content, objectXml) => ctx.boxes!(content, objectXml, ctx)) };
+  const inline: InlineContext = { xml, moves: ctx.moves, sheet, base, last: base, out: [], links: ctx.links, box: ctx.boxes && ((content, objectXml) => ctx.boxes!(content, objectXml, ctx)) };
   collectInline(p, '', inline);
   // An empty paragraph takes the formatting of its paragraph mark.
   const mark = child(pPr, 'w:rPr');
@@ -813,6 +822,9 @@ function parseParagraph(p: XmlNode, ctx: BlockContext): Paragraph {
     cell: ctx.cell,
     origin: slots.length,
     section: sect && parseSection(sect, xml),
+    // The label of a list item is set in the formatting of the mark. Measured against Word: a label of Arial, the font of
+    // the style, made the first line of a paragraph of Georgia taller.
+    mark: props.numId ? defined<RunProps>({ fontFamily: markProps.fontFamily, fontSize: markProps.fontSize, bold: markProps.bold, italic: markProps.italic, color: markProps.color }) : undefined,
   });
   slots.push({ node: p, paragraph, baseRun: base });
   return paragraph;
@@ -952,8 +964,7 @@ function parseTable(tbl: XmlNode, ctx: BlockContext): void {
   const width = child(tblPr, 'w:tblW');
   const widthValue = width?.attrs['w:w'] ?? '';
   // A relative width is written in fiftieths of a percent, or as a percentage.
-  const fraction =
-    width?.attrs['w:type'] === 'pct' ? Number(widthValue) / 5000 : widthValue.endsWith('%') ? parseFloat(widthValue) / 100 : NaN;
+  const fraction = width?.attrs['w:type'] === 'pct' ? Number(widthValue) / 5000 : widthValue.endsWith('%') ? parseFloat(widthValue) / 100 : NaN;
 
   const index = ctx.tables.length;
   const rows: TableRow[] = [];
@@ -1111,20 +1122,45 @@ export function parseColumns(sect: XmlNode | undefined): Columns | undefined {
 }
 
 /** How a section is set out, from its properties. */
+const NOTE_FORMATS = ['decimal', 'lowerRoman', 'upperRoman', 'lowerLetter', 'upperLetter'] as const;
+const NOTE_RESTARTS: Record<string, NoteNumbering['restart']> = { eachSect: 'section', eachPage: 'page' };
+
+/**
+ * How a section numbers its notes, as its `w:footnotePr` or `w:endnotePr`
+ * says: undefined when it says nothing that is not what they are anyway
+ * (1, 2, 3 at the foot of the page, i, ii, iii at the end). Notes at the end
+ * cannot start again on each page.
+ */
+export function parseNoteNumbering(sect: XmlNode | undefined, kind: 'footnote' | 'endnote'): NoteNumbering | undefined {
+  const props = child(sect, kind === 'footnote' ? 'w:footnotePr' : 'w:endnotePr');
+  if (!props) return undefined;
+  const format = NOTE_FORMATS.find((f) => f === val(child(props, 'w:numFmt')));
+  const start = Number(val(child(props, 'w:numStart')));
+  const restart = NOTE_RESTARTS[val(child(props, 'w:numRestart')) ?? ''];
+  const numbering = defined<NoteNumbering>({
+    format: format === (kind === 'footnote' ? 'decimal' : 'lowerRoman') ? undefined : format,
+    start: Number.isInteger(start) && start > 1 ? start : undefined,
+    restart: restart === 'page' && kind === 'endnote' ? undefined : restart,
+  });
+  return Object.keys(numbering).length ? numbering : undefined;
+}
+
 function parseSection(sect: XmlNode, xml: string): Section {
   const start = val(child(sect, 'w:type'));
   return defined<Section>({
     page: parsePage(sect),
     columns: parseColumns(sect),
     start: start && SECTION_STARTS.has(start) && start !== 'nextPage' ? (start as SectionStart) : undefined,
+    endnoteNumbering: parseNoteNumbering(sect, 'endnote'),
+    footnoteNumbering: parseNoteNumbering(sect, 'footnote'),
+    noEndnotes: toggle(sect, 'w:noEndnote') || undefined,
     xml: xml.slice(sect.start, sect.end),
   });
 }
 
 /** The text of a comment: its paragraphs, one to a line. */
 function commentText(node: XmlNode): string {
-  const inline = (n: XmlNode): string =>
-    n.children.map((c) => (c.name === 'w:t' ? textOf(c) : c.name === 'w:tab' ? '\t' : c.name === 'w:br' ? '\n' : c.name === 'w:p' ? '' : inline(c))).join('');
+  const inline = (n: XmlNode): string => n.children.map((c) => (c.name === 'w:t' ? textOf(c) : c.name === 'w:tab' ? '\t' : c.name === 'w:br' ? '\n' : c.name === 'w:p' ? '' : inline(c))).join('');
   const paragraphs: string[] = [];
   const walk = (n: XmlNode) => {
     for (const c of n.children) {
@@ -1212,8 +1248,7 @@ export interface ImportOptions {
 export const MAX_DOCX_SIZE = 256 * 1024 * 1024;
 
 export function importDocx(data: Uint8Array, options: ImportOptions = {}): Doc {
-  moveRanges = new Map();
-  unnamedMoves.clear();
+  const moves = newMoves();
   const limit = options.maxSize ?? MAX_DOCX_SIZE;
   let total = 0;
   const files = unzipSync(data, {
@@ -1257,7 +1292,7 @@ export function importDocx(data: Uint8Array, options: ImportOptions = {}): Doc {
   const slots: SourceSlot[] = [];
   const tables: Table[] = [];
   const tableNodes: XmlNode[] = [];
-  collectBlocks(body, { xml, sheet, numbering, slots, tables, tableNodes, out: paragraphs, links: externalLinks(files, mainPath), path: mainPath, boxes });
+  collectBlocks(body, { xml, moves, sheet, numbering, slots, tables, tableNodes, out: paragraphs, links: externalLinks(files, mainPath), path: mainPath, boxes });
   if (!paragraphs.length) {
     paragraphs.push({ props: { ...sheet.paragraphDefaults }, runs: [{ text: '', props: { ...sheet.runDefaults } }] });
   }
@@ -1282,13 +1317,18 @@ export function importDocx(data: Uint8Array, options: ImportOptions = {}): Doc {
     const storyTables: Table[] = [];
     const storySlots: SourceSlot[] = [];
     const out: Paragraph[] = [];
-    collectBlocks(root, { xml: partXml, sheet, numbering, slots: storySlots, tables: storyTables, tableNodes: [], out, links: externalLinks(files, path), path, boxes });
+    collectBlocks(root, { xml: partXml, moves, sheet, numbering, slots: storySlots, tables: storyTables, tableNodes: [], out, links: externalLinks(files, path), path, boxes });
     const made = defined<Story>({ paragraphs: out, tables: storyTables.length ? storyTables : undefined });
     return { path, xml: partXml, root, slots: storySlots, story: made };
   };
   // What each section shows: a section that names no part of a kind shows the one the section before it shows, as in Word.
   const ROOTS = { header: 'w:hdr', footer: 'w:ftr', firstHeader: 'w:hdr', firstFooter: 'w:ftr' } as const;
-  const REFS = { header: ['w:headerReference', 'default'], footer: ['w:footerReference', 'default'], firstHeader: ['w:headerReference', 'first'], firstFooter: ['w:footerReference', 'first'] } as const;
+  const REFS = {
+    header: ['w:headerReference', 'default'],
+    footer: ['w:footerReference', 'default'],
+    firstHeader: ['w:headerReference', 'first'],
+    firstFooter: ['w:footerReference', 'first'],
+  } as const;
   const named = (node: XmlNode | undefined, base: BasePart) => {
     const [reference, type] = REFS[base];
     const ref = childrenOf(node, reference).find((r) => (r.attrs['w:type'] ?? 'default') === type);
@@ -1322,7 +1362,9 @@ export function importDocx(data: Uint8Array, options: ImportOptions = {}): Doc {
 
   const settings = files[`${dir}settings.xml`];
   const compat = settings && /<w:compatSetting\b[^>]*w:name="compatibilityMode"[^>]*>/.exec(strFromU8(settings))?.[0];
-  const compatMode = int(/w:val="(\d+)"/.exec(compat || '')?.[1]);
+  // A file that says no version Word opens as one of Word 2007, and lays out by its rules. Measured against Word: a table
+  // floated to the right hung the margins of its cells past the margin of the page, as Word 2007 sets tables.
+  const compatMode = int(/w:val="(\d+)"/.exec(compat || '')?.[1]) ?? 12;
   const defaultTabStop = twips(settings && /<w:defaultTabStop\b[^>]*w:val="(\d+)"/.exec(strFromU8(settings))?.[1]);
   // Whether the document keeps the changes made to it, as Word's "Track changes" says.
   const tracking = settings ? /<w:trackRevisions\b(?![^>]*w:val="(?:0|false|off)")[^>]*\/?>/.test(strFromU8(settings)) : false;
@@ -1334,6 +1376,10 @@ export function importDocx(data: Uint8Array, options: ImportOptions = {}): Doc {
   if (columns) source.columns = columns;
   const lastStart = val(child(sect, 'w:type'));
   if (lastStart && SECTION_STARTS.has(lastStart) && lastStart !== 'nextPage') source.sectionStart = lastStart as SectionStart;
+  const endnoteNumbering = parseNoteNumbering(sect, 'endnote');
+  if (endnoteNumbering) source.endnoteNumbering = endnoteNumbering;
+  const footnoteNumbering = parseNoteNumbering(sect, 'footnote');
+  if (footnoteNumbering) source.footnoteNumbering = footnoteNumbering;
 
   // A section before the last shows the document's header when it shows the same part; one of its own when it shows another, and none when none.
   marks.forEach((p, k) => {
@@ -1356,40 +1402,67 @@ export function importDocx(data: Uint8Array, options: ImportOptions = {}): Doc {
   const header0 = !!header;
   const footer0 = !!footer;
 
-  // The notes at the foot of the pages, each a story of its own; the separator above them, as the file draws it.
-  const footnotes: Footnote[] = [];
-  let footnoteSeparator: Paragraph | undefined;
-  const footnotesPath = partOfType(files, mainPath, 'footnotes');
-  if (footnotesPath && files[footnotesPath]) {
-    const partXml = strFromU8(files[footnotesPath]);
-    const root = child(parseXml(partXml), 'w:footnotes');
+  // The notes at the foot of the pages and at the end, each a story of its own; the separator above them, as the file draws it.
+  const readNoteKind = (kind: 'footnote' | 'endnote') => {
+    const notes: Footnote[] = [];
+    let separator: Paragraph | undefined;
+    const path = partOfType(files, mainPath, `${kind}s`);
     const sources = new Map<string, StorySource>();
-    for (const node of childrenOf(root, 'w:footnote')) {
+    if (!path || !files[path]) return { notes, separator, path: undefined, sources };
+    const partXml = strFromU8(files[path]);
+    const root = child(parseXml(partXml), `w:${kind}s`);
+    for (const node of childrenOf(root, `w:${kind}`)) {
       const id = node.attrs['w:id'];
       const type = node.attrs['w:type'] ?? 'normal';
       if (id === undefined) continue;
       const storyTables: Table[] = [];
       const storySlots: SourceSlot[] = [];
       const out: Paragraph[] = [];
-      collectBlocks(node, { xml: partXml, sheet, numbering, slots: storySlots, tables: storyTables, tableNodes: [], out, links: externalLinks(files, footnotesPath), path: footnotesPath, boxes });
+      collectBlocks(node, {
+        xml: partXml,
+        moves,
+        sheet,
+        numbering,
+        slots: storySlots,
+        tables: storyTables,
+        tableNodes: [],
+        out,
+        links: externalLinks(files, path),
+        path,
+        boxes,
+      });
       if (type === 'separator') {
-        footnoteSeparator ??= out[0];
+        separator ??= out[0];
         continue;
       }
       if (type !== 'normal' || !out.length) continue;
       const note = defined<Footnote>({ id, paragraphs: out, tables: storyTables.length ? storyTables : undefined });
-      footnotes.push(note);
-      sources.set(id, { path: footnotesPath, xml: partXml, root: node, slots: storySlots, story: note });
+      notes.push(note);
+      sources.set(id, { path, xml: partXml, root: node, slots: storySlots, story: note });
     }
-    Object.assign(source, { footnotesPath, footnoteSources: sources });
-  }
+    return { notes, separator, path, sources };
+  };
+  const foot = readNoteKind('footnote');
+  const footnotes = foot.notes;
+  const footnoteSeparator = foot.separator;
+  if (foot.path) Object.assign(source, { footnotesPath: foot.path, footnoteSources: foot.sources });
+  const end = readNoteKind('endnote');
+  if (end.path) Object.assign(source, { endnotesPath: end.path, endnoteSources: end.sources });
+  // Where they go is the settings' to say: Word reads it nowhere else.
+  const endnotesAt = settings && /<w:endnotePr>(?:(?!<\/w:endnotePr>)[\s\S])*<w:pos\b[^>]*w:val="sectEnd"/.test(strFromU8(settings)) ? ('sections' as const) : undefined;
 
   const notes = readNotes(files, mainPath);
   if (notes) Object.assign(source, { notesPath: notes.path, notes: notes.notes });
 
   const used = new Set<string>();
   if (boxSources.size) source.textBoxSources = boxSources;
-  for (const p of [...paragraphs, ...[...read.values()].flatMap((part) => part?.story.paragraphs ?? []), ...footnotes.flatMap((note) => note.paragraphs), ...textBoxes.flatMap((box) => box.paragraphs)]) {
+  for (const p of [
+    ...paragraphs,
+    ...[...read.values()].flatMap((part) => part?.story.paragraphs ?? []),
+    ...footnotes.flatMap((note) => note.paragraphs),
+    ...end.notes.flatMap((note) => note.paragraphs),
+    ...textBoxes.flatMap((box) => box.paragraphs),
+  ]) {
     if (p.props.styleId) used.add(p.props.styleId);
   }
 
@@ -1410,6 +1483,11 @@ export function importDocx(data: Uint8Array, options: ImportOptions = {}): Doc {
     notes: notes?.notes.length ? notes.notes : undefined,
     footnotes: footnotes.length ? footnotes : undefined,
     footnoteSeparator,
+    endnotes: end.notes.length ? end.notes : undefined,
+    endnoteSeparator: end.separator,
+    endnoteNumbering,
+    footnoteNumbering,
+    endnotesAt,
     textBoxes: textBoxes.length ? textBoxes : undefined,
     styles: styleCatalog(sheet, used),
     numbering,

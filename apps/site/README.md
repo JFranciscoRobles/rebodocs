@@ -24,9 +24,10 @@ On any other static host, run `npm run build:site` and publish `apps/site/out`.
 | `app/layout.tsx` | What every page has: the document, the styles, the metadata. No header and no footer. |
 | `app/(home)/page.tsx` | The landing page, with a header and a footer of its own. Its pieces are in `components/home/`. |
 | `lib/home.ts` | What the landing page says: the version, the packages and the features. |
+| `components/home/Metrics.tsx` | The four numbers under the hero: the lines where Word puts them, the tests, the tools for an assistant and a PDF's time, all read from where they were measured (`components/docs/status/data.ts`, `@rebodocs/mcp`, `components/docs/server/data.ts`). |
 | `app/(site)/layout.tsx` | The header and the footer of the documentation, for the pages inside `app/(site)`. |
 | `app/(site)/docs/` | The pages of the documentation, and their menu at the side. |
-| `app/demo/page.tsx`, `components/DemoApp.tsx` | [The demo](https://rebodocs.com/demo/), on the whole window: the two components of `apps/demo`, taken from where they are written. |
+| `app/demo/page.tsx`, `components/DemoApp.tsx` | [The demo](https://rebodocs.com/demo/), on the whole window: the components of `apps/demo`, taken from where they are written. |
 | `components/LiveDemo.tsx` | The editor on the landing page: the real one, not a picture. |
 | `scripts/demo.ts` | Writes the document it opens with, `public/demo.docx`, when the site is built. |
 | `content/docs/*.md` | The documentation: one Markdown file per page. |

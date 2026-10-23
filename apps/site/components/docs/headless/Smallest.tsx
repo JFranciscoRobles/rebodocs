@@ -8,10 +8,18 @@ function Toolbar() {
   const button = (on: boolean) => `h-8 min-w-8 rounded-md px-2 text-sm font-semibold ${on ? 'bg-blue-100 text-blue-800' : 'hover:bg-neutral-100'}`;
   return (
     <div className="flex items-center gap-1 border-b border-neutral-200 bg-white p-2">
-      <button type="button" aria-pressed={state.bold} className={`${button(state.bold)} font-bold`} onClick={() => commands.toggleMark('bold')}>B</button>
-      <button type="button" aria-pressed={state.italic} className={`${button(state.italic)} italic`} onClick={() => commands.toggleMark('italic')}>I</button>
-      <button type="button" aria-pressed={state.list === 'bullet'} className={button(state.list === 'bullet')} onClick={() => commands.toggleList('bullet')}>• List</button>
-      <button type="button" disabled={!state.canUndo} className={`${button(false)} disabled:opacity-40`} onClick={() => commands.undo()}>Undo</button>
+      <button type="button" aria-pressed={state.bold} className={`${button(state.bold)} font-bold`} onClick={() => commands.toggleMark('bold')}>
+        B
+      </button>
+      <button type="button" aria-pressed={state.italic} className={`${button(state.italic)} italic`} onClick={() => commands.toggleMark('italic')}>
+        I
+      </button>
+      <button type="button" aria-pressed={state.list === 'bullet'} className={button(state.list === 'bullet')} onClick={() => commands.toggleList('bullet')}>
+        • List
+      </button>
+      <button type="button" disabled={!state.canUndo} className={`${button(false)} disabled:opacity-40`} onClick={() => commands.undo()}>
+        Undo
+      </button>
       <span className="ml-auto text-sm text-neutral-600">
         Page {state.page} of {state.pageCount}
       </span>

@@ -16,7 +16,13 @@ export function SelectionBar() {
       <button type="button" aria-pressed={state.italic} className={`${button(state.italic)} italic`} onMouseDown={(e) => e.preventDefault()} onClick={() => commands.toggleMark('italic')}>
         I
       </button>
-      <button type="button" aria-pressed={state.highlight !== ''} className={button(state.highlight !== '')} onMouseDown={(e) => e.preventDefault()} onClick={() => commands.setRunProps({ highlight: state.highlight ? '' : 'FFF59D' })}>
+      <button
+        type="button"
+        aria-pressed={state.highlight !== ''}
+        className={button(state.highlight !== '')}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => commands.setRunProps({ highlight: state.highlight ? '' : 'FFF59D' })}
+      >
         ✎
       </button>
     </div>

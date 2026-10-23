@@ -13,11 +13,28 @@ const h3 = 'm-0 mt-12 font-display text-xl font-bold tracking-[-0.01em]';
 
 const LINE = 'Received from {{client | capital}} the amount of {{amount | currency}} on {{date | long date}}.';
 /** The line of the top of the page, filled by fillVariables when the site is built. */
-const FILLED = paragraphText(fillVariables(createDoc([{ props: {}, runs: [{ text: LINE, props: {} }] }]), { client: 'ana pérez', amount: '2500', date: '2026-10-13' }, { locale: 'en-US' }).paragraphs[0]);
+const FILLED = paragraphText(
+  fillVariables(createDoc([{ props: {}, runs: [{ text: LINE, props: {} }] }]), { client: 'ana pérez', amount: '2500', date: '2026-10-13' }, { locale: 'en-US' }).paragraphs[0],
+);
 
 /** The example of blocks: a template of paragraphs, the data, and what fillVariables makes of them when the site is built. */
-const ORDER = ['Order {{number}} for {{client.name}}{{#client.vip}} (priority){{/client.vip}}', '{{#lines}}', '{{lines.qty}} × {{lines.item}}: {{lines.price | currency}}', '{{/lines}}', '{{^lines}}', 'Nothing ordered yet.', '{{/lines}}'];
-const ORDER_DATA: TemplateData = { number: 18, client: { name: 'Ana Pérez', vip: true }, lines: [{ qty: 2, item: 'Desk lamp', price: 45 }, { qty: 1, item: 'Chair', price: 120 }] };
+const ORDER = [
+  'Order {{number}} for {{client.name}}{{#client.vip}} (priority){{/client.vip}}',
+  '{{#lines}}',
+  '{{lines.qty}} × {{lines.item}}: {{lines.price | currency}}',
+  '{{/lines}}',
+  '{{^lines}}',
+  'Nothing ordered yet.',
+  '{{/lines}}',
+];
+const ORDER_DATA: TemplateData = {
+  number: 18,
+  client: { name: 'Ana Pérez', vip: true },
+  lines: [
+    { qty: 2, item: 'Desk lamp', price: 45 },
+    { qty: 1, item: 'Chair', price: 120 },
+  ],
+};
 const ORDERED = docText(fillVariables(createDoc(ORDER.map((text) => ({ props: {}, runs: [{ text, props: {} }] }))), ORDER_DATA, { locale: 'en-US' })).split('\n');
 
 function Signatures({ rows }: { rows: { sig: string; text: string }[] }) {
@@ -106,8 +123,8 @@ npx -p @rebodocs/mcp rebodocs-generate template.docx data.json -o out.pdf --font
     <>
       <h1 className="m-0 mt-3 font-display text-[clamp(36px,4vw,48px)] font-extrabold leading-[1.08] tracking-[-0.03em]">Templates and variables</h1>
       <p className="m-0 mt-3.5 max-w-[700px] text-lg leading-[1.6] text-muted">
-        A variable is text between double braces, <code className={mono}>{'{{client}}'}</code>. That is all a template is, so any DOCX can be one and Word shows it as it is: write it in Word, in the editor, or both,
-        and fill it in the editor, on a server or from the command line.
+        A variable is text between double braces, <code className={mono}>{'{{client}}'}</code>. That is all a template is, so any DOCX can be one and Word shows it as it is: write it in Word, in the
+        editor, or both, and fill it in the editor, on a server or from the command line.
       </p>
       <div className="mt-6 max-w-[760px] rounded-[10px] bg-surface px-5 py-4 text-[17px] leading-[1.7] text-ink">
         <p className="m-0">
@@ -121,8 +138,8 @@ npx -p @rebodocs/mcp rebodocs-generate template.docx data.json -o out.pdf --font
 
       <section aria-labelledby="try" className="mt-16">
         <SectionHead id="try" badge="Live" color="green" title="Fill a template">
-          A receipt with variables in its text, its header, a note at the foot of the page and its signatures. Type values in the panel and fill them, or have the page fill them as your application would,
-          from a form.
+          A receipt with variables in its text, its header, a note at the foot of the page and its signatures. Type values in the panel and fill them, or have the page fill them as your application
+          would, from a form.
         </SectionHead>
         <LazyEditorDemo />
         <p className={prose}>
@@ -239,22 +256,22 @@ npx -p @rebodocs/mcp rebodocs-generate template.docx data.json -o out.pdf --font
                 {i < all.length - 2 ? ', ' : i === all.length - 2 ? ' and ' : ''}
               </span>
             ))}
-          . <code className={mono}>italic</code> and <code className={mono}>underline</code> are written like <code className={mono}>bold</code>. Set from the panel, a letter case takes the place of another, and so
-          does a type of data: a variable is a date or a number, in one letter case.
+          . <code className={mono}>italic</code> and <code className={mono}>underline</code> are written like <code className={mono}>bold</code>. Set from the panel, a letter case takes the place of
+          another, and so does a type of data: a variable is a date or a number, in one letter case.
         </p>
         <p className={prose}>
           A date is given as <code className={mono}>2026-10-13</code>, <code className={mono}>13/10/2026</code> (day first, or month first in a language that writes it so), or{' '}
           <code className={mono}>today</code> / <code className={mono}>hoy</code>. In a pattern after <code className={mono}>date:</code>, <code className={mono}>d</code>,{' '}
-          <code className={mono}>dd</code>, <code className={mono}>dddd</code> (the day of the week), <code className={mono}>M</code>, <code className={mono}>MM</code>, <code className={mono}>MMM</code>,{' '}
-          <code className={mono}>MMMM</code>, <code className={mono}>yy</code> and <code className={mono}>yyyy</code> are replaced and every other word is kept, so <code className={mono}>d de MMMM</code> needs no
-          quotes. A number is given plain, <code className={mono}>1234.5</code>; commas and a dollar sign in it are left out.
+          <code className={mono}>dd</code>, <code className={mono}>dddd</code> (the day of the week), <code className={mono}>M</code>, <code className={mono}>MM</code>,{' '}
+          <code className={mono}>MMM</code>, <code className={mono}>MMMM</code>, <code className={mono}>yy</code> and <code className={mono}>yyyy</code> are replaced and every other word is kept, so{' '}
+          <code className={mono}>d de MMMM</code> needs no quotes. A number is given plain, <code className={mono}>1234.5</code>; commas and a dollar sign in it are left out.
         </p>
       </section>
 
       <section aria-labelledby="languages" className="mt-24">
         <SectionHead id="languages" badge="Locale" color="purple" title="In a language">
-          Values are written in the language of the document, or in English when it says none; give a locale for another. The names of months and days, the order of a date, the separators of
-          numbers and the rules of capitals follow it.
+          Values are written in the language of the document, or in English when it says none; give a locale for another. The names of months and days, the order of a date, the separators of numbers
+          and the rules of capitals follow it.
         </SectionHead>
         <div className={`mt-6 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: locale }} />
         <ul className="m-0 mt-6 grid max-w-[760px] list-none gap-2.5 p-0 text-base leading-[1.6] text-ink-soft">
@@ -262,8 +279,8 @@ npx -p @rebodocs/mcp rebodocs-generate template.docx data.json -o out.pdf --font
             <strong className="text-ink">A currency of its own.</strong> <code className={mono}>{'{{price | currency: EUR}}'}</code> names its own, whatever is given to the call.
           </li>
           <li>
-            <strong className="text-ink">The editor</strong> writes values in the language of the text: the one chosen at its foot, its <code className={mono}>language</code> prop, or the one the
-            file says; else that of the interface with the browser’s region: <code className={mono}>editor.formatLocale</code>.
+            <strong className="text-ink">The editor</strong> writes values in the language of the text: the one chosen at its foot, its <code className={mono}>language</code> prop, or the one the file
+            says; else that of the interface with the browser’s region: <code className={mono}>editor.formatLocale</code>.
           </li>
           <li>
             <strong className="text-ink">The command line</strong> takes <code className={mono}>--locale</code> and <code className={mono}>--currency</code>, and an assistant’s{' '}
@@ -303,8 +320,8 @@ npx -p @rebodocs/mcp rebodocs-generate template.docx data.json -o out.pdf --font
 
       <section aria-labelledby="command-line" className="mt-24">
         <SectionHead id="command-line" badge="CLI" color="purple" title="From the command line">
-          A template, a JSON file of values, and a DOCX, a PDF or Markdown out, by its extension. Nested values give dotted names: <code className={mono}>{'{ "client": { "name": "Ana" } }'}</code> fills{' '}
-          <code className={mono}>{'{{client.name}}'}</code>.
+          A template, a JSON file of values, and a DOCX, a PDF or Markdown out, by its extension. Nested values give dotted names: <code className={mono}>{'{ "client": { "name": "Ana" } }'}</code>{' '}
+          fills <code className={mono}>{'{{client.name}}'}</code>.
         </SectionHead>
         <div className={`mt-6 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: cli }} />
         <p className={prose}>
@@ -333,8 +350,8 @@ npx -p @rebodocs/mcp rebodocs-generate template.docx data.json -o out.pdf --font
         </SectionHead>
         <p className={prose}>
           In the editor, <strong>Signatures</strong> in the toolbar’s Insert menu or in the bar beside the caret; in code,{' '}
-          <code className={mono}>{"editor.insertSignatures(['Landlord', 'Tenant'])"}</code>. Put variables in the names, <code className={mono}>{'{{tenant | upper}}'}</code>, and they fill with the rest. Not inside a
-          table.
+          <code className={mono}>{"editor.insertSignatures(['Landlord', 'Tenant'])"}</code>. Put variables in the names, <code className={mono}>{'{{tenant | upper}}'}</code>, and they fill with the
+          rest. Not inside a table.
         </p>
       </section>
 

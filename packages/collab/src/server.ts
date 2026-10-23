@@ -7,17 +7,22 @@
 //
 // An editor listens to its room (server-sent events) and posts what its
 // person does. Whoever has the name of a room can work in it: the name is
-// long and random, and is all there is to keep. Node only.
+// long and random, and is all there is to keep. This is the HTTP of it: what
+// a room does is in room.ts. Node only.
 
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
-import { type Doc, exportDocx, importDocx } from '@rebodocs/core';
-import { type Op, apply, decode, digest, encode, fromBase64, stampIds, transform } from './changes';
+import { importDocx } from '@rebodocs/core/internal';
+import { decode, fromBase64 } from './changes';
+import { type OpsPost, PREFIX, type PresencePost, eventText } from './protocol';
+import { type CollabEvent, type Listener, Room, type RoomContext } from './room';
 import { type Entry, type RoomStorage, type Session, folderStorage, memoryStorage } from './storage';
 
-export type { Entry, Session };
+export type { CollabEvent, Entry, Session };
+export type { Presence } from './protocol';
+export { PEER_COLORS } from './room';
 
 export interface CollabServerOptions {
   /**
@@ -38,8 +43,30 @@ export interface CollabServerOptions {
   staticDir?: string;
   /** How long a room nobody is in waits before its changes are folded into its file, in milliseconds. */
   idle?: number;
-  /** How often the document of a room people are in is given to a storage that keeps nothing else, in milliseconds. */
+  /**
+   * How long after the last change the document of a room people are in is
+   * given to a storage that keeps nothing else, in milliseconds; 5000. While
+   * changes keep coming, it is given at least every `saveEvery`.
+   */
+  saveAfter?: number;
+  /** The longest the document of a room people are in goes without being given to a storage that keeps nothing else, in milliseconds; 30000. */
   saveEvery?: number;
+  /**
+   * How many changes a room people stay in gathers before they are folded
+   * into its file, at the next pause, so that whoever comes in has fewer to
+   * make; 1000. The editors in it load the file again, keeping what they had
+   * not sent and what they can undo.
+   */
+  foldAfter?: number;
+  /**
+   * How often the storage is asked again whether each person in a room may
+   * still be in it, in milliseconds; never when left out. Whoever it no
+   * longer lets in is sent away, and whoever it now lets only watch, or edit,
+   * comes back as that. `recheck` does it at once.
+   */
+  recheckEvery?: number;
+  /** Told what happens: who comes and goes, the changes being folded, the documents being given to the storage, and what goes wrong, which goes to the console when there is nothing to tell. */
+  onEvent?: (event: CollabEvent) => void;
   /**
    * How long after the last change a room is told what its document is like,
    * for every editor in it to see that it has the same, in milliseconds; 1500.
@@ -60,65 +87,20 @@ export interface CollabServer {
   handle(req: IncomingMessage, res: ServerResponse, next?: (error?: unknown) => void): void;
   /** Gives the storage what it does not have yet of the rooms people are in. */
   flush(): Promise<void>;
+  /**
+   * Asks the storage again whether each person in a room, or in every room,
+   * may still be in it: for a system that took someone's access away, or
+   * changed it, to have it hold at once.
+   */
+  recheck(room?: string): Promise<void>;
   /** The rooms it holds now, and what the people in each are called: a room nobody is in is on its way out. */
   rooms(): { id: string; people: string[] }[];
   close(): void;
 }
 
-/** A place in the text, by the id of its paragraph. */
-interface Mark {
-  id: string;
-  offset: number;
-}
-
-/** Where someone's caret is: what the others draw. */
-export interface Presence {
-  part?: string;
-  page: number;
-  anchor: Mark;
-  focus: Mark;
-}
-
-interface Client {
-  id: string;
-  name: string;
-  color: string;
-  sel?: Presence;
-  /** Let in to watch: what they send to change the document is not taken. */
-  readOnly?: boolean;
-  streams: Set<ServerResponse>;
-}
-
-interface Room {
-  id: string;
-  name: string;
-  /** Goes up each time the changes are folded into the file: what was known of the room before is of no use then. */
-  epoch: number;
-  base: Uint8Array;
-  log: Entry[];
-  clients: Map<string, Client>;
-  /** The last sending taken from each, so one sent twice is taken once. */
-  seqs: Map<string, number>;
-  timer?: NodeJS.Timeout;
-  /** How many are on their way in, while the storage is asked about them: the room is not let go of under them. */
-  entering?: number;
-  /** The document with the changes so far made, so the next ones are made to it and not all of them again. */
-  live?: { doc: Doc; rev: number };
-  /** How many changes the storage that only keeps the document has of it, and whether a folding still has to reach it. */
-  saved: number;
-  /** The session whose changes were folded into the file, while the storage still has to be given it. */
-  unkept?: Session;
-  /** What everybody who came in since the changes were last folded is called, by the client they came with. */
-  names: Map<string, string>;
-  /** When the room is to be told what its document is like, and since when it waits to be. */
-  check?: NodeJS.Timeout;
-  checkSince?: number;
-}
-
-/** The colours people are told apart by, in the order they are given out. */
-export const PEER_COLORS = ['E8710A', '1A73E8', '0F9D58', 'D93025', '9334E6', '00897B', 'C2185B', '6D4C41'];
 const MAX_BODY = 96 * 1024 * 1024;
-const PREFIX = '/collab';
+/** Where someone is, and what they are called, is never more. */
+const MAX_PRESENCE = 64 * 1024;
 const ROOM_ID = /^[A-Za-z0-9_-]{8,64}$/;
 const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const TYPES: Record<string, string> = {
@@ -135,7 +117,6 @@ const TYPES: Record<string, string> = {
 };
 
 export function createCollabServer(options: CollabServerOptions): CollabServer {
-  const idle = options.idle ?? 30000;
   const rooms = new Map<string, Room>();
   /** Rooms being read from where they are kept: two who ask for one at once get the same. */
   const opening = new Map<string, Promise<Room | undefined>>();
@@ -143,10 +124,29 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
   const staticDir = options.staticDir && resolve(options.staticDir);
   let closed = false;
 
-  // --- Keeping the rooms ----------------------------------------------------------
-
-  const kept = ({ name, epoch, base, log }: Room) => ({ name, epoch, base, log });
-  const complain = (room: Room, what: string, error: unknown) => console.error(`[collab] ${room.id}: ${what}: ${(error as Error).message}`);
+  const ctx: RoomContext = {
+    storage,
+    idle: options.idle ?? 30000,
+    foldAfter: options.foldAfter ?? 1000,
+    saveAfter: options.saveAfter ?? 5000,
+    saveEvery: options.saveEvery ?? 30000,
+    checkAfter: options.checkAfter ?? 1500,
+    emit(event) {
+      if (!options.onEvent) {
+        if (event.type === 'error') console.error(`[collab] ${event.room}: ${event.what}: ${event.error.message}`);
+        return;
+      }
+      try {
+        options.onEvent(event);
+      } catch (error) {
+        console.error(`[collab] onEvent: ${(error as Error).message}`);
+      }
+    },
+    closed: () => closed,
+    forget(room) {
+      if (rooms.get(room.id) === room) rooms.delete(room.id);
+    },
+  };
 
   const find = (id: string): Promise<Room | undefined> => {
     if (!ROOM_ID.test(id)) return Promise.resolve(undefined);
@@ -158,8 +158,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
         .load(id)
         .then((found) => {
           if (!found) return undefined;
-          const room: Room = { id, ...found, clients: new Map(), seqs: new Map(), saved: found.log.length, names: new Map() };
-          for (const entry of room.log) room.seqs.set(entry.by, entry.seq);
+          const room = new Room(id, found, ctx);
           rooms.set(id, room);
           return room;
         })
@@ -169,107 +168,31 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
     return wait;
   };
 
-  /** The document of a room as it is now, made from its file and its changes the way every editor makes it. */
-  const live = (room: Room): Doc => {
-    let { doc, rev } = room.live ?? { doc: stampIds(importDocx(room.base)), rev: 0 };
-    for (; rev < room.log.length; rev++) doc = apply(doc, room.log[rev].ops);
-    room.live = { doc, rev };
-    return doc;
-  };
-
-  /** The document of a room as it is now, as a file. */
-  const current = (room: Room): Uint8Array => (room.log.length ? exportDocx(live(room)) : room.base);
-
-  const checkAfter = options.checkAfter ?? 1500;
-  /** Tells the room what its document is like, once the changes stop for a moment. */
-  const toCheck = (room: Room) => {
-    clearTimeout(room.check);
-    room.checkSince ??= Date.now();
-    const wait = Math.max(0, Math.min(checkAfter, room.checkSince + checkAfter * 4 - Date.now()));
-    room.check = setTimeout(() => {
-      room.check = undefined;
-      room.checkSince = undefined;
-      if (!room.clients.size || closed) return;
-      try {
-        tell(room, 'check', { epoch: room.epoch, rev: room.log.length, digest: digest(live(room)) });
-      } catch (error) {
-        complain(room, 'no se pudo calcular el documento para comprobarlo', error);
-      }
-    }, wait);
-  };
-
-  /** With nobody in it, a room's changes become its file: joining it again does not make them all over. */
-  const fold = async (room: Room): Promise<void> => {
-    if (room.clients.size || room.entering || closed) return;
-    try {
-      let ended: Session | undefined;
-      if (room.log.length) {
-        // Who changed it, as they were called: the session that ends.
-        const authors = [...new Set(room.log.map((entry) => room.names.get(entry.by) ?? ''))].filter(Boolean);
-        ended = { authors };
-        const base = current(room);
-        // What cannot be read back is not kept in place of what could.
-        importDocx(base);
-        room.base = base;
-        room.log = [];
-        room.live = undefined;
-        room.saved = 0;
-        room.seqs.clear();
-        room.names.clear();
-        room.epoch++;
-        room.unkept = ended;
-      }
-      if (room.unkept) {
-        await storage.keep(room.id, kept(room), true, room.unkept);
-        room.unkept = undefined;
-      }
-      // Kept somewhere else, whole: nothing of it stays here.
-      if (storage.forgets && !room.clients.size && !room.entering && rooms.get(room.id) === room) rooms.delete(room.id);
-    } catch (error) {
-      complain(room, 'los cambios no se pudieron guardar y siguen aquí; se intenta de nuevo', error);
-      if (!room.clients.size && !closed) room.timer = setTimeout(() => void fold(room), Math.max(idle, 5000));
-    }
-  };
-
   const flush = async (): Promise<void> => {
-    if (!storage.save) return;
-    for (const room of rooms.values()) {
-      if (!room.clients.size || room.saved === room.log.length) continue;
-      const upTo = room.log.length;
-      try {
-        await storage.save(room.id, current(room));
-        room.saved = Math.max(room.saved, upTo);
-      } catch (error) {
-        complain(room, 'no se pudo guardar el documento; se intenta de nuevo', error);
-      }
-    }
+    await Promise.all([...rooms.values()].map((room) => room.save()));
   };
-  const saver = storage.save ? setInterval(() => void flush(), options.saveEvery ?? 30000) : undefined;
 
-  // --- Talking to the editors -----------------------------------------------------
-
-  const send = (stream: ServerResponse, event: string, data: unknown) => stream.write(`event: ${event}\ndata: ${encode(data)}\n\n`);
-  const tell = (room: Room, event: string, data: unknown, but?: string) => {
-    for (const client of room.clients.values()) {
-      if (client.id !== but) for (const stream of client.streams) send(stream, event, data);
-    }
+  const recheck = async (id?: string): Promise<void> => {
+    const which = id === undefined ? [...rooms.values()] : [rooms.get(id)].filter((room): room is Room => !!room);
+    await Promise.all(which.map((room) => room.recheck()));
   };
-  const seen = ({ id, name, color, sel }: Client) => ({ client: id, name, color, sel });
+  const rechecker = options.recheckEvery && storage.admit ? setInterval(() => void recheck(), options.recheckEvery) : undefined;
 
-  const body = (req: IncomingMessage): Promise<string> => {
+  // --- HTTP -----------------------------------------------------------------------
+
+  const body = (req: IncomingMessage, limit = MAX_BODY): Promise<string> => {
     // Read already by the server it is mounted in (Express's body parsers).
     const parsed = (req as IncomingMessage & { body?: unknown }).body;
     if (req.readableEnded && parsed !== undefined) {
-      if (typeof parsed === 'string') return Promise.resolve(parsed);
-      if (parsed instanceof Uint8Array) return Promise.resolve(Buffer.from(parsed).toString('utf8'));
-      return Promise.resolve(JSON.stringify(parsed));
+      const text = typeof parsed === 'string' ? parsed : parsed instanceof Uint8Array ? Buffer.from(parsed).toString('utf8') : JSON.stringify(parsed);
+      return text.length > limit ? Promise.reject(new Error('too large')) : Promise.resolve(text);
     }
     return new Promise((done, fail) => {
       const chunks: Buffer[] = [];
       let size = 0;
       req.on('data', (chunk: Buffer) => {
         size += chunk.length;
-        if (size > MAX_BODY) req.destroy(new Error('too large'));
+        if (size > limit) req.destroy(new Error('too large'));
         else chunks.push(chunk);
       });
       req.on('error', fail);
@@ -278,7 +201,11 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
   };
 
   const cors = { 'Access-Control-Allow-Origin': '*' };
-  const json = (res: ServerResponse, status: number, data: unknown) => res.writeHead(status, { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(data));
+  const json = (res: ServerResponse, status: number, data: unknown): void => {
+    res.writeHead(status, { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(data));
+  };
+  const docx = (res: ServerResponse, file: Uint8Array, headers: Record<string, string> = {}) =>
+    res.writeHead(200, { ...cors, 'Content-Type': DOCX_TYPE, 'Cache-Control': 'no-store', ...headers }).end(file);
 
   const serveFile = (res: ServerResponse, path: string) => {
     if (!staticDir) return json(res, 404, { error: 'not found' });
@@ -287,6 +214,60 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
     if (!existsSync(file) || statSync(file).isDirectory()) file = join(staticDir, 'index.html');
     if (!existsSync(file)) return json(res, 404, { error: 'not found' });
     res.writeHead(200, { 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream' }).end(readFileSync(file));
+  };
+
+  /** A document starts being shared: its file is what everybody starts from. */
+  const share = async (req: IncomingMessage, res: ServerResponse, url: URL) => {
+    if (!storage.open) return json(res, 403, { error: 'rooms' });
+    if (options.token && url.searchParams.get('token') !== options.token) return json(res, 401, { error: 'token' });
+    const posted = decode<{ name?: string; docx?: string }>(await body(req));
+    const base = fromBase64(String(posted.docx ?? ''));
+    importDocx(base);
+    const room = new Room(randomBytes(12).toString('base64url'), { name: String(posted.name ?? '').slice(0, 200), epoch: 1, base, log: [] }, ctx);
+    await storage.keep(room.id, room.kept(), false);
+    rooms.set(room.id, room);
+    json(res, 200, { room: room.id });
+  };
+
+  /** Someone comes in, and listens to the room from then on. */
+  const listen = async (req: IncomingMessage, res: ServerResponse, url: URL, room: Room) => {
+    const query = url.searchParams;
+    const id = (query.get('client') ?? '').slice(0, 64);
+    if (!id) return json(res, 400, { error: 'client' });
+    // An id somebody is in the room with: only whoever has its key comes back with it.
+    if (room.clients.has(id) && !room.signed(id, query.get('key'))) return json(res, 409, { error: 'client' });
+    const ticket = query.get('ticket') ?? '';
+    const pass = await room.admit(ticket);
+    if (!pass) return json(res, 403, { error: 'access' });
+    // Gone while the room was being read or the storage was being asked about them: their
+    // leaving was not heard, so they are not let in, or they would be in the room for good.
+    if (req.socket.destroyed) return;
+    const stream: Listener = { write: (text) => res.write(text), end: () => res.end() };
+    const hello = room.join(id, query.get('key'), ticket, pass, query.get('name') ?? '', stream, { epoch: Number(query.get('epoch')), from: Number(query.get('from')) });
+    // Taken by somebody else while the storage was being asked about them.
+    if (!hello) return json(res, 409, { error: 'client' });
+    const client = room.clients.get(id)!;
+    res.writeHead(200, { ...cors, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+    res.write(eventText('hello', hello));
+    const beat = setInterval(() => res.write(': still here\n\n'), 20000);
+    res.on('close', () => {
+      clearInterval(beat);
+      room.leave(client, stream);
+    });
+  };
+
+  /** What someone in the room sends: changes, or where they are. */
+  const receive = async (req: IncomingMessage, res: ServerResponse, room: Room, action: 'ops' | 'presence') => {
+    const posted = decode<Partial<OpsPost & PresencePost>>(await body(req, action === 'presence' ? MAX_PRESENCE : MAX_BODY));
+    const client = room.signed(String(posted.client), posted.key);
+    if (!client) return json(res, 409, { error: 'client' });
+    if (!room.allows(client)) return json(res, 429, { error: 'too many' });
+    if (action === 'presence') {
+      room.presence(client, posted.sel, posted.name);
+      return json(res, 200, {});
+    }
+    const taken = room.take(client, posted);
+    json(res, taken === 'ok' ? 200 : taken === 'read-only' ? 403 : 409, taken === 'ok' ? {} : { error: taken });
   };
 
   const onRequest = async (req: IncomingMessage, res: ServerResponse, next?: (error?: unknown) => void): Promise<void> => {
@@ -304,119 +285,23 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
       return;
     }
     const [, , what, id, action] = path.split('/');
-
     if (req.method === 'GET' && what === 'ping') return void json(res, 200, { collab: 1, token: !!options.token });
-
-    // A document starts being shared: its file is what everybody starts from.
-    if (req.method === 'POST' && what === 'rooms' && !id) {
-      if (!storage.open) return void json(res, 403, { error: 'rooms' });
-      if (options.token && url.searchParams.get('token') !== options.token) return void json(res, 401, { error: 'token' });
-      const posted = decode<{ name?: string; docx?: string }>(await body(req));
-      const base = fromBase64(String(posted.docx ?? ''));
-      importDocx(base);
-      const room: Room = { id: randomBytes(12).toString('base64url'), name: String(posted.name ?? '').slice(0, 200), epoch: 1, base, log: [], clients: new Map(), seqs: new Map(), saved: 0, names: new Map() };
-      await storage.keep(room.id, kept(room), false);
-      rooms.set(room.id, room);
-      return void json(res, 200, { room: room.id });
-    }
+    if (req.method === 'POST' && what === 'rooms' && !id) return share(req, res, url);
 
     const room = what === 'rooms' && id ? await find(id) : undefined;
     if (!room) return void json(res, 404, { error: 'room' });
     /** Where coming in takes more than the name of the room, its files are for those who came in. */
-    const inside = () => !storage.admit || room.clients.has(url.searchParams.get('client') ?? '');
+    const inside = () => !storage.admit || !!room.signed(url.searchParams.get('client') ?? '', url.searchParams.get('key'));
 
-    // The document as it is now: for whoever wants the file without an editor.
-    if (req.method === 'GET' && action === 'docx') {
+    if (req.method === 'GET' && (action === 'docx' || action === 'base')) {
       if (!inside()) return void json(res, 403, { error: 'access' });
-      res.writeHead(200, { ...cors, 'Content-Type': DOCX_TYPE, 'Cache-Control': 'no-store' }).end(current(room));
+      // The document as it is now, for whoever wants the file without an editor; or the file the changes are made to.
+      if (action === 'docx') docx(res, room.current());
+      else docx(res, room.base, { 'X-Epoch': String(room.epoch), 'Access-Control-Expose-Headers': 'X-Epoch' });
       return;
     }
-
-    if (req.method === 'GET' && action === 'base') {
-      if (!inside()) return void json(res, 403, { error: 'access' });
-      res.writeHead(200, { ...cors, 'Content-Type': DOCX_TYPE, 'Cache-Control': 'no-store', 'X-Epoch': String(room.epoch), 'Access-Control-Expose-Headers': 'X-Epoch' }).end(room.base);
-      return;
-    }
-
-    if (req.method === 'GET' && action === 'events') {
-      const clientId = (url.searchParams.get('client') ?? '').slice(0, 64);
-      if (!clientId) return void json(res, 400, { error: 'client' });
-      let pass: { name?: string; readOnly?: boolean } | undefined = {};
-      if (storage.admit) {
-        room.entering = (room.entering ?? 0) + 1;
-        try {
-          pass = await storage.admit(room.id, url.searchParams.get('ticket') ?? '');
-        } finally {
-          room.entering--;
-        }
-      }
-      if (!pass) {
-        if (!room.clients.size) void fold(room);
-        return void json(res, 403, { error: 'access' });
-      }
-      // Gone while the room was being read or the storage was being asked about them: their
-      // leaving was not heard, so they are not let in, or they would be in the room for good.
-      if (req.socket.destroyed) {
-        if (!room.clients.size && !closed) {
-          clearTimeout(room.timer);
-          room.timer = setTimeout(() => void fold(room), idle);
-        }
-        return;
-      }
-      clearTimeout(room.timer);
-      const used = new Set([...room.clients.values()].map((c) => c.color));
-      const client: Client = room.clients.get(clientId) ?? { id: clientId, name: '', color: PEER_COLORS.find((c) => !used.has(c)) ?? PEER_COLORS[room.clients.size % PEER_COLORS.length], streams: new Set() };
-      room.clients.set(clientId, client);
-      // Who they are is for the system to say, when it does.
-      const named = pass.name;
-      client.name = (named ?? url.searchParams.get('name') ?? '').slice(0, 80);
-      client.readOnly = !!pass.readOnly;
-      room.names.set(client.id, client.name);
-      client.streams.add(res);
-      res.writeHead(200, { ...cors, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-      // What it has of the room is of use only if it is of the room as it is now.
-      const known = Number(url.searchParams.get('epoch')) === room.epoch ? Math.max(0, Math.min(Number(url.searchParams.get('from')) || 0, room.log.length)) : 0;
-      send(res, 'hello', { client: client.id, color: client.color, as: client.name, readOnly: client.readOnly, epoch: room.epoch, name: room.name, rev: room.log.length, from: known, entries: room.log.slice(known), peers: [...room.clients.values()].filter((c) => c !== client).map(seen) });
-      tell(room, 'presence', seen(client), client.id);
-      const beat = setInterval(() => res.write(': still here\n\n'), 20000);
-      res.on('close', () => {
-        clearInterval(beat);
-        client.streams.delete(res);
-        if (client.streams.size || room.clients.get(client.id) !== client) return;
-        room.clients.delete(client.id);
-        tell(room, 'leave', { client: client.id });
-        if (!room.clients.size && !closed) room.timer = setTimeout(() => void fold(room), idle);
-      });
-      return;
-    }
-
-    if (req.method === 'POST' && (action === 'ops' || action === 'presence')) {
-      const posted = decode<{ client?: string; epoch?: number; rev?: number; seq?: number; ops?: Op[]; sel?: Presence | null; name?: string }>(await body(req));
-      const client = room.clients.get(String(posted.client));
-      if (!client) return void json(res, 409, { error: 'client' });
-      if (action === 'presence') {
-        client.sel = posted.sel ?? undefined;
-        if (typeof posted.name === 'string' && !storage.admit) {
-          client.name = posted.name.slice(0, 80);
-          room.names.set(client.id, client.name);
-        }
-        tell(room, 'presence', seen(client), client.id);
-        return void json(res, 200, {});
-      }
-      if (client.readOnly) return void json(res, 403, { error: 'read-only' });
-      const { rev, seq, ops } = posted;
-      if (posted.epoch !== room.epoch || !Number.isInteger(rev) || rev! < 0 || rev! > room.log.length || !Number.isInteger(seq) || !Array.isArray(ops)) return void json(res, 409, { error: 'stale' });
-      // Sent again because the answer got lost: it is already in its place.
-      if (seq! <= (room.seqs.get(client.id) ?? 0)) return void json(res, 200, {});
-      const entry: Entry = { by: client.id, seq: seq!, ops: transform(ops, room.log.slice(rev).flatMap((e) => e.ops)).second };
-      room.log.push(entry);
-      room.seqs.set(client.id, seq!);
-      storage.add(room.id, entry);
-      tell(room, 'op', { rev: room.log.length - 1, ...entry });
-      toCheck(room);
-      return void json(res, 200, {});
-    }
-
+    if (req.method === 'GET' && action === 'events') return listen(req, res, url, room);
+    if (req.method === 'POST' && (action === 'ops' || action === 'presence')) return receive(req, res, room, action);
     json(res, 404, { error: 'not found' });
   };
 
@@ -448,15 +333,12 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
     ready,
     handle,
     flush,
+    recheck,
     rooms: () => [...rooms.values()].map((room) => ({ id: room.id, people: [...room.clients.values()].map((client) => client.name) })),
     close() {
       closed = true;
-      clearInterval(saver);
-      for (const room of rooms.values()) {
-        clearTimeout(room.timer);
-        clearTimeout(room.check);
-        for (const client of room.clients.values()) for (const stream of client.streams) stream.end();
-      }
+      clearInterval(rechecker);
+      for (const room of rooms.values()) room.close();
       server?.close();
       server?.closeAllConnections();
     },

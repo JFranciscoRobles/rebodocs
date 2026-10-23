@@ -1,10 +1,12 @@
 # Demo
 
-`@rebodocs/react` as an application uses it. The same document two ways, in
-two tabs:
+`@rebodocs/react` as an application uses it. The same document three ways, in
+three tabs:
 
 - **DocsEditor**: the whole editor as it comes, in a dozen lines
   (`src/FullEditor.tsx`).
+- **Another layout**: the same component set out another way, its tools in
+  tabs and its panel as a rail (`layout="another"`).
 - **Headless**: an interface built from nothing on the hooks, dark and laid
   out like a design tool, that does everything the first does
   (`src/HeadlessEditor.tsx`, `src/headless/`).
@@ -17,9 +19,9 @@ npm run build:demo    # apps/demo/dist, a static site
 It is also on the site, at [rebodocs.com/demo](https://rebodocs.com/demo/):
 `apps/site` takes these same components from here.
 
-`/#headless` opens on the second tab. It starts with a sample agreement, in English, that
+`/#headless` opens on the third tab, `/#screen` on the second. It starts with a sample agreement, in English, that
 `scripts/sample.ts` writes with the engine: headings, variables with a type,
-text in two columns, a table with a heading row, places to sign. `Open a .docx` opens a file of the disk in both tabs.
+text in two columns, a table with a heading row, places to sign, a note at the foot of a page and one at the end. `Open a .docx` opens a file of the disk in every tab.
 Saving hands the DOCX back as a download: there is no backend.
 
 Its interface opens in English (`setLocale('en')` in `src/main.tsx`). The selector in the status bar changes it for what the library writes and for the
@@ -40,10 +42,10 @@ project that installs `@rebodocs/react` from npm, it works without the alias.
 
 | File | What it is |
 | --- | --- |
-| `src/App.tsx` | The two tabs, the sample document, opening a file. |
+| `src/App.tsx` | The three tabs, the sample document, opening a file. |
 | `src/FullEditor.tsx` | `DocsEditor`. |
 | `src/HeadlessEditor.tsx` | The provider and the layout: bars, find, ruler, pages. |
-| `src/headless/Panels.tsx` | The side panel: format, page, contents, notes. |
+| `src/headless/Panels.tsx` | The side panel: format; page, with the page number and where the endnotes go and how they are numbered; contents; notes. |
 | `src/headless/texts.ts` | Its labels in Spanish and English, and the hook that follows the language. |
 | `src/HeadlessEditor.css` | Its look, all under `.hd`. |
 | `scripts/sample.ts` | Writes `public/sample.docx`. |

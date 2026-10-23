@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@rebodocs/react"><img src="https://img.shields.io/npm/v/@rebodocs/react?label=npm&color=0b57d0" alt="npm version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2e6b3c" alt="MIT license"></a>
-  <img src="https://img.shields.io/badge/tests-475%20passing-2e6b3c" alt="475 tests passing">
+  <img src="https://img.shields.io/badge/tests-642%20passing-2e6b3c" alt="642 tests passing">
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6" alt="TypeScript">
 </p>
 
@@ -63,7 +63,8 @@ and [Headless](https://rebodocs.com/docs/headless/).
 ## Features
 
 - **Faithful DOCX round trip.** A file opened and saved keeps its XML; what is edited is written back into the original structure.
-- **Word-compatible layout.** Sections, columns, tables that split across pages, floating pictures and tables, headers and footers, footnotes, text boxes. Measured against Word's own PDFs: 96.5% of lines land where Word puts them across 16 documents.
+- **Word-compatible layout.** Sections, columns, tables that split across pages, floating pictures and tables, headers and footers, footnotes and endnotes, text boxes, kerning. Measured line by line against Word's own PDFs, with 47 documents kept in `test-documents/` that anyone can run: 99% of Word's lines land where Word puts them.
+- **Copy and paste with Word.** A table copied in Word comes with its merged cells, widths, colours, borders and row heights, and goes back to Word the same way.
 - **Tracked changes** as Word's, accepted or rejected in the editor, from code or by an assistant.
 - **Versions** compared word by word and restored. Your application keeps them; the editor lists them.
 - **Templates.** `{{client.name}}` is a variable, with formats for dates and amounts, and `{{#lines}} … {{/lines}}` repeats rows or paragraphs. Fill them in the editor, on a server or from the command line.
@@ -137,6 +138,7 @@ cd rebodocs
 npm install
 npm run dev          # playground at http://localhost:5173
 npm test             # Vitest
+npm run test:browser # the editor itself, in Chrome
 npm run typecheck
 ```
 
@@ -146,23 +148,26 @@ npm run typecheck
 | `npm run build:react` | Builds `@rebodocs/react` and packs it as a tarball. |
 | `npm run site` | The documentation site at http://localhost:5174. |
 | `npm run generate -- template.docx data.json -o out.pdf` | Fills a template without a browser. |
-| `npm run word-compare -- file.docx` | Compares the layout with Word's (macOS, with Word). |
+| `npm run word-check` | Lays out the documents of `test-documents/` and compares them with the PDFs Word made of them. |
+| `npm run word-compare -- file.docx` | Compares one document with Word's PDF of it; `--word` has Word make it (macOS). |
 | `npm run locale -- fr texts/fr.json` | Starts or updates a translation of the interface. |
 
 ## Status
 
-**0.9: ready to try in production, not yet stable.** The API may still
+**0.10: ready to try in production, not yet stable.** The API may still
 change before 1.0; every change is listed in the [changelog](CHANGELOG.md).
 
 What is checked, and how, is on the [status page](https://rebodocs.com/docs/status/):
-475 automated tests, layout measured line by line against Word, a round trip
-of real documents, and the interface driven in a browser. The main limits
-today:
+642 automated tests, 30 of them driving the editor in Chrome
+(`npm run test:browser`), layout measured line by line against Word with the
+documents of `test-documents/` (`npm run word-check`), a round trip of real
+documents, collaboration across networks, and the rest of the interface
+driven in a browser by hand. The main limits today:
 
-- Pasting from Word or the web keeps text formatting, links and lists, but not pictures or tables.
-- Collaboration has not been tried across networks; one server process holds a room.
+- Pasting from Word or the web keeps text formatting, links, lists and tables, but not pictures; a table inside a cell comes as lines.
+- One collaboration server process holds a room.
 - Screen readers have been tested by reading what is announced, not yet with VoiceOver, NVDA or JAWS.
-- No right-to-left text, hyphenation or laid-out endnotes.
+- No right-to-left text or hyphenation.
 
 ## Contributing
 

@@ -48,10 +48,17 @@ export function startCollab(backendUrl: string): CollabServer {
     port: collabPort,
     host: process.env.COLLAB_HOST,
     storage: backendStorage({ url: backendUrl, key: process.env.COLLAB_BACKEND_KEY }),
-    // Often, so that what is typed is soon seen where the documents are kept; 30 seconds is the usual.
-    saveEvery: 10_000,
+    // Soon after typing stops, so that it is soon seen where the documents are kept; 5 seconds is the usual.
+    saveAfter: 2000,
     // A room lasts as long as someone is in it: a moment after the last one leaves, the document is
     // given back and the room is let go of. The moment is for a page that is only being loaded again.
     idle: 1500,
+    // What happens in the rooms, in the terminal the demo runs in.
+    onEvent: (event) => {
+      if (event.type === 'join') console.log(`[collab] ${event.name || 'someone'} came into ${event.room}${event.readOnly ? ', to watch' : ''}`);
+      else if (event.type === 'leave') console.log(`[collab] ${event.name || 'someone'} left ${event.room}`);
+      else if (event.type === 'fold') console.log(`[collab] ${event.room}: ${event.changes} changes folded into its file${event.people ? `, with ${event.people} in it` : ''}`);
+      else if (event.type === 'error') console.error(`[collab] ${event.room}: ${event.what}: ${event.error.message}`);
+    },
   }));
 }

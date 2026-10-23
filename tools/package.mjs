@@ -78,7 +78,8 @@ export async function buildPackage(name, spec) {
     config,
     JSON.stringify({
       extends: join(root, 'tsconfig.json'),
-      compilerOptions: { noEmit: false, declaration: true, emitDeclarationOnly: true, rootDir: packages, outDir: types },
+      // What a package marks @internal is for its own files, not for whoever uses it: it is left out.
+      compilerOptions: { noEmit: false, declaration: true, emitDeclarationOnly: true, stripInternal: true, rootDir: packages, outDir: types },
       include: [join(here, 'src')],
     }),
   );
@@ -121,7 +122,13 @@ export async function buildPackage(name, spec) {
     // `default` too: Node from 22.12 loads these with require() as well, for a server compiled to CommonJS (Nest).
     exports: Object.fromEntries(Object.entries(spec.exports).map(([path, output]) => [path, { types: typesOf(output), import: `./${output}.js`, default: `./${output}.js` }])),
     // For TypeScript set to resolve as old Node did, which does not read `exports`.
-    typesVersions: { '*': Object.fromEntries(Object.entries(spec.exports).filter(([path]) => path !== '.').map(([path, output]) => [path.slice(2), [typesOf(output).slice(2)]])) },
+    typesVersions: {
+      '*': Object.fromEntries(
+        Object.entries(spec.exports)
+          .filter(([path]) => path !== '.')
+          .map(([path, output]) => [path.slice(2), [typesOf(output).slice(2)]]),
+      ),
+    },
     dependencies: Object.fromEntries([...ours.map((dep) => [dep, version]), ...theirs.map((dep) => [dep, deps[dep]])].sort(([a], [b]) => a.localeCompare(b))),
     publishConfig: { access: 'public' },
   };

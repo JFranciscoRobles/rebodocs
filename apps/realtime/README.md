@@ -14,7 +14,8 @@ leaves, the document is saved and the room is let go of. The list says which
 rooms are open and who is in each.
 
 Open a document, press **Copy link**, and open the link in another window or
-another browser. While someone types it saves itself every 10 seconds.
+another browser. It saves itself two seconds after typing stops, and every
+30 seconds while it goes on. The terminal says who comes and goes.
 
 When everybody has left a document they changed, the backend keeps a version
 of it, signed by who changed it. The **Versions** tab of the side panel lists
@@ -59,8 +60,9 @@ three: the pages, your backend, and
 
 ## Where it can improve
 
-- **Two browsers over a real bucket.** The tests run two people over a
-  folder, with no browser.
+- **Two browsers in the tests.** Two browsers over a real bucket, across
+  networks behind an HTTPS proxy, were tried by hand; the tests run two people
+  over a folder, with no browser.
 - **Who may do what.** No sign-in: a ticket is signed for whatever name is
   given. `server/api.ts` says where an application decides.
 - **A ticket is checked on coming in.** Whoever is in stays until they leave.

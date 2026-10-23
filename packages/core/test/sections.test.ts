@@ -13,6 +13,8 @@ import {
   hitTest,
   importDocx,
   insertColumnBreak,
+  paragraphLength,
+  resolveParagraph,
   insertSectionBreak,
   setSectionPage,
   layoutDocument,
@@ -21,7 +23,7 @@ import {
   sectionsOf,
   setColumns,
   splitParagraph,
-} from '../src';
+} from '../src/internal';
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 const R = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
@@ -56,12 +58,25 @@ const xml = (doc: Doc) => strFromU8(unzipSync(exportDocx(doc))['word/document.xm
 
 describe('sections', () => {
   it('reads the sections of a document: their page, their columns and where they start', () => {
-    const doc = open(p('a') + end(sect('<w:cols w:num="3" w:space="400" w:sep="1"/>', 'continuous')) + p('b'), sect('<w:cols w:num="2" w:space="400" w:equalWidth="0"><w:col w:w="2000" w:space="600"/><w:col w:w="3000"/></w:cols>', 'nextColumn'));
+    const doc = open(
+      p('a') + end(sect('<w:cols w:num="3" w:space="400" w:sep="1"/>', 'continuous')) + p('b'),
+      sect('<w:cols w:num="2" w:space="400" w:equalWidth="0"><w:col w:w="2000" w:space="600"/><w:col w:w="3000"/></w:cols>', 'nextColumn'),
+    );
     expect(doc.paragraphs[1].section?.columns).toEqual({ count: 3, space: 20, separator: true });
     expect(doc.paragraphs[1].section?.start).toBe('continuous');
-    expect(doc.columns).toEqual({ count: 2, space: 20, widths: [{ width: 100, space: 30 }, { width: 150, space: 0 }] });
+    expect(doc.columns).toEqual({
+      count: 2,
+      space: 20,
+      widths: [
+        { width: 100, space: 30 },
+        { width: 150, space: 0 },
+      ],
+    });
     expect(doc.sectionStart).toBe('nextColumn');
-    expect(sectionsOf(doc).map((s) => [s.columns.count, s.start, s.end])).toEqual([[3, 'continuous', 2], [2, 'nextColumn', 3]]);
+    expect(sectionsOf(doc).map((s) => [s.columns.count, s.start, s.end])).toEqual([
+      [3, 'continuous', 2],
+      [2, 'nextColumn', 3],
+    ]);
     expect(sectionCount(doc)).toBe(2);
     expect(columnsAt(doc, 0).count).toBe(3);
     expect(columnsAt(doc, 2).count).toBe(2);
@@ -137,7 +152,11 @@ describe('sections', () => {
   it('gives no room to the empty paragraph that only ends a section', () => {
     const doc = open(p('a') + end(sect('<w:cols w:space="720"/>')) + p('b'), sect('<w:cols w:space="720"/>', 'continuous'));
     const layout = layoutDocument(doc, measurer);
-    expect(layout.lines.map((l) => [l.para, l.y])).toEqual([[0, 10], [1, 20], [2, 20]]);
+    expect(layout.lines.map((l) => [l.para, l.y])).toEqual([
+      [0, 10],
+      [1, 20],
+      [2, 20],
+    ]);
   });
 
   it('starts a section on a new page, on an odd one or in the next column, as it asks', () => {
@@ -158,7 +177,8 @@ describe('sections', () => {
 
   it('shows no header on the pages of the first sections when none of them has one', () => {
     const hdr = `<w:hdr ${W}><w:p><w:r><w:t>head</w:t></w:r></w:p></w:hdr>`;
-    const rels = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rH" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/></Relationships>';
+    const rels =
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rH" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/></Relationships>';
     const doc = open(p('a') + end(sect('<w:cols w:space="720"/>')) + p('b'), `<w:sectPr><w:headerReference w:type="default" r:id="rH"/>${PAGE}</w:sectPr>`, {
       'word/header1.xml': hdr,
       'word/_rels/document.xml.rels': rels,
@@ -257,5 +277,30 @@ describe('sections', () => {
     expect(layout.lines[1].x).toBeGreaterThan(layout.lines[0].x);
     expect(xml(at.doc)).toContain(COLUMN_BREAK_XML);
     expect(importDocx(exportDocx(at.doc)).paragraphs[0].runs.some((r) => r.props.object === COLUMN_BREAK_XML)).toBe(true);
+  });
+
+  it('sets the last line of a justified paragraph that ends a section across the column, as Word does', () => {
+    const justified = (text: string) => createParagraph(text, {}, { align: 'justify' });
+    let doc = createDoc([justified('uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce quince dieciseis diecisiete'), justified('otra')]);
+    doc = insertSectionBreak(doc, { para: 0, offset: paragraphLength(doc.paragraphs[0]) }, 'continuous').doc;
+    const layout = layoutDocument(doc, measurer);
+    const lines = layout.lines.filter((l) => l.para === 0);
+    // Its last line, which the section break ends, is spread as the others are; the last of the document is not.
+    expect(lines.at(-1)!.fragments.some((f) => f.wordSpacing > 0)).toBe(true);
+    expect(layout.lines.at(-1)!.fragments.every((f) => !f.wordSpacing)).toBe(true);
+  });
+
+  it('leaves the end of a paragraph that ends in a column break at the top of the next column, as an empty line', () => {
+    // 'a', then a paragraph of nothing but the break, then 'b': as Word writes a column break of its own.
+    let doc = createDoc([createParagraph('a'), createParagraph(''), createParagraph('b')]);
+    doc = setColumns(doc, { from: docEnd(doc), to: docEnd(doc) }, { count: 2, space: 20 });
+    doc = insertColumnBreak(doc, { para: 1, offset: 0 }).doc;
+    const layout = layoutDocument(doc, measurer);
+    const [a, , b] = layout.lines.filter((l) => l.para !== 1 || l.start === 0);
+    // Measured against Word: the column after it starts a line lower, the line its paragraph ends on.
+    expect(b.x).toBeGreaterThan(a.x);
+    const height = layout.lines.find((l) => l.para === 1)!.height;
+    const [mark, next] = [resolveParagraph(doc.paragraphs[1].props), resolveParagraph(doc.paragraphs[2].props)];
+    expect(b.y - 72).toBeCloseTo(height + Math.max(mark.spacingAfter, next.spacingBefore));
   });
 });

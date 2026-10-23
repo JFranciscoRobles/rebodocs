@@ -121,8 +121,8 @@ export function PaintDemo() {
             ]}
           />
           <p className="m-0 text-[15px] leading-[1.6] text-ink-soft">
-            Click in the text and type: the keys go to a real textarea at the caret, each becomes a change to the text, and the lines are broken and placed again. Zoom scales pages laid out at their real size, so no line breaks
-            differently.
+            Click in the text and type: the keys go to a real textarea at the caret, each becomes a change to the text, and the lines are broken and placed again. Zoom scales pages laid out at their
+            real size, so no line breaks differently.
           </p>
         </>
       }
@@ -181,11 +181,7 @@ export function PaintDemo() {
               className="absolute m-0 h-[24px] w-px resize-none overflow-hidden border-0 p-0 text-[16px] opacity-0 outline-0"
               style={{ left: at.x, top: at.y }}
             />
-            <span
-              aria-hidden="true"
-              className={`absolute w-[1.5px] bg-black ${focused ? 'animate-blink' : 'opacity-40'}`}
-              style={{ left: at.x, top: at.y + 3, height: LINE - 6 }}
-            />
+            <span aria-hidden="true" className={`absolute w-[1.5px] bg-black ${focused ? 'animate-blink' : 'opacity-40'}`} style={{ left: at.x, top: at.y + 3, height: LINE - 6 }} />
             {textarea && (
               <span
                 aria-hidden="true"
@@ -201,11 +197,15 @@ export function PaintDemo() {
       <div className="mt-3 flex items-center gap-3 text-[13px] text-muted">
         <span>{text.length >= MAX ? 'That is as long as the demo goes.' : 'Click in the text and type; ← → and Backspace work too.'}</span>
         {text !== START && (
-          <button type="button" onClick={() => {
+          <button
+            type="button"
+            onClick={() => {
               setText(START);
               setCaret(START.indexOf(' within'));
               setLast(undefined);
-            }} className="ml-auto cursor-pointer border-0 bg-transparent p-0 text-[13px] text-muted underline">
+            }}
+            className="ml-auto cursor-pointer border-0 bg-transparent p-0 text-[13px] text-muted underline"
+          >
             Start again
           </button>
         )}

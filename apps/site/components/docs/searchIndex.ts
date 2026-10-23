@@ -41,6 +41,7 @@ export function searchIndex(): SearchEntry[] {
   const api = hrefOf('editor-api');
   for (const member of MEMBER_NAMES) entries.push({ kind: 'Member', title: `editor.${member.name}`, detail: `Editor · ${member.group}`, href: `${api}#${member.row}` });
   const assistants = hrefOf('assistants');
-  for (const tool of [...FILE_TOOLS, ...toolDocs()]) entries.push({ kind: 'Tool', title: tool.name, detail: `MCP · ${tool.description.split(/(?<=[.:])\s/)[0]}`, href: `${assistants}#tool-${tool.name}` });
+  for (const tool of [...FILE_TOOLS, ...toolDocs()])
+    entries.push({ kind: 'Tool', title: tool.name, detail: `MCP · ${tool.description.split(/(?<=[.:])\s/)[0]}`, href: `${assistants}#tool-${tool.name}` });
   return entries;
 }

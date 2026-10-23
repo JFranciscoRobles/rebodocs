@@ -89,7 +89,16 @@ export function PagesDemo() {
   const [keep, setKeep] = useState(true);
   const sample = useRef<HTMLDivElement>(null);
   const font = useFontOf(sample);
-  const intro = useLines(INTRO + MORE.split(' ').slice(0, above + 1).join(' '), font, WIDTH, LINE, false).lines.map(words);
+  const intro = useLines(
+    INTRO +
+      MORE.split(' ')
+        .slice(0, above + 1)
+        .join(' '),
+    font,
+    WIDTH,
+    LINE,
+    false,
+  ).lines.map(words);
   const body = useLines(BODY, font, WIDTH, LINE, false).lines.map(words);
 
   const { pages, moved } = paginate(
@@ -113,13 +122,17 @@ export function PagesDemo() {
             lines={[
               ['page 1', `${shown[0].length} of ${ROOM} lines`, 'good'],
               ['page 2', `${shown[1]?.length ?? 0} lines`, 'good'],
-              ['widow control', !widows ? 'off' : moved.widow ? `took ${moved.widow} line along` : moved.orphan ? 'sent a lone first line on' : 'nothing to do', moved.widow || moved.orphan ? 'warn' : 'dim'],
+              [
+                'widow control',
+                !widows ? 'off' : moved.widow ? `took ${moved.widow} line along` : moved.orphan ? 'sent a lone first line on' : 'nothing to do',
+                moved.widow || moved.orphan ? 'warn' : 'dim',
+              ],
               ['keep with next', !keep ? 'off' : moved.keep ? 'moved the heading' : 'nothing to do', moved.keep ? 'warn' : 'dim'],
             ]}
           />
           <p className="m-0 text-[15px] leading-[1.6] text-ink-soft">
-            Drag the text above until the last paragraph meets the foot of the page. With the rules on, no line is left alone and the heading never ends a page; turn them off to see what they prevent. These are the rules of the
-            engine, made small: the real ones also keep lines together, break before a paragraph and split table rows.
+            Drag the text above until the last paragraph meets the foot of the page. With the rules on, no line is left alone and the heading never ends a page; turn them off to see what they prevent.
+            These are the rules of the engine, made small: the real ones also keep lines together, break before a paragraph and split table rows.
           </p>
         </>
       }

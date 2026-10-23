@@ -1,7 +1,8 @@
 // Writes the document the demo opens with: a short contract, in English, that
 // is also a template, with one of each thing an interface has something to show for:
 // headings for the outline, variables with a type, a table with a heading
-// row, text in two columns, places to sign, a header and a page number. Made with the same operations the editor uses.
+// row, text in two columns, places to sign, a note at the foot of a page and one at the end,
+// a header and a page number. Made with the same operations the editor uses.
 //
 //   npm run sample -w @rebodocs/demo     → public/sample.docx
 //   vite-node scripts/sample.ts <file>   → wherever the site wants its copy
@@ -9,7 +10,25 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { type Doc, type Run, type RunProps, applyRunProps, createDoc, exportDocx, insertSignatures, insertTable, insertText, paragraphText, setCellProps, setColumns, setHeaderRow, setPageNumbering, setParagraphStyle } from '@rebodocs/core';
+import {
+  type Doc,
+  type Run,
+  type RunProps,
+  applyRunProps,
+  createDoc,
+  exportDocx,
+  insertEndnote,
+  insertFootnote,
+  insertSignatures,
+  insertTable,
+  insertText,
+  paragraphText,
+  setCellProps,
+  setColumns,
+  setHeaderRow,
+  setPageNumbering,
+  setParagraphStyle,
+} from '@rebodocs/core';
 
 const run = (text: string, props: RunProps = {}): Run => ({ text, props });
 const bold = (text: string) => run(text, { bold: true });
@@ -19,14 +38,29 @@ const LINES: { runs: Run[]; style?: string; align?: 'justify' | 'right' | 'cente
   { runs: [run('{{city}}, {{date | long date}}', { italic: true })], align: 'right' },
   { runs: [run('Parties')], style: 'Heading1' },
   {
-    runs: [run('This agreement is made between '), bold('{{client | capital}}'), run(' (“the Client”) and '), bold('{{provider | capital}}'), run(' (“the Provider”). Each party confirms it has the legal capacity to be bound by the terms of this agreement.')],
+    runs: [
+      run('This agreement is made between '),
+      bold('{{client | capital}}'),
+      run(' (“the Client”) and '),
+      bold('{{provider | capital}}'),
+      run(' (“the Provider”). Each party confirms it has the legal capacity to be bound by the terms of this agreement.'),
+    ],
     align: 'justify',
   },
   { runs: [run('Scope of the services')], style: 'Heading1' },
   { runs: [run('The Provider will carry out for the Client the services described in Schedule A, with the care expected of its trade and within the deadlines set out there.')], align: 'justify' },
   { runs: [run('Obligations of the parties')], style: 'Heading1' },
-  { runs: [bold('The Client. '), run('To give the Provider the information and access it needs, to review each delivery within five business days, and to pay the fees on the dates agreed.')], align: 'justify' },
-  { runs: [bold('The Provider. '), run('To carry out the services to the quality agreed, to tell the Client of any delay as soon as it knows of it, and to keep confidential the information it receives.')], align: 'justify' },
+  {
+    runs: [bold('The Client. '), run('To give the Provider the information and access it needs, to review each delivery within five business days, and to pay the fees on the dates agreed.')],
+    align: 'justify',
+  },
+  {
+    runs: [
+      bold('The Provider. '),
+      run('To carry out the services to the quality agreed, to tell the Client of any delay as soon as it knows of it, and to keep confidential the information it receives.'),
+    ],
+    align: 'justify',
+  },
   { runs: [run('Fees and payment')], style: 'Heading1' },
   { runs: [run('The Client will pay the Provider '), bold('{{amount | currency}}'), run(', on the following schedule:')], align: 'justify' },
   { runs: [run('')] },
@@ -65,6 +99,16 @@ function sampleDoc(): Doc {
   const first = doc.paragraphs.findIndex((p) => paragraphText(p).startsWith('The Client.'));
   const last = first + 1;
   doc = setColumns(doc, { from: { para: first, offset: 0 }, to: { para: last, offset: paragraphText(doc.paragraphs[last]).length } }, { count: 2, space: 24, separator: true });
+
+  // A note at the foot of the page on the schedule, and one at the end on the parties.
+  const scope = doc.paragraphs.findIndex((p) => paragraphText(p).startsWith('The Provider will carry out'));
+  doc = insertFootnote(
+    doc,
+    { para: scope, offset: paragraphText(doc.paragraphs[scope]).indexOf('Schedule A') + 'Schedule A'.length },
+    'Schedule A is agreed by both parties and signed with this agreement.',
+  ).doc;
+  const parties = doc.paragraphs.findIndex((p) => paragraphText(p).startsWith('This agreement is made between'));
+  doc = insertEndnote(doc, { para: parties, offset: paragraphText(doc.paragraphs[parties]).length }, 'Where a party is a company, the person who signs for it confirms they may bind it.').doc;
 
   doc = { ...doc, header: { paragraphs: [{ props: { align: 'right' }, runs: [run('Rebodocs · sample document', { fontSize: 9, color: '777777' })] }] } };
   return setPageNumbering(doc, { place: 'footer', align: 'center', format: 'pageOfTotal' });

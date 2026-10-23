@@ -1,6 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type Doc, createDoc, exportDocx, importDocx, paragraphStyles, resolveRun, setParagraphStyle, styleIdAt, toggleList } from '../src';
+import { type Doc, createDoc, exportDocx, importDocx, paragraphStyles, resolveRun, setParagraphStyle, styleIdAt, toggleList } from '../src/internal';
 
 const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 const STYLES =
@@ -28,7 +28,15 @@ const save = (doc: Doc) => Object.fromEntries(Object.entries(unzipSync(exportDoc
 
 describe('paragraph styles', () => {
   it('offers a standard set in a new document, and gives a paragraph the look of one', () => {
-    const doc = createDoc([{ props: { align: 'center', indentFirstLine: 18 }, runs: [{ text: 'A ', props: { bold: true } }, { text: 'title', props: { underline: true, fontFamily: 'Georgia' } }] }]);
+    const doc = createDoc([
+      {
+        props: { align: 'center', indentFirstLine: 18 },
+        runs: [
+          { text: 'A ', props: { bold: true } },
+          { text: 'title', props: { underline: true, fontFamily: 'Georgia' } },
+        ],
+      },
+    ]);
     expect(paragraphStyles(doc).map((s) => s.name)).toEqual(['Normal', 'Título', 'Subtítulo', 'Título 1', 'Título 2', 'Título 3']);
     expect(styleIdAt(doc, 0)).toBe('Normal');
     const titled = setParagraphStyle(doc, 0, 0, 'Heading1');
@@ -44,7 +52,15 @@ describe('paragraph styles', () => {
   });
 
   it('writes the styles a new document uses, and reads them back as its own', () => {
-    const doc = setParagraphStyle(createDoc([{ props: {}, runs: [{ text: 'Chapter', props: {} }] }, { props: {}, runs: [{ text: 'Text', props: {} }] }]), 0, 0, 'Heading2');
+    const doc = setParagraphStyle(
+      createDoc([
+        { props: {}, runs: [{ text: 'Chapter', props: {} }] },
+        { props: {}, runs: [{ text: 'Text', props: {} }] },
+      ]),
+      0,
+      0,
+      'Heading2',
+    );
     const out = save(doc);
     expect(out['word/document.xml']).toContain('<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:keepNext/>');
     expect(out['[Content_Types].xml']).toContain('PartName="/word/styles.xml"');
@@ -77,7 +93,12 @@ describe('paragraph styles', () => {
       ['Heading3', 'Título 3'],
       ['Cita', 'Quote'],
     ]);
-    expect(styles[3]).toMatchObject({ outlineLevel: 1, next: 'Normal', paragraph: { spacingBefore: 12, spacingAfter: 0, keepNext: true }, run: { fontFamily: 'Georgia', fontSize: 16, bold: true, color: '2F5496' } });
+    expect(styles[3]).toMatchObject({
+      outlineLevel: 1,
+      next: 'Normal',
+      paragraph: { spacingBefore: 12, spacingAfter: 0, keepNext: true },
+      run: { fontFamily: 'Georgia', fontSize: 16, bold: true, color: '2F5496' },
+    });
     // The standard ones are built on the Normal of the file.
     expect(styles[4]).toMatchObject({ paragraph: { spacingBefore: 18, spacingAfter: 6 }, run: { fontFamily: 'Georgia', fontSize: 16, bold: false } });
   });

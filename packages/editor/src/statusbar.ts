@@ -2,7 +2,7 @@
 // how the pages are shown. Like the toolbar, it only uses the public methods
 // of the editor.
 
-import { type Doc, docText } from '@rebodocs/core';
+import { type Doc, docText } from '@rebodocs/core/internal';
 import { type Editor, type ViewMode, type ZoomFit, MAX_ZOOM, MIN_ZOOM } from './editor';
 import { getLocale, plural, t, withRegion } from './i18n';
 
@@ -67,8 +67,7 @@ const ZOOM_STEP = 10;
 const GRID_ZOOM = 0.3;
 const STYLE_ID = 'dx-statusbar-style';
 /** What goes before the page while the header or the footer is being edited. */
-const areaPrefix = (area: 'body' | 'header' | 'footer' | 'footnote' | 'textbox') =>
-  area === 'body' ? '' : `${t(area === 'header' ? 'area.header' : area === 'footer' ? 'area.footer' : area === 'textbox' ? 'area.textbox' : 'area.footnote')} · `;
+const areaPrefix = (area: 'body' | 'header' | 'footer' | 'footnote' | 'endnote' | 'textbox') => (area === 'body' ? '' : `${t(`area.${area}`)} · `);
 
 const CSS = `
 .dx-sb-chips,.dx-sb-floating{gap:6px;padding:0;background:none;border:0}
@@ -131,7 +130,9 @@ const ICONS = {
   flow: svg('<path d="M3 4.5h12M3 7.5h12M3 10.5h12M3 13.5h7"/>'),
   column: svg('<rect x="5" y="2.5" width="8" height="13" rx="1"/><path d="M7.5 6h3M7.5 9h3M7.5 12h3"/>'),
   spread: svg('<rect x="2" y="3.5" width="6.2" height="11" rx="1"/><rect x="9.8" y="3.5" width="6.2" height="11" rx="1"/>'),
-  grid: svg('<rect x="2.5" y="2.5" width="5.2" height="5.2" rx=".8"/><rect x="10.3" y="2.5" width="5.2" height="5.2" rx=".8"/><rect x="2.5" y="10.3" width="5.2" height="5.2" rx=".8"/><rect x="10.3" y="10.3" width="5.2" height="5.2" rx=".8"/>'),
+  grid: svg(
+    '<rect x="2.5" y="2.5" width="5.2" height="5.2" rx=".8"/><rect x="10.3" y="2.5" width="5.2" height="5.2" rx=".8"/><rect x="2.5" y="10.3" width="5.2" height="5.2" rx=".8"/><rect x="10.3" y="10.3" width="5.2" height="5.2" rx=".8"/>',
+  ),
   width: svg('<rect x="4.5" y="2.5" width="9" height="13" rx="1"/><path d="M6.5 9h5M8 7.4 6.5 9 8 10.6M10 7.4 11.5 9 10 10.6"/>'),
   page: svg('<rect x="4.5" y="2.5" width="9" height="13" rx="1"/><path d="M9 5.5v7M7.4 7 9 5.5 10.6 7M7.4 11 9 12.5 10.6 11"/>'),
   notes: svg('<rect x="2.5" y="2.5" width="8" height="13" rx="1"/><path d="M12.5 4.5h3M12.5 8h3M12.5 11.5h3"/>'),
@@ -315,7 +316,7 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
   if (options.collab) {
     const collab = options.collab;
     let pop: HTMLElement | undefined;
-    const initial = (name: string) => (name.trim()[0] ?? '?');
+    const initial = (name: string) => name.trim()[0] ?? '?';
     const dot = (name: string, color: string) => {
       const node = document.createElement('span');
       node.className = 'dx-sb-dot';
@@ -330,13 +331,15 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
       const people = pop.querySelector('.dx-sb-people')!;
       const others = collab.peers();
       people.replaceChildren(
-        ...[{ name: `${collab.name() || t('collab.someone')} (${t('collab.you')})`, color: collab.color() }, ...others.map((p) => ({ name: p.name || t('collab.someone'), color: p.color }))].map((person) => {
-          const item = document.createElement('li');
-          const label = document.createElement('span');
-          label.textContent = person.name;
-          item.append(dot(person.name, person.color), label);
-          return item;
-        }),
+        ...[{ name: `${collab.name() || t('collab.someone')} (${t('collab.you')})`, color: collab.color() }, ...others.map((p) => ({ name: p.name || t('collab.someone'), color: p.color }))].map(
+          (person) => {
+            const item = document.createElement('li');
+            const label = document.createElement('span');
+            label.textContent = person.name;
+            item.append(dot(person.name, person.color), label);
+            return item;
+          },
+        ),
       );
       if (!others.length) {
         const none = document.createElement('li');
@@ -458,10 +461,22 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
   bar.append(
     ...views.map(([view, label]) => button(view, label, ICONS[view], setView(view), () => ({ on: editor.view === view }))),
     // The notes beside the pages, as Word shows its comments; a grid of pages has no room for them.
-    button('notes', t('view.notes'), ICONS.notes, () => editor.setShowNotes(!editor.showNotes), () => ({ on: editor.showNotes, disabled: editor.view === 'grid' || editor.view === 'flow' })),
+    button(
+      'notes',
+      t('view.notes'),
+      ICONS.notes,
+      () => editor.setShowNotes(!editor.showNotes),
+      () => ({ on: editor.showNotes, disabled: editor.view === 'grid' || editor.view === 'flow' }),
+    ),
     sep(),
     ...fits.map(([fit, label]) =>
-      button(`fit-${fit}`, label, ICONS[fit], () => editor.setFit(fit), () => ({ on: editor.fit === fit, disabled: editor.view === 'grid' || editor.view === 'flow' })),
+      button(
+        `fit-${fit}`,
+        label,
+        ICONS[fit],
+        () => editor.setFit(fit),
+        () => ({ on: editor.fit === fit, disabled: editor.view === 'grid' || editor.view === 'flow' }),
+      ),
     ),
     sep(),
   );
@@ -502,7 +517,10 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
   );
   if (options.focus) {
     const { on, toggle } = options.focus;
-    bar.append(sep(), button('focus', t('focus.enter', { keys: IS_MAC ? '⌘⇧.' : 'Ctrl+Shift+.' }), ICONS.focus, toggle, () => ({ on: on() })));
+    bar.append(
+      sep(),
+      button('focus', t('focus.enter', { keys: IS_MAC ? '⌘⇧.' : 'Ctrl+Shift+.' }), ICONS.focus, toggle, () => ({ on: on() })),
+    );
   }
 
   // Clicks on the bar must not take the keyboard away from the document; the slider needs it to be dragged.

@@ -14,14 +14,23 @@ import {
   serializeClip,
   setParagraphStyle,
   toggleList,
-} from '../src';
+} from '../src/internal';
 
 const p = (text: string, props: Paragraph['runs'][number]['props'] = {}): Paragraph => ({ props: {}, runs: [{ text, props }] });
 const pos = (para: number, offset: number) => ({ para, offset });
 
 describe('copying and pasting with the formatting', () => {
   it('takes the text of a range with its formatting, and leaves behind what only means something in the document', () => {
-    const doc = createDoc([{ props: { align: 'center' }, runs: [{ text: 'Hola ', props: { opaque: '<w:x/>' } }, { text: 'mundo', props: { bold: true, revision: 'insert' } }] }, p('Adiós')]);
+    const doc = createDoc([
+      {
+        props: { align: 'center' },
+        runs: [
+          { text: 'Hola ', props: { opaque: '<w:x/>' } },
+          { text: 'mundo', props: { bold: true, revision: 'insert' } },
+        ],
+      },
+      p('Adiós'),
+    ]);
     const clip = clipOf(doc, { from: pos(0, 2), to: pos(1, 3) });
     expect(clipText(clip)).toBe('la mundo\nAdi');
     expect(clip.paragraphs[0].props).toEqual({ align: 'center' });

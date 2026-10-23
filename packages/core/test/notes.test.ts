@@ -1,13 +1,38 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type Doc, addNote, createDoc, deleteRange, docText, exportDocx, importDocx, insertText, noteExcerpt, noteRanges, notesAt, pruneNotes, removeNote, setNoteColor, setNoteText, variableNotes } from '../src';
+import {
+  type Doc,
+  addNote,
+  createDoc,
+  deleteRange,
+  docText,
+  exportDocx,
+  importDocx,
+  insertText,
+  noteExcerpt,
+  noteRanges,
+  notesAt,
+  pruneNotes,
+  removeNote,
+  setNoteColor,
+  setNoteText,
+  variableNotes,
+} from '../src/internal';
 
-const base = () => createDoc([{ props: {}, runs: [{ text: 'El precio es de mil pesos.', props: {} }] }, { props: {}, runs: [{ text: 'Segundo párrafo.', props: {} }] }]);
+const base = () =>
+  createDoc([
+    { props: {}, runs: [{ text: 'El precio es de mil pesos.', props: {} }] },
+    { props: {}, runs: [{ text: 'Segundo párrafo.', props: {} }] },
+  ]);
 const visible = (doc: Doc) => docText(doc).replace(/⁠/g, '');
 /** A part of a package, without the attribute that keeps the spaces of a text. */
 const part = (bytes: Uint8Array, path: string) => strFromU8(unzipSync(bytes)[path]).replace(/ xml:space="preserve"/g, '');
 /** Where `text` starts in a paragraph, counting the marks that take no room. */
-const offsetOf = (doc: Doc, para: number, text: string) => doc.paragraphs[para].runs.map((r) => r.text).join('').indexOf(text);
+const offsetOf = (doc: Doc, para: number, text: string) =>
+  doc.paragraphs[para].runs
+    .map((r) => r.text)
+    .join('')
+    .indexOf(text);
 
 describe('notes', () => {
   it('puts a note on a stretch of text, which stays as it was', () => {
@@ -52,10 +77,16 @@ describe('notes', () => {
   });
 
   it('writes them as comments of Word, and reads them back', () => {
-    const made = addNote(base(), { from: { para: 0, offset: 16 }, to: { para: 0, offset: 25 } }, { text: 'Confirmar <importe>\nCon el cliente', author: 'Ana "la jefa" Pérez', date: '2026-10-12T10:00:00Z' }).doc;
+    const made = addNote(
+      base(),
+      { from: { para: 0, offset: 16 }, to: { para: 0, offset: 25 } },
+      { text: 'Confirmar <importe>\nCon el cliente', author: 'Ana "la jefa" Pérez', date: '2026-10-12T10:00:00Z' },
+    ).doc;
     const bytes = exportDocx(made);
     const document = part(bytes, 'word/document.xml');
-    expect(document.replace(/<w:rPr>.*?<\/w:rPr>/g, '')).toContain('<w:commentRangeStart w:id="0"/><w:r><w:t>mil pesos</w:t></w:r><w:commentRangeEnd w:id="0"/><w:r><w:commentReference w:id="0"/></w:r>');
+    expect(document.replace(/<w:rPr>.*?<\/w:rPr>/g, '')).toContain(
+      '<w:commentRangeStart w:id="0"/><w:r><w:t>mil pesos</w:t></w:r><w:commentRangeEnd w:id="0"/><w:r><w:commentReference w:id="0"/></w:r>',
+    );
     expect(part(bytes, 'word/comments.xml')).toContain(
       '<w:comment w:id="0" w:author="Ana &quot;la jefa&quot; Pérez" w:date="2026-10-12T10:00:00Z" w:initials="A&quot;J">' +
         '<w:p><w:r><w:annotationRef/></w:r><w:r><w:t>Confirmar &lt;importe&gt;</w:t></w:r></w:p><w:p><w:r><w:t>Con el cliente</w:t></w:r></w:p></w:comment>',
@@ -64,7 +95,9 @@ describe('notes', () => {
     expect(part(bytes, 'word/_rels/document.xml.rels')).toContain('/comments" Target="comments.xml"');
 
     const back = importDocx(bytes);
-    expect(back.notes!.map(({ id, author, date, text }) => ({ id, author, date, text }))).toEqual([{ id: '0', author: 'Ana "la jefa" Pérez', date: '2026-10-12T10:00:00Z', text: 'Confirmar <importe>\nCon el cliente' }]);
+    expect(back.notes!.map(({ id, author, date, text }) => ({ id, author, date, text }))).toEqual([
+      { id: '0', author: 'Ana "la jefa" Pérez', date: '2026-10-12T10:00:00Z', text: 'Confirmar <importe>\nCon el cliente' },
+    ]);
     expect(noteRanges(back).map((n) => noteExcerpt(back, n.range))).toEqual(['mil pesos']);
     // Untouched, the file is written with the very comments it had; a second note joins the first.
     expect(part(exportDocx(back), 'word/comments.xml')).toBe(part(bytes, 'word/comments.xml'));
@@ -84,8 +117,10 @@ describe('notes', () => {
 
   it('keeps the comments of a file it did not write, as they were', () => {
     const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
-    const comment = '<w:comment w:id="4" w:author="Luis" w:initials="L"><w:p><w:pPr><w:pStyle w:val="CommentText"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>Revisar</w:t></w:r><w:r><w:t>_esto</w:t></w:r></w:p></w:comment>';
-    const paragraph = '<w:p><w:r><w:t>Uno </w:t></w:r><w:commentRangeStart w:id="4"/><w:r><w:t>dos</w:t></w:r><w:commentRangeEnd w:id="4"/><w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr><w:commentReference w:id="4"/></w:r><w:r><w:t>tres</w:t></w:r></w:p>';
+    const comment =
+      '<w:comment w:id="4" w:author="Luis" w:initials="L"><w:p><w:pPr><w:pStyle w:val="CommentText"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>Revisar</w:t></w:r><w:r><w:t>_esto</w:t></w:r></w:p></w:comment>';
+    const paragraph =
+      '<w:p><w:r><w:t>Uno </w:t></w:r><w:commentRangeStart w:id="4"/><w:r><w:t>dos</w:t></w:r><w:commentRangeEnd w:id="4"/><w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr><w:commentReference w:id="4"/></w:r><w:r><w:t>tres</w:t></w:r></w:p>';
     const file = zipSync({
       '[Content_Types].xml': strToU8('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'),
       'word/document.xml': strToU8(`<w:document ${NS}><w:body>${paragraph}<w:p><w:r><w:t>Final</w:t></w:r></w:p></w:body></w:document>`),
@@ -102,7 +137,9 @@ describe('notes', () => {
     const comments = part(out, 'word/comments.xml');
     expect(comments).toContain(`xmlns:w14="urn:x">${comment}<w:comment w:id="0" w:author="Ana"`);
     // Its text changed, a comment of the file is written anew.
-    expect(part(exportDocx(setNoteText(doc, '4', 'Listo')), 'word/comments.xml')).toContain('<w:comment w:id="4" w:author="Luis" w:initials="L"><w:p><w:r><w:annotationRef/></w:r><w:r><w:t>Listo</w:t></w:r></w:p></w:comment>');
+    expect(part(exportDocx(setNoteText(doc, '4', 'Listo')), 'word/comments.xml')).toContain(
+      '<w:comment w:id="4" w:author="Luis" w:initials="L"><w:p><w:r><w:annotationRef/></w:r><w:r><w:t>Listo</w:t></w:r></w:p></w:comment>',
+    );
   });
 
   it('drops the note whose text was deleted, when the file is written', () => {
@@ -138,7 +175,9 @@ describe('notes', () => {
 
     // Back to the usual one, its entry goes; the other properties of a file stay.
     const files = unzipSync(bytes);
-    files['docProps/custom.xml'] = strToU8(strFromU8(files['docProps/custom.xml']).replace('<property ', '<property fmtid="{X}" pid="7" name="Cliente"><vt:lpwstr>ACME</vt:lpwstr></property><property '));
+    files['docProps/custom.xml'] = strToU8(
+      strFromU8(files['docProps/custom.xml']).replace('<property ', '<property fmtid="{X}" pid="7" name="Cliente"><vt:lpwstr>ACME</vt:lpwstr></property><property '),
+    );
     const kept = importDocx(zipSync(files));
     const out = part(exportDocx(setNoteColor(setNoteColor(kept, '0', ''), '1', 'EA4335')), 'docProps/custom.xml');
     expect(out).toContain('name="Cliente"><vt:lpwstr>ACME</vt:lpwstr></property>');
@@ -152,13 +191,21 @@ describe('notes', () => {
     doc = addNote(doc, { from: { para: 1, offset: 0 }, to: { para: 1, offset: 7 } }, { ...when, text: 'Segunda', color: '34A853' }).doc;
     doc = addNote(doc, { from: { para: 1, offset: 9 }, to: { para: 1, offset: 12 } }, { ...when, text: 'Tercera, sin color' }).doc;
     const back = importDocx(exportDocx(doc));
-    expect(back.notes!.map((n) => [n.text, n.color])).toEqual([['Primera; con = signos', '4285F4'], ['Segunda', '34A853'], ['Tercera, sin color', undefined]]);
+    expect(back.notes!.map((n) => [n.text, n.color])).toEqual([
+      ['Primera; con = signos', '4285F4'],
+      ['Segunda', '34A853'],
+      ['Tercera, sin color', undefined],
+    ]);
   });
 });
 
 describe('notes on variables', () => {
   const template = () => createDoc([{ props: {}, runs: [{ text: 'Vende {{clienteNombre}} el inmueble en {{inmuebleDomicilio}} a {{clienteNombre}}.', props: {} }] }]);
-  const at = (doc: Doc, text: string) => doc.paragraphs[0].runs.map((r) => r.text).join('').indexOf(text);
+  const at = (doc: Doc, text: string) =>
+    doc.paragraphs[0].runs
+      .map((r) => r.text)
+      .join('')
+      .indexOf(text);
 
   it('says what a note on a variable, or on a part of it, says; once, and nothing for the others', () => {
     let doc = template();
@@ -166,7 +213,10 @@ describe('notes on variables', () => {
     doc = addNote(doc, { from: { para: 0, offset: name }, to: { para: 0, offset: name + 17 } }, { text: 'Como viene en la INE', author: 'Ana' }).doc;
     // A note on more text than the variable, and one that only touches it.
     doc = addNote(doc, { from: { para: 0, offset: 0 }, to: { para: 0, offset: at(doc, 'Nombre}}') + 3 } }, { text: 'El vendedor', author: 'Ana' }).doc;
-    const second = doc.paragraphs[0].runs.map((r) => r.text).join('').lastIndexOf('{{clienteNombre}}');
+    const second = doc.paragraphs[0].runs
+      .map((r) => r.text)
+      .join('')
+      .lastIndexOf('{{clienteNombre}}');
     doc = addNote(doc, { from: { para: 0, offset: second }, to: { para: 0, offset: second + 17 } }, { text: 'Como viene en la INE', author: 'Luis' }).doc;
     // In the order of the text, each once.
     expect(variableNotes(doc)).toEqual({ clienteNombre: ['El vendedor', 'Como viene en la INE'] });

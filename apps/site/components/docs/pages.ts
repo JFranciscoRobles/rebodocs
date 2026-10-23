@@ -15,7 +15,7 @@ export interface CustomPage {
 export const CUSTOM: Record<string, CustomPage> = {
   status: {
     title: 'Status and roadmap',
-    description: 'What is checked, with the tests of each package and the layout of 16 documents measured against Word; what is not; the known limits; the roadmap; contributing; the license.',
+    description: 'What is checked, with the tests of each package and the layout of the test documents measured against Word; what is not; the known limits; the roadmap; contributing; the license.',
     headings: [
       { id: 'what-is-checked', text: 'What is checked' },
       { id: 'what-is-not', text: 'What is not' },
@@ -58,7 +58,8 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   react: {
     title: 'React component',
-    description: 'DocsEditor running, its features switched on and off and its handle used through a ref; putting it in a page; every prop and what happens when it changes; the features; the handle; saving; and without React.',
+    description:
+      'DocsEditor running, its features switched on and off and its handle used through a ref; putting it in a page; every prop and what happens when it changes; the features; the handle; saving; and without React.',
     headings: [
       { id: 'try', text: 'Switch it on and off' },
       { id: 'start', text: 'Put it in a page' },
@@ -73,7 +74,8 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   headless: {
     title: 'Headless: your own UI',
-    description: 'The smallest headless editor, running, with its state beside it; useDocs, its state and its commands; the hooks for panels; the keys; the bar beside the selection; variables; the ruler; and what was learned building a whole editor screen.',
+    description:
+      'The smallest headless editor, running, with its state beside it; useDocs, its state and its commands; the hooks for panels; the keys; the bar beside the selection; variables; the ruler; and what was learned building a whole editor screen.',
     headings: [
       { id: 'try', text: 'The smallest one' },
       { id: 'usedocs', text: 'useDocs' },
@@ -89,7 +91,8 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   example: {
     title: 'A complete interface',
-    description: 'The interface of apps/demo built on the hooks, running on the page; its files; which piece uses which hook; its skeleton, read from its file; what it had to get right; and running it.',
+    description:
+      'The interface of apps/demo built on the hooks, running on the page; its files; which piece uses which hook; its skeleton, read from its file; what it had to get right; and running it.',
     headings: [
       { id: 'try', text: 'Your own interface, running' },
       { id: 'run', text: 'Run it' },
@@ -104,7 +107,8 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   vanilla: {
     title: 'Without a framework',
-    description: 'The pieces of @rebodocs/editor put on and taken off a bare Editor, with the code of what is shown; what each piece is; how they are wired; changing the language; mountDocs; and the editor itself.',
+    description:
+      'The pieces of @rebodocs/editor put on and taken off a bare Editor, with the code of what is shown; what each piece is; how they are wired; changing the language; mountDocs; and the editor itself.',
     headings: [
       { id: 'try', text: 'Put it together' },
       { id: 'start', text: 'The smallest page' },
@@ -119,7 +123,8 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   styling: {
     title: 'Styling and Tailwind',
-    description: 'A real editor and its whole interface recoloured by CSS variables, a dark theme among them; the pages, the ruler and the interface; six pieces of your own made with the headless hooks and Tailwind; and Tailwind itself.',
+    description:
+      'A real editor and its whole interface recoloured by CSS variables, a dark theme among them; the pages, the ruler and the interface; six pieces of your own made with the headless hooks and Tailwind; and Tailwind itself.',
     headings: [
       { id: 'try', text: 'Recolour it' },
       { id: 'the-pages', text: 'The pages' },
@@ -133,7 +138,8 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   mobile: {
     title: 'Phones and touch',
-    description: 'A real editor at the width of a phone, a tablet or the page; what a narrow window changes; the gestures; the bar for a finger; the keyboard of the screen; the reading view; and doing it in your own interface.',
+    description:
+      'A real editor at the width of a phone, a tablet or the page; what a narrow window changes; the gestures; the bar for a finger; the keyboard of the screen; the reading view; and doing it in your own interface.',
     headings: [
       { id: 'try', text: 'At the width of a phone' },
       { id: 'narrow', text: 'What a narrow window changes' },
@@ -149,7 +155,8 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   accessibility: {
     title: 'Accessibility',
-    description: 'What a screen reader hears from a real editor, written down as it is said; screen reader mode; the keys; what is seen; the tagged PDF; what an interface of your own has to do; and what is not checked.',
+    description:
+      'What a screen reader hears from a real editor, written down as it is said; screen reader mode; the keys; what is seen; the tagged PDF; what an interface of your own has to do; and what is not checked.',
     headings: [
       { id: 'try', text: 'What a screen reader hears' },
       { id: 'heard', text: 'What is said' },
@@ -189,6 +196,7 @@ export const CUSTOM: Record<string, CustomPage> = {
       { id: 'safety', text: 'What an assistant may touch' },
       { id: 'tools', text: 'Every tool' },
       { id: 'look', text: 'Keeping the look' },
+      { id: 'contracts', text: 'Working on a contract' },
       { id: 'app', text: 'In your own application' },
       { id: 'know', text: 'What to know' },
     ],
@@ -244,7 +252,8 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   templates: {
     title: 'Templates and variables',
-    description: 'Any DOCX with {{variables}} is a template: one filled in a real editor, how a variable is read, every format as the code writes it, in a language, the panel, the calls and the tools of an assistant.',
+    description:
+      'Any DOCX with {{variables}} is a template: one filled in a real editor, how a variable is read, every format as the code writes it, in a language, the panel, the calls and the tools of an assistant.',
     headings: [
       { id: 'try', text: 'Fill a template' },
       { id: 'writing', text: 'Writing a template' },
@@ -310,7 +319,8 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   storage: {
     title: 'Documents in an S3 bucket',
-    description: 'Documents in a bucket that speaks S3, a backend that signs addresses, and the editor in the browser: the requests of a save on the page, the demo to run, a .env for each S3, and what to know.',
+    description:
+      'Documents in a bucket that speaks S3, a backend that signs addresses, and the editor in the browser: the requests of a save on the page, the demo to run, a .env for each S3, and what to know.',
     headings: [
       { id: 'try', text: 'The requests of a save' },
       { id: 'run-it', text: 'Run it with Cloudflare R2' },
@@ -325,7 +335,8 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   server: {
     title: 'On a server: DOCX and PDF',
-    description: '@rebodocs/core without a browser: a template filled and rendered as a PDF in the page, where it runs, a route that makes a PDF, every call by topic, what the PDF has, how fast it is, documents from others and the command-line tool.',
+    description:
+      '@rebodocs/core without a browser: a template filled and rendered as a PDF in the page, where it runs, a route that makes a PDF, every call by topic, what the PDF has, how fast it is, documents from others and the command-line tool.',
     headings: [
       { id: 'try', text: 'A template, filled and rendered' },
       { id: 'where', text: 'Where it runs' },
@@ -344,7 +355,8 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   languages: {
     title: 'Languages',
-    description: 'The interface in Spanish, English or a language of your own: the editor switched on the page, how to add a language and keep it up to date, every text by key, and checking the spelling of the text.',
+    description:
+      'The interface in Spanish, English or a language of your own: the editor switched on the page, how to add a language and keep it up to date, every text by key, and checking the spelling of the text.',
     headings: [
       { id: 'try', text: 'Switch it' },
       { id: 'adding-a-language', text: 'Adding a language' },

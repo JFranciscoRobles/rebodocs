@@ -7,12 +7,27 @@
 // later one, with what was taken out struck through and what was put in
 // underlined, as Word shows a comparison.
 
-import { type Doc, type Media, type Note, type Paragraph, type Position, type Run, type RunProps, type Story, ANCHOR_CHAR, OBJECT_CHAR, defined, paragraphText, resolveParagraph, resolveRun } from './model';
+import {
+  type Doc,
+  type Media,
+  type Note,
+  type Paragraph,
+  type Position,
+  type Run,
+  type RunProps,
+  type Story,
+  ANCHOR_CHAR,
+  OBJECT_CHAR,
+  defined,
+  paragraphText,
+  resolveParagraph,
+  resolveRun,
+} from './model';
 import { sliceRuns } from './ops';
 import { commonPairs } from './diffing';
 import { docImage, mediaKey } from './images';
-import { type StoryPart, footnotePart, storyOf, storyParts, withStory } from './stories';
-import { shownFootnotes } from './footnotes';
+import { type StoryPart, endnotePart, footnotePart, storyOf, storyParts, withStory } from './stories';
+import { shownEndnotes, shownFootnotes } from './footnotes';
 import { decideAllRevisions, hasRevisions } from './revisions';
 import { textBoxPart } from './textboxes';
 import { paragraphStyles } from './styles';
@@ -371,10 +386,11 @@ function marked(story: Story, from: Doc, to: Doc, before: Paragraph[], part: Sto
   return { paragraphs: out, marks };
 }
 
-/** The parts both versions have text in besides the body: headers, footers, the notes their references show, and text boxes. */
+/** The parts both versions have text in besides the body: headers, footers, the notes at the foot and at the end their references show, and text boxes. */
 function partsOf(before: Doc, after: Doc): StoryPart[] {
   const parts = new Set<StoryPart>([...storyParts(before), ...storyParts(after)]);
   for (const doc of [after, before]) for (const note of shownFootnotes(doc)) parts.add(footnotePart(note.id));
+  for (const doc of [after, before]) for (const note of shownEndnotes(doc)) parts.add(endnotePart(note.id));
   for (const doc of [after, before]) for (const box of doc.textBoxes ?? []) parts.add(textBoxPart(box.id));
   return [...parts];
 }
@@ -473,7 +489,8 @@ export function restoreVersion(current: Doc, version: Doc): Doc {
       if (step.kind !== 'same') continue;
       const kept = was[step.b];
       // The very same text, its marks too: a note or a bookmark the version has not would be left without its own.
-      if (paragraphText(kept) === paragraphText(now[step.a]) && !kept.cell && !now[step.a].cell && !!kept.section === !!now[step.a].section && sameValue(kept.section, now[step.a].section)) out[step.a] = kept;
+      if (paragraphText(kept) === paragraphText(now[step.a]) && !kept.cell && !now[step.a].cell && !!kept.section === !!now[step.a].section && sameValue(kept.section, now[step.a].section))
+        out[step.a] = kept;
     }
     return out;
   };

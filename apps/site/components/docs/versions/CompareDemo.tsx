@@ -37,11 +37,7 @@ export default function CompareDemo() {
           <Readout
             label="changes"
             live={false}
-            lines={
-              changes.length
-                ? changes.slice(0, 6).map((change, i) => [`${i + 1}. ${change.kind}`, describeChange(change, 16), TONE[change.kind]])
-                : [['—', 'no change', 'dim']]
-            }
+            lines={changes.length ? changes.slice(0, 6).map((change, i) => [`${i + 1}. ${change.kind}`, describeChange(change, 16), TONE[change.kind]]) : [['—', 'no change', 'dim']]}
           />
           {changes.length > 6 && <p className="m-0 -mt-2 text-[13px] text-muted">and {changes.length - 6} more</p>}
           <Readout
@@ -51,9 +47,7 @@ export default function CompareDemo() {
               ['restoreVersion(after, before)', restored === was ? '= before ✓' : 'differs', restored === was ? 'good' : 'warn'],
             ]}
           />
-          <p className="m-0 text-[13px] leading-normal text-muted">
-            A paragraph with few of the same words as the one it replaced is two changes, one taken out and one put in, not one that changed.
-          </p>
+          <p className="m-0 text-[13px] leading-normal text-muted">A paragraph with few of the same words as the one it replaced is two changes, one taken out and one put in, not one that changed.</p>
         </>
       }
     >

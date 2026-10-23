@@ -2,11 +2,39 @@
 // a mail), read into a clip with the formatting it shows: bold, italics,
 // underlines, colours, sizes and fonts, links, lists, headings, alignment.
 
-import { type Clip, type ClipParagraph, type ClipRun, type RunProps, HIGHLIGHT_COLORS, defined, parseClip } from '@rebodocs/core';
+import { type Border, type CellLines, type Clip, type ClipCell, type ClipParagraph, type ClipRun, type ClipTable, type RunProps, HIGHLIGHT_COLORS, defined, parseClip } from '@rebodocs/core/internal';
 
 const BLOCKS = new Set([
-  'P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'PRE', 'TR', 'TABLE', 'UL', 'OL', 'DL', 'DT', 'DD',
-  'SECTION', 'ARTICLE', 'HEADER', 'FOOTER', 'ASIDE', 'NAV', 'MAIN', 'FIGURE', 'FIGCAPTION', 'ADDRESS', 'HR', 'CENTER',
+  'P',
+  'DIV',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
+  'LI',
+  'BLOCKQUOTE',
+  'PRE',
+  'TR',
+  'TABLE',
+  'UL',
+  'OL',
+  'DL',
+  'DT',
+  'DD',
+  'SECTION',
+  'ARTICLE',
+  'HEADER',
+  'FOOTER',
+  'ASIDE',
+  'NAV',
+  'MAIN',
+  'FIGURE',
+  'FIGCAPTION',
+  'ADDRESS',
+  'HR',
+  'CENTER',
 ]);
 const SKIPPED = new Set(['SCRIPT', 'STYLE', 'HEAD', 'TITLE', 'META', 'LINK', 'TEMPLATE', 'NOSCRIPT', 'SVG', 'CANVAS', 'IFRAME', 'OBJECT', 'BUTTON', 'SELECT', 'INPUT', 'TEXTAREA', 'IMG']);
 const GENERIC_FONTS = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-\w+|-apple-system|blinkmacsystemfont|inherit|initial)$/i;
@@ -17,15 +45,41 @@ interface Inherited {
   pre: boolean;
 }
 
-/** A colour of CSS as hex RGB, or undefined for none, a transparent one or one CSS names by a word. */
+/**
+ * Colours CSS names by a word that are written for text: Word writes `white`
+ * for white text. Black is left out, as `windowtext` and `auto` are: it is the
+ * colour of text that has none, which a dark page shows light.
+ */
+const COLOR_NAMES: Record<string, string> = {
+  white: 'FFFFFF',
+  red: 'FF0000',
+  green: '008000',
+  blue: '0000FF',
+  yellow: 'FFFF00',
+  navy: '000080',
+  maroon: '800000',
+  purple: '800080',
+  teal: '008080',
+  olive: '808000',
+  gray: '808080',
+  grey: '808080',
+  silver: 'C0C0C0',
+  orange: 'FFA500',
+};
+
+/** A colour of CSS as hex RGB, or undefined for none, a transparent one, black, or a word it does not know. */
 export function cssColor(value: string): string | undefined {
   const v = value.trim().toLowerCase();
+  if (v in COLOR_NAMES) return COLOR_NAMES[v];
   let m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/.exec(v);
   if (m) return (m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1]).toUpperCase();
   m = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)(?:[\s,/]+([\d.]+%?))?\s*\)$/.exec(v);
   if (!m) return undefined;
   if (m[4] !== undefined && parseFloat(m[4]) === 0) return undefined;
-  return [m[1], m[2], m[3]].map((n) => Math.min(255, +n).toString(16).padStart(2, '0')).join('').toUpperCase();
+  return [m[1], m[2], m[3]]
+    .map((n) => Math.min(255, +n).toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
 }
 
 /** The highlight of Word's palette nearest to `hex`; undefined for white, which is no highlight. */
@@ -68,7 +122,7 @@ export function cssFontSize(value: string, inherited = BROWSER_SIZE): number | u
   if (v === 'smaller') return half(inherited / 1.2);
   if (v === 'larger') return half(inherited * 1.2);
   const m = /^([\d.]+)(em|rem|%)$/.exec(v);
-  if (m) return half((m[2] === 'rem' ? BROWSER_SIZE : inherited) * parseFloat(m[1]) / (m[2] === '%' ? 100 : 1));
+  if (m) return half(((m[2] === 'rem' ? BROWSER_SIZE : inherited) * parseFloat(m[1])) / (m[2] === '%' ? 100 : 1));
   return cssPoints(v);
 }
 
@@ -96,7 +150,11 @@ function inlineStyleSheets(page: Document): void {
     // Rules inside @media, @font-face, @page... are not about the text.
     const flat = css.replace(/@[^{]+\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '');
     for (const [, selectors, body] of flat.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      const selector = selectors.split(',').map((x) => x.trim()).filter((x) => x && !x.includes(':')).join(',');
+      const selector = selectors
+        .split(',')
+        .map((x) => x.trim())
+        .filter((x) => x && !x.includes(':'))
+        .join(',');
       if (!selector) continue;
       let found: NodeListOf<Element>;
       try {
@@ -130,7 +188,10 @@ function styleProps(el: HTMLElement, props: RunProps): RunProps {
   const size = s.fontSize && cssFontSize(s.fontSize, props.fontSize);
   if (size && size >= 1 && size <= 400) out.fontSize = size;
   if (s.fontFamily) {
-    const family = s.fontFamily.split(',').map((f) => f.trim().replace(/^["']|["']$/g, '')).find((f) => f && !GENERIC_FONTS.test(f));
+    const family = s.fontFamily
+      .split(',')
+      .map((f) => f.trim().replace(/^["']|["']$/g, ''))
+      .find((f) => f && !GENERIC_FONTS.test(f));
     if (family) out.fontFamily = family;
   }
   return out;
@@ -194,9 +255,19 @@ function tagProps(tag: string, props: RunProps): RunProps {
 }
 
 const ALIGNS: Record<string, ClipParagraph['props']['align']> = {
-  left: 'left', start: 'left', center: 'center', right: 'right', end: 'right', justify: 'justify',
+  left: 'left',
+  start: 'left',
+  center: 'center',
+  right: 'right',
+  end: 'right',
+  justify: 'justify',
   // What Chrome writes for the alignment of <center> and of align="...".
-  '-webkit-left': 'left', '-webkit-center': 'center', '-webkit-right': 'right', '-moz-left': 'left', '-moz-center': 'center', '-moz-right': 'right',
+  '-webkit-left': 'left',
+  '-webkit-center': 'center',
+  '-webkit-right': 'right',
+  '-moz-left': 'left',
+  '-moz-center': 'center',
+  '-moz-right': 'right',
 };
 
 /** The list Word's own HTML says a paragraph is in: `mso-list: l0 level2 lfo1`. */
@@ -216,9 +287,13 @@ export function clipFromHtml(html: string): Clip | undefined {
   inlineStyleSheets(page);
 
   const paragraphs: ClipParagraph[] = [];
+  const tables: ClipTable[] = [];
+  /** The cell of a table being read, and how deep in tables the reading is: a table inside a cell comes as lines. */
+  let cellAt: ClipParagraph['cell'];
+  let depth = 0;
   let current: ClipParagraph | undefined;
   /** The paragraph being written, made when text first comes. */
-  const paragraph = (): ClipParagraph => (current ??= { runs: [], props: {} });
+  const paragraph = (): ClipParagraph => (current ??= defined<ClipParagraph>({ runs: [], props: {}, cell: cellAt }));
   /** Ends the paragraph being written; what comes next starts another. */
   const end = (): void => {
     if (current) paragraphs.push(current);
@@ -275,6 +350,11 @@ export function clipFromHtml(html: string): Clip | undefined {
       if (/^(https?:|mailto:|tel:)/i.test(href)) next = { ...next, href };
     }
     if (tag === 'PRE' || /^pre/.test(el.style.whiteSpace)) next = { ...next, pre: true };
+    if (tag === 'TABLE' && depth === 0 && isTable(el as HTMLTableElement)) {
+      end();
+      readTable(el as HTMLTableElement, next);
+      return;
+    }
     if (tag === 'TD' || tag === 'TH') {
       // Cells of a row are set apart by a tab.
       if (current?.runs.length) text('\t', { ...next, pre: true });
@@ -331,15 +411,192 @@ export function clipFromHtml(html: string): Clip | undefined {
     ({ blockProps, blockList, blockStyle } = saved);
   };
 
+  /**
+   * A table: its grid, worked out from the cells each row has and those that
+   * span rows and columns into it; each cell's paragraphs, read as any other;
+   * the widths its cells or columns say, and the rows that are its heading.
+   */
+  const readTable = (el: HTMLTableElement, at: Inherited): void => {
+    const rows = rowsOf(el);
+    const index = tables.length;
+    const table: ClipTable = { rows: rows.length, columns: 0 };
+    tables.push(table);
+    const taken = new Set<string>();
+    const merges: NonNullable<ClipTable['merges']> = [];
+    const cells: ClipCell[] = [];
+    const heights: NonNullable<ClipTable['heights']> = [];
+    rows.forEach((tr, r) => {
+      const said = declarations(tr);
+      // Word says it on the row, and again on its cells; a browser on either.
+      const height = cssLength(said.get('height') ?? '') ?? Math.max(0, ...cellsOf(tr).map((td) => cssLength(declarations(td).get('height') ?? '') ?? 0));
+      if (height > 0) heights.push(defined({ row: r, height, exact: said.get('mso-height-rule') === 'exactly' || undefined }));
+    });
+    const widths: number[] = [];
+    [...el.children]
+      .flatMap((child) => (child.tagName.toUpperCase() === 'COLGROUP' ? [...child.children] : [child]))
+      .filter((col) => col.tagName.toUpperCase() === 'COL')
+      .forEach((col, c) => {
+        if (!(col instanceof HTMLElement)) return;
+        const w = cssPoints(col.style.width || '-') ?? (Number(col.getAttribute('width')) * 0.75 || undefined);
+        if (w && w > 0) widths[c] = w;
+      });
+    const saved = { blockProps, blockList, blockStyle };
+    rows.forEach((tr, r) => {
+      let c = 0;
+      for (const td of cellsOf(tr)) {
+        while (taken.has(`${r}:${c}`)) c++;
+        const columns = Math.max(1, Math.min(63, Number(td.getAttribute('colspan')) || 1));
+        const down = Math.max(1, Math.min(rows.length - r, Number(td.getAttribute('rowspan')) || 1));
+        for (let rr = r; rr < r + down; rr++) for (let cc = c; cc < c + columns; cc++) taken.add(`${rr}:${cc}`);
+        if (columns > 1 || down > 1) merges.push({ row: r, column: c, rows: down, columns });
+        if (columns === 1 && widths[c] === undefined) {
+          const w = cssPoints(td.style.width || '-') ?? (Number(td.getAttribute('width')) * 0.75 || undefined);
+          if (w && w > 0) widths[c] = w;
+        }
+        const look = cellLook(td, r, c);
+        if (look) cells.push(look);
+        // A place Word keeps for a row that starts or ends further in than the others is no cell to write in.
+        if (declarations(td).get('mso-cell-special') === 'placeholder') {
+          c += columns;
+          continue;
+        }
+        // A cell starts afresh: the look of the blocks around the table is not its own.
+        cellAt = { table: index, row: r, column: c };
+        ({ blockProps, blockList, blockStyle } = { blockProps: {}, blockList: undefined, blockStyle: undefined });
+        depth++;
+        td.childNodes.forEach((child) => walk(child, at));
+        depth--;
+        end();
+        c += columns;
+      }
+    });
+    cellAt = undefined;
+    ({ blockProps, blockList, blockStyle } = saved);
+    table.columns = Math.max(1, ...[...taken].map((key) => Number(key.split(':')[1]) + 1));
+    if (merges.length) table.merges = merges;
+    if (cells.length) table.cells = cells;
+    if (heights.length) table.heights = heights;
+    if (widths.length === table.columns && widths.every((w) => w > 0)) table.widths = widths;
+    let header = 0;
+    while (header < rows.length - 1 && (rows[header].parentElement?.tagName.toUpperCase() === 'THEAD' || cellsOf(rows[header]).every((td) => td.tagName.toUpperCase() === 'TH'))) header++;
+    if (header) table.header = header;
+  };
+
   walk(page.body, { props: {}, pre: false });
   end();
 
-  // Blank lines around what was copied are where it was cut from, not part of it.
-  while (paragraphs.length && !paragraphs[0].runs.some((r) => r.text.trim())) paragraphs.shift();
-  while (paragraphs.length && !paragraphs[paragraphs.length - 1].runs.some((r) => r.text.trim())) paragraphs.pop();
+  // Blank lines around what was copied are where it was cut from, not part of it; an empty cell is part of its table.
+  const blank = (p: ClipParagraph) => !p.cell && !p.runs.some((r) => r.text.trim());
+  while (paragraphs.length && blank(paragraphs[0])) paragraphs.shift();
+  while (paragraphs.length && blank(paragraphs[paragraphs.length - 1])) paragraphs.pop();
   for (const p of paragraphs) {
     const last = p.runs[p.runs.length - 1];
     if (last) last.text = last.text.replace(/[ \n]+$/, '');
   }
-  return paragraphs.length ? { paragraphs } : undefined;
+  // A table nothing of which was read is not kept; the others keep their numbers.
+  if (!paragraphs.length) return undefined;
+  return tables.length ? { paragraphs, tables } : { paragraphs };
 }
+
+/**
+ * The declarations of an element's style as written, by property in lower
+ * case: a browser drops those it does not know, and Word says what its tables
+ * are in its own (`mso-border-alt`, `mso-height-rule`).
+ */
+function declarations(el: Element): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const part of (el.getAttribute('style') ?? '').split(';')) {
+    const colon = part.indexOf(':');
+    if (colon > 0)
+      out.set(
+        part.slice(0, colon).trim().toLowerCase(),
+        part
+          .slice(colon + 1)
+          .trim()
+          .replace(/\s+/g, ' '),
+      );
+  }
+  return out;
+}
+
+/** A length of CSS in points, unrounded: the lines of a table are as thin as a quarter of a point. */
+function cssLength(value: string): number | undefined {
+  const m = /^(-?[\d.]+)(pt|px|in|cm|mm)$/.exec(value.trim().toLowerCase());
+  if (!m) return undefined;
+  return Math.round(parseFloat(m[1]) * { pt: 1, px: 0.75, in: 72, cm: 72 / 2.54, mm: 72 / 25.4 }[m[2] as 'pt'] * 100) / 100;
+}
+
+const BORDER_STYLES: Record<string, Border['style'] | null> = { solid: 'single', double: 'double', dashed: 'dashed', dotted: 'dotted', none: null, hidden: null };
+const BORDER_WIDTHS: Record<string, number> = { thin: 0.75, medium: 2.25, thick: 3.75 };
+/** The words for black, which a line is drawn in when it says no other colour. */
+const COLOR_WORDS: Record<string, string> = { black: '000000', windowtext: '000000', auto: '000000' };
+
+/** A border of CSS, `solid #8EAADB .5pt`: null for none, undefined when it says nothing to go by. */
+function cssBorder(value: string): Border | null | undefined {
+  let style: Border['style'] | null | undefined;
+  let width: number | undefined;
+  let color = '000000';
+  for (const token of value.toLowerCase().split(' ')) {
+    if (token in BORDER_STYLES) style = BORDER_STYLES[token];
+    else if (token in BORDER_WIDTHS) width = BORDER_WIDTHS[token];
+    else if (cssLength(token) !== undefined) width = cssLength(token);
+    else color = cssColor(token) ?? COLOR_WORDS[token] ?? color;
+  }
+  if (style === null || width === 0) return null;
+  if (!style) return undefined;
+  // A double line's width in CSS is the whole of it, two lines and the room between; the model's is one of them.
+  const whole = width ?? 0.75;
+  return { style, width: style === 'double' ? Math.round((whole / 3) * 100) / 100 : whole, color };
+}
+
+/**
+ * The look of a cell of a table pasted: its colour, where its text sits, and
+ * the line of each side. Word writes each line twice: in CSS, thickened for a
+ * browser and left out where the cell beside draws it, and as it is in its
+ * own (`mso-border-alt`, `mso-border-top-alt`), which is the one taken.
+ * Measured on what Word for Mac puts on the clipboard.
+ */
+function cellLook(td: HTMLElement, row: number, column: number): ClipCell | undefined {
+  const said = declarations(td);
+  // A place Word keeps for a row that starts or ends further in than the others is drawn with nothing.
+  if (said.get('mso-cell-special') === 'placeholder') return { row, column, lines: {} };
+  const background = said.get('background-color') ?? said.get('background');
+  const shade = background ? cssColor(background.split(' ')[0]) : undefined;
+  // A cell HTML does not say otherwise of has its text in the middle: Word says top where it is at the top.
+  const align = (said.get('vertical-align') ?? td.getAttribute('valign') ?? 'middle').toLowerCase();
+  const valign = align === 'middle' || align === 'center' ? ('center' as const) : align === 'bottom' ? ('bottom' as const) : undefined;
+  const read = (property: string) => {
+    const value = said.get(property);
+    return value === undefined ? undefined : cssBorder(value);
+  };
+  const lines: CellLines = {};
+  let lined = false;
+  const all = read('mso-border-alt');
+  for (const key of ['top', 'right', 'bottom', 'left'] as const) {
+    const css = read(`border-${key}`) ?? read('border');
+    const own = read(`mso-border-${key}-alt`);
+    // Its own first; then, where CSS draws a line, what Word says all its lines are.
+    const line = own !== undefined ? own : css === null ? null : css && all !== undefined ? all : css;
+    if (line === undefined) continue;
+    lined = true;
+    if (line) lines[key] = line;
+  }
+  const look = defined<ClipCell>({ row, column, shade, valign, lines: lined ? lines : undefined });
+  return Object.keys(look).length > 2 ? look : undefined;
+}
+
+/** Whether an HTML table is a table of data, not one a page or a mail is laid out with: one cell, or one that says so. */
+function isTable(el: HTMLTableElement): boolean {
+  if (el.getAttribute('role') === 'presentation' || el.getAttribute('role') === 'none') return false;
+  const rows = rowsOf(el);
+  return rows.length > 1 || (rows[0] ? cellsOf(rows[0]).length > 1 : false);
+}
+
+/** The rows of a table, its own and not those of a table inside it: in it, or in its head, body and foot. */
+function rowsOf(table: Element): HTMLElement[] {
+  const tag = (el: Element) => el.tagName.toUpperCase();
+  return [...table.children].flatMap((child) => (['THEAD', 'TBODY', 'TFOOT'].includes(tag(child)) ? [...child.children] : [child])).filter((row): row is HTMLElement => tag(row) === 'TR');
+}
+
+/** The cells of a row. */
+const cellsOf = (row: Element): HTMLElement[] => [...row.children].filter((cell): cell is HTMLElement => ['TD', 'TH'].includes(cell.tagName.toUpperCase()));

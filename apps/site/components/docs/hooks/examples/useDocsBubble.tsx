@@ -8,9 +8,15 @@ function Insert() {
   const bubble = useDocsBubble();
   return (
     <div className="flex gap-1.5">
-      <button className={button} onClick={() => bubble?.ask('variable')}>Variable</button>
-      <button className={button} onClick={() => bubble?.ask('note')}>Note</button>
-      <button className={button} onClick={() => bubble?.ask('link')}>Link</button>
+      <button className={button} onClick={() => bubble?.ask('variable')}>
+        Variable
+      </button>
+      <button className={button} onClick={() => bubble?.ask('note')}>
+        Note
+      </button>
+      <button className={button} onClick={() => bubble?.ask('link')}>
+        Link
+      </button>
     </div>
   );
 }

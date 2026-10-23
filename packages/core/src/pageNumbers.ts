@@ -72,11 +72,7 @@ function numberParagraph(doc: Doc, { align, format, words = wordsOf(doc) }: Page
   const field = (name: string): Run => ({ text: '1', props: { ...props, field: name } });
   const worded = format === 'page' || format === 'pageOfTotal';
   const total = format === 'numberOfTotal' || format === 'pageOfTotal';
-  const runs = [
-    ...(worded ? [text(`${words.page} `)] : []),
-    field('PAGE'),
-    ...(total ? [text(worded ? ` ${words.of} ` : ' / '), field('NUMPAGES')] : []),
-  ];
+  const runs = [...(worded ? [text(`${words.page} `)] : []), field('PAGE'), ...(total ? [text(worded ? ` ${words.of} ` : ' / '), field('NUMPAGES')] : [])];
   return { props: { align, spacingBefore: 0, spacingAfter: 0, lineHeight: 1 }, runs };
 }
 

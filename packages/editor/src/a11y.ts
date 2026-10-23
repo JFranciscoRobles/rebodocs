@@ -24,7 +24,10 @@ const MAX_SPOKEN = 300;
 export function createAnnouncer(parent: HTMLElement): Announcer {
   const polite = document.createElement('div');
   const assertive = document.createElement('div');
-  for (const [el, live] of [[polite, 'polite'], [assertive, 'assertive']] as const) {
+  for (const [el, live] of [
+    [polite, 'polite'],
+    [assertive, 'assertive'],
+  ] as const) {
     el.className = 'dx-live';
     el.setAttribute('aria-live', live);
     el.setAttribute('aria-atomic', 'true');
@@ -74,7 +77,12 @@ export function spokenChar(ch: string | undefined): string {
 
 /** Text as it is read: without the characters that stand for objects and marks, and not too long. */
 export function spokenText(text: string): string {
-  const clean = text.replace(/[\u2060\u200B]/g, '').replace(/\uFFFC/g, ` ${t('a11y.object')} `).replace(/\f/g, ' ').replace(/[\t\n]+/g, ' ').trim();
+  const clean = text
+    .replace(/[\u2060\u200B]/g, '')
+    .replace(/\uFFFC/g, ` ${t('a11y.object')} `)
+    .replace(/\f/g, ' ')
+    .replace(/[\t\n]+/g, ' ')
+    .trim();
   if (!clean) return t('a11y.blank');
   if (clean.length <= MAX_SPOKEN) return clean;
   return plural('a11y.long', clean.length, { start: clean.slice(0, 80), count: clean.length });

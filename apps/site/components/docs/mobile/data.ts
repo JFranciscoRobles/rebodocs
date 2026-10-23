@@ -1,7 +1,8 @@
 // What the page "Phones and touch" says that is data, each checked in
-// packages/editor/src (responsive.ts, platform.ts, editor.ts: onTouchStart,
-// onTouchMove, onTouchEnd, handle, renderHandles; bubble.ts: clipboard) and by
-// touching a real editor in a phone-sized headless Chrome.
+// packages/editor/src (responsive.ts, platform.ts, pointer.ts: onTouchStart,
+// onTouchMove, onTouchEnd, handle, renderHandles; bubble.ts: clipboard), by
+// touching a real editor in a phone-sized headless Chrome, and by the tests of
+// packages/editor/test/browser/pointer.test.ts.
 
 /** What a narrow window changes, from responsive.ts and fitGap in editor.ts. */
 export const NARROW: { title: string; text: string }[] = [
@@ -12,7 +13,7 @@ export const NARROW: { title: string; text: string }[] = [
   { title: 'The zoom comes back', text: 'When the window is wide again, the pages go back to the zoom, or the fit, they had before.' },
 ];
 
-/** The gestures, from the touch handlers of editor.ts. */
+/** The gestures, from the touch handlers of pointer.ts. */
 export const GESTURES: { gesture: string; text: string }[] = [
   { gesture: 'Tap', text: 'Places the caret and brings up the keyboard. A handle stays under the caret for four seconds, to drag it exactly where it should be.' },
   { gesture: 'Tap on the caret', text: 'Again where the caret is, or on its handle: brings up the bar with Paste, Paste as text and Select all.' },

@@ -161,9 +161,7 @@ export default function FontsDemo() {
               Open the {made.kind} it made
             </a>
           )}
-          <p className={`${CAPTION} normal-case tracking-normal`}>
-            The font stays with the page once given, until it is reloaded: going to another page of the site and back finds it there.
-          </p>
+          <p className={`${CAPTION} normal-case tracking-normal`}>The font stays with the page once given, until it is reloaded: going to another page of the site and back finds it there.</p>
         </>
       }
     >

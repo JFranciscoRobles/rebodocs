@@ -24,16 +24,19 @@ const STATE: [string, string][] = [
 /** The commands, from the list of them in docs.ts. */
 const COMMANDS: [string, string][] = [
   ['History', 'undo, redo'],
-  ['Text', 'toggleMark, setRunProps, insertText, selectAll, copy, cut, paste'],
+  ['Text', 'toggleMark, setRunProps, insertText, insertLineBreak, selectAll, copy, cut, paste'],
   ['Paragraph', 'setParagraphProps, setParagraphStyle, toggleList, shiftListLevel, setListStyle, restartNumbering, continueNumbering, shiftIndent, insertPageBreak'],
-  ['Tables', 'insertTable, insertTableRow, insertTableColumn, deleteTableRow, deleteTableColumn, deleteTable, mergeTableCells, splitTableCell, setTableCellProps, setTableBorders, setTableRowHeight, setHeaderRow'],
+  [
+    'Tables',
+    'insertTable, insertTableRow, insertTableColumn, deleteTableRow, deleteTableColumn, deleteTable, mergeTableCells, splitTableCell, setTableCellProps, setTableBorders, setTableRowHeight, setHeaderRow',
+  ],
   ['Pictures', 'insertImageFile, insertImageGrid, setPictureWrap, fitSelectedPicture'],
   ['Templates', 'insertVariable, fillVariables, insertSignatures'],
   ['Links and notes', 'setLink, removeLink, addNote, setNoteText, setNoteColor, removeNote, selectNote'],
-  ['Structure', 'insertToc, updateToc, goToHeading, moveSection, insertFootnote, insertTextBox, restoreVersion'],
+  ['Structure', 'insertToc, updateToc, goToHeading, moveSection, insertFootnote, insertEndnote, insertTextBox, restoreVersion'],
   ['Review', 'setTrackChanges, setChangesView, acceptRevision, rejectRevision, acceptAllRevisions, rejectAllRevisions, goToRevision, selectRevision'],
   ['Columns and sections', 'setColumns, insertColumnBreak, insertSectionBreak'],
-  ['Page', 'setPage, setPageNumbering, setFirstPageDifferent, setOwnHeaders, setArea, setLetterhead, setLetterheadFile, fitLetterheadMargins, removeLetterhead'],
+  ['Page', 'setPage, setPageNumbering, setFirstPageDifferent, setOwnHeaders, setEndnotesAt, setNoteNumbering, setArea, setLetterhead, setLetterheadFile, fitLetterheadMargins, removeLetterhead'],
   ['Search', 'find, findStep, replaceFound, replaceAllFound'],
   ['View', 'setZoom, setFit, setView, setShowNotes, print'],
 ];
@@ -46,7 +49,7 @@ const HOOKS: [string, string][] = [
   ['useDocsOutline()', 'items, active, goTo, move'],
   ['useDocsVariables()', 'names, active, insert, select, blocks, fill; and what each asks of its value: formats, uses, setFormat, preview'],
   ['useDocsStyles()', 'styles, active, set'],
-  ['useDocsPage()', 'page, set, sections, section, ownHeaders, numbering, firstPageDifferent, and the letterhead'],
+  ['useDocsPage()', 'page, set, sections, section, ownHeaders, numbering, endnotesAt, noteNumbering, firstPageDifferent, and the letterhead'],
   ['useDocsSelectionBox()', 'Where the selection is on the screen, to put something beside it'],
   ['useDocsCount()', 'words and characters of the document, and of what is selected'],
   ['useDocsBubble()', 'The bar beside the selection, with <DocsProvider bubble>: open, close, toggle, ask'],
@@ -210,9 +213,10 @@ commands.restoreVersion(doc);`,
         <p className={prose}>
           <code className={mono}>DocsProvider</code> takes the props of <code className={mono}>DocsEditor</code> that are about the document (<code className={mono}>docx</code>,{' '}
           <code className={mono}>name</code>, <code className={mono}>author</code>, <code className={mono}>collab</code>, <code className={mono}>onSave</code>…), and{' '}
-          <code className={mono}>locale</code> and <code className={mono}>locales</code> for the texts the library still has (the bar beside the selection, what a screen reader is told); not
-          those of the interface it does not draw (<code className={mono}>features</code>, <code className={mono}>className</code>, <code className={mono}>onReady</code>). It has three of its own: <code className={mono}>onLinkKey</code>, <code className={mono}>onFindKey</code> and <code className={mono}>bubble</code>, below.
-          It puts nothing on the page itself: its children are where they are.
+          <code className={mono}>locale</code> and <code className={mono}>locales</code> for the texts the library still has (the bar beside the selection, what a screen reader is told); not those of
+          the interface it does not draw (<code className={mono}>features</code>, <code className={mono}>className</code>, <code className={mono}>onReady</code>). It has three of its own:{' '}
+          <code className={mono}>onLinkKey</code>, <code className={mono}>onFindKey</code> and <code className={mono}>bubble</code>, below. It puts nothing on the page itself: its children are where
+          they are.
         </p>
         <p className={prose}>
           <a href="/docs/components/" className={LINK}>
@@ -255,16 +259,16 @@ commands.restoreVersion(doc);`,
         </SectionHead>
         {rows(HOOKS, 240)}
         <p className={prose}>
-          <code className={mono}>useDocsValue</code> compares what it selects as JSON at every change, so it is for small values: it warns in the console when given one as large as the document. To know
-          when the document changes, <code className={mono}>editor.onChange</code>. A find bar, for example:
+          <code className={mono}>useDocsValue</code> compares what it selects as JSON at every change, so it is for small values: it warns in the console when given one as large as the document. To
+          know when the document changes, <code className={mono}>editor.onChange</code>. A find bar, for example:
         </p>
         {block(find)}
       </section>
 
       <section aria-labelledby="keys" className="mt-24">
         <SectionHead id="keys" badge="Keys" color="yellow" title="Keys">
-          Most keys are the editor’s own and work with nothing asked of you: ⌘B, ⌘I, ⌘U, ⌘Z and ⇧⌘Z, ⌘A, ⌘↵ for a page break, ⌘S (with an <code className={mono}>onSave</code>) and ⌘P, ⌘-click on a link,
-          ⌘ and the wheel to zoom. Ctrl takes the place of ⌘ away from a Mac.
+          Most keys are the editor’s own and work with nothing asked of you: ⌘B, ⌘I, ⌘U, ⌘Z and ⇧⌘Z, ⌘A, ⌘↵ for a page break, ⌘S (with an <code className={mono}>onSave</code>) and ⌘P, ⌘-click on a
+          link, ⌘ and the wheel to zoom. Ctrl takes the place of ⌘ away from a Mac.
         </SectionHead>
         <p className={prose}>
           Two open something only an interface has, so the editor knows the key and leaves the answer to you. Each is taken from the browser only while you give it someone to call, and only while the
@@ -288,16 +292,16 @@ commands.restoreVersion(doc);`,
           <code className={mono}>{'<DocsProvider bubble>'}</code> gives the document the small bar that comes up beside what is selected, the one the included interface has.
         </SectionHead>
         <p className={prose}>
-          On it: copy, cut and paste on a screen that is touched, a variable made of the words selected, a link, a note, and what can be done to a picture or a table. A tap on ⌘ shows and hides it, and
-          with it ⌘K asks for a link there unless you gave an <code className={mono}>onLinkKey</code>. It is off unless asked for, and read when the document is made.
+          On it: copy, cut and paste on a screen that is touched, a variable made of the words selected, a link, a note, and what can be done to a picture or a table. A tap on ⌘ shows and hides it,
+          and with it ⌘K asks for a link there unless you gave an <code className={mono}>onLinkKey</code>. It is off unless asked for, and read when the document is made.
         </p>
         <p className={prose}>
           It is the one piece here with a look of its own, and it is put in <code className={mono}>document.body</code>. Give it your colours with the{' '}
           <a href="/docs/styling/#the-included-interface" className={LINK}>
             --dx-ui-… variables
           </a>{' '}
-          on <code className={mono}>body</code> (or on <code className={mono}>body:has(.your-editor)</code>), not by reaching into its classes. <code className={mono}>useDocsBubble()</code> gives it to your
-          own buttons:
+          on <code className={mono}>body</code> (or on <code className={mono}>body:has(.your-editor)</code>), not by reaching into its classes. <code className={mono}>useDocsBubble()</code> gives it
+          to your own buttons:
         </p>
         {block(bubble)}
         <p className={prose}>
@@ -391,8 +395,8 @@ commands.restoreVersion(doc);`,
         {lesson(
           'Read only',
           <p className={prose}>
-            <code className={mono}>editor.readOnly = true</code> for someone who may only look: the commands do nothing and the keys type nothing. In a room, the server’s <code className={mono}>admit</code>{' '}
-            saying <code className={mono}>readOnly</code> does it for you.
+            <code className={mono}>editor.readOnly = true</code> for someone who may only look: the commands do nothing and the keys type nothing. In a room, the server’s{' '}
+            <code className={mono}>admit</code> saying <code className={mono}>readOnly</code> does it for you.
           </p>,
         )}
         {lesson(
@@ -407,8 +411,8 @@ commands.restoreVersion(doc);`,
         {lesson(
           'Phones',
           <p className={prose}>
-            <code className={mono}>useDocsResponsive</code>, or <code className={mono}>commands.setFit(&apos;width&apos;)</code> on a narrow screen: the whole page across it, zoomed, without setting the
-            text out again. See{' '}
+            <code className={mono}>useDocsResponsive</code>, or <code className={mono}>commands.setFit(&apos;width&apos;)</code> on a narrow screen: the whole page across it, zoomed, without setting
+            the text out again. See{' '}
             <a href="/docs/mobile/" className={LINK}>
               Phones and touch
             </a>
@@ -418,17 +422,17 @@ commands.restoreVersion(doc);`,
         {lesson(
           'Full screen',
           <p className={prose}>
-            The bar beside the selection, menus and toasts are drawn on the page, outside the editor. Put the page in full screen (<code className={mono}>document.documentElement.requestFullscreen()</code>)
-            and the editor above everything with <code className={mono}>position: fixed</code>, rather than the editor’s own element. The bar follows an element that holds the editor into full screen;
-            your menus and toasts will not.
+            The bar beside the selection, menus and toasts are drawn on the page, outside the editor. Put the page in full screen (
+            <code className={mono}>document.documentElement.requestFullscreen()</code>) and the editor above everything with <code className={mono}>position: fixed</code>, rather than the editor’s own
+            element. The bar follows an element that holds the editor into full screen; your menus and toasts will not.
           </p>,
         )}
         {lesson(
           'A room inside your API',
           <p className={prose}>
-            <code className={mono}>createCollabServer</code> without a <code className={mono}>port</code> gives a <code className={mono}>handle</code> to mount at <code className={mono}>/collab</code> in
-            Express or Nest, with a storage that calls your services straight. The browser must reach it directly: a proxy that reads the whole response first (Next’s route handlers do) never ends a
-            stream of server-sent events. See{' '}
+            <code className={mono}>createCollabServer</code> without a <code className={mono}>port</code> gives a <code className={mono}>handle</code> to mount at <code className={mono}>/collab</code>{' '}
+            in Express or Nest, with a storage that calls your services straight. The browser must reach it directly: a proxy that reads the whole response first (Next’s route handlers do) never ends
+            a stream of server-sent events. See{' '}
             <a href="/docs/collaboration/" className={LINK}>
               collaboration
             </a>

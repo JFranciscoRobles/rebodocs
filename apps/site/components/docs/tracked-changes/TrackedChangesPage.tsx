@@ -163,9 +163,10 @@ Late payments add a fee{+ of 2% a month+}.`,
           Headless
         </h3>
         <p className={prose}>
-          <code className={mono}>DocsState</code> has <code className={mono}>trackChanges</code> and <code className={mono}>revisionCount</code>; the commands have{' '}
-          the editor&apos;s methods of the same names, from <code className={mono}>setTrackChanges</code> to <code className={mono}>selectRevision</code>, for an interface of your own.
+          <code className={mono}>DocsState</code> has <code className={mono}>trackChanges</code> and <code className={mono}>revisionCount</code>; the commands have the editor&apos;s methods of the
+          same names, from <code className={mono}>setTrackChanges</code> to <code className={mono}>selectRevision</code>, for an interface of your own.
         </p>
+        <div className={`mt-4 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: headless }} />
       </section>
 
       <section aria-labelledby="in-core" className="mt-24">
@@ -220,12 +221,12 @@ Late payments add a fee{+ of 2% a month+}.`,
       <section aria-labelledby="checked-against-word" className="mt-24">
         <SectionHead id="checked-against-word" badge="Word" color="blue" title="Checked against Word" />
         <p className={prose}>
-          Documents with insertions, deletions, a split paragraph and a joined one were opened in Word for Mac. Word found the same changes, by the same authors. Accepting all of them, and rejecting all of
-          them, gave the same text in Word as here. Changes made in Word read back the same way, and a file opened and saved without changes keeps its XML.
+          Documents with insertions, deletions, a split paragraph and a joined one were opened in Word for Mac. Word found the same changes, by the same authors. Accepting all of them, and rejecting
+          all of them, gave the same text in Word as here. Changes made in Word read back the same way, and a file opened and saved without changes keeps its XML.
         </p>
         <p className={prose}>
-          Text one person put in and another took out was checked in Word for Mac too: Word keeps it, a <code className={mono}>w:del</code> inside the <code className={mono}>w:ins</code>, as it is written
-          here. So were changes of formatting and rows taken out, which Word lists by the same people.
+          Text one person put in and another took out was checked in Word for Mac too: Word keeps it, a <code className={mono}>w:del</code> inside the <code className={mono}>w:ins</code>, as it is
+          written here. So were changes of formatting and rows taken out, which Word lists by the same people.
         </p>
         <p className={prose}>
           A document that does not say its language has Word give every run the one it guesses when it opens it, and with changes tracked, that is a change of formatting of every run by whoever opened

@@ -11,13 +11,17 @@ function Notes() {
       </button>
       {notes.notes.map((note) => (
         <article key={note.id} className="grid gap-1.5 rounded-md border border-neutral-200 p-2" style={{ borderLeft: `4px solid #${note.color}` }}>
-          <button className="truncate text-left text-xs text-neutral-600" onClick={() => notes.select(note.id)}>“{note.excerpt}”</button>
+          <button className="truncate text-left text-xs text-neutral-600" onClick={() => notes.select(note.id)}>
+            “{note.excerpt}”
+          </button>
           <textarea aria-label="Note" className="rounded border border-neutral-300 p-1 text-sm" value={note.text} onChange={(e) => notes.setText(note.id, e.target.value)} />
           <div className="flex gap-1">
             {NOTE_COLORS.map((color) => (
               <button key={color} aria-label={`#${color}`} className="size-5 rounded-full" style={{ background: `#${color}` }} onClick={() => notes.setColor(note.id, color)} />
             ))}
-            <button className="ml-auto text-xs text-red-700" onClick={() => notes.remove(note.id)}>Delete</button>
+            <button className="ml-auto text-xs text-red-700" onClick={() => notes.remove(note.id)}>
+              Delete
+            </button>
           </div>
         </article>
       ))}

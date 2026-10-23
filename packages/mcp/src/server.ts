@@ -6,10 +6,11 @@
 
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, extname, isAbsolute, relative, resolve } from 'node:path';
-import { type Doc, type FontFile, FontMeasurer, createDoc, embeddedFonts, exportDocx, exportMarkdown, importDocx, layoutDocument, readFont, renderPdf } from '@rebodocs/core';
+import { type Doc, type FontFile, FontMeasurer, type Layout, createDoc, embeddedFonts, exportDocx, exportMarkdown, importDocx, layoutDocument, readFont, renderPdf } from '@rebodocs/core/internal';
 import type { Bridge, EditorInfo } from './bridge';
 import { EXPORT_TOOL } from './browser';
 import { familiesOf, fontsFor } from './fonts';
+import { version } from '../package.json';
 import { TOOLS, type Tool, ToolError, findTool, runTool, toolProperties } from './tools';
 
 export interface ServerOptions {
@@ -39,9 +40,14 @@ interface OpenFile {
   saved: Doc;
   /** False for a new document that has not been written anywhere yet. */
   onDisk: boolean;
+  /** The document before each change, the last last: what undo goes back to. */
+  history: Doc[];
 }
 
-const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
+/** How many changes to a file can be undone. */
+const HISTORY = 50;
+
+const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 /** The name the document in the editor goes by. */
 const LIVE = 'editor';
 
@@ -53,21 +59,28 @@ const DOCUMENT = {
 const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif' };
 
 /** The tools that are about files and the editor, not about what is in a document. */
-const OWN: Omit<Tool, 'run' | 'writes'>[] = [
+const OWN: (Omit<Tool, 'run' | 'writes'> & { annotations: Record<string, boolean> })[] = [
   {
     name: 'open_document',
+    title: 'Open a Word file',
+    annotations: { readOnlyHint: true },
     description: 'Opens a Word file (.docx) to read it and change it. It is kept in memory: nothing is written until save_document. Gives its overview.',
     properties: { path: { type: 'string', description: 'The path of the .docx file.' } },
     required: ['path'],
   },
   {
     name: 'new_document',
+    title: 'New document',
+    annotations: { readOnlyHint: true },
     description: 'Starts an empty document, to write in and save. Gives it the path it will be saved to.',
     properties: { path: { type: 'string', description: 'Where it will be saved: a path ending in .docx.' } },
     required: ['path'],
   },
   {
     name: 'save_document',
+    title: 'Save a document',
+    // It writes a file, and over one when told to.
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     description: `Writes a document to a file: Word (.docx), PDF (.pdf) or Markdown (.md), by the ending of the path. A DOCX that was opened keeps everything that was not changed exactly as it was. With "${LIVE}" as the document, it saves what is open in the editor. It does not write over a file that is there unless "overwrite" is true: saving a copy under a new name is the safe way.`,
     properties: {
       document: DOCUMENT,
@@ -76,12 +89,27 @@ const OWN: Omit<Tool, 'run' | 'writes'>[] = [
     },
   },
   {
+    name: 'undo',
+    title: 'Undo changes to a file',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    description: `Undoes the last changes the tools made to a file that is open, one at a time or several: the way back from a mistake without opening the file again and losing the rest. Up to ${HISTORY} changes. In the editor in the browser, each change is a step the person undoes there.`,
+    properties: {
+      document: { type: 'string', description: 'The path of the file. Left out, the last file opened.' },
+      steps: { type: 'integer', description: 'How many changes to undo. 1 when left out.' },
+    },
+  },
+  {
     name: 'list_documents',
+    title: 'List the documents',
+    annotations: { readOnlyHint: true },
     description: 'The documents that can be worked on now: the files that are open, with whether each has changes not saved, and whether an editor is connected.',
     properties: {},
   },
   {
     name: 'close_document',
+    title: 'Close a file',
+    // What was not saved is lost.
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     description: 'Forgets a file that is open, with any changes that were not saved.',
     properties: { path: { type: 'string', description: 'The path of the file.' } },
     required: ['path'],
@@ -125,11 +153,18 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
     if (!fontCache.has(key)) fontCache.set(key, fontsFor(doc, options.fontDirs));
     return fontCache.get(key)!;
   };
-  const pageOf = (doc: Doc) => {
-    const own = doc.source ? embeddedFonts(doc.source).map((font) => readFont(font.bytes, font)).filter((font): font is FontFile => !!font) : [];
+  const layoutOf = (doc: Doc): Layout => {
+    const own = doc.source
+      ? embeddedFonts(doc.source)
+          .map((font) => readFont(font.bytes, font))
+          .filter((font): font is FontFile => !!font)
+      : [];
     const fonts = [...own, ...fontsOf(doc)];
     if (!fonts.length) throw new ToolError('No font files were found on this machine, so the pages of the document cannot be worked out.');
-    const { lines, paraFirstLine } = layoutDocument(doc, new FontMeasurer(fonts));
+    return layoutDocument(doc, new FontMeasurer(fonts));
+  };
+  const pageOf = (doc: Doc) => {
+    const { lines, paraFirstLine } = layoutOf(doc);
     return (para: number) => (lines[paraFirstLine[para]]?.page ?? 0) + 1;
   };
 
@@ -149,7 +184,8 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
     const editors = (await bridge?.editors()) ?? [];
     if (!editors.length) refuse(howToConnect());
     const number = /:(\d+)$/.exec(given)?.[1];
-    if (number !== undefined) return editors.find((editor) => editor.id === Number(number)) ?? refuse(`There is no editor ${number}. Connected: ${editors.map((editor) => editorName(editor, true)).join(', ')}.`);
+    if (number !== undefined)
+      return editors.find((editor) => editor.id === Number(number)) ?? refuse(`There is no editor ${number}. Connected: ${editors.map((editor) => editorName(editor, true)).join(', ')}.`);
     if (editors.length > 1) refuse(`${editors.length} editors are connected: say which. ${editors.map((editor) => editorName(editor, true)).join(', ')}.`);
     return editors[0];
   };
@@ -204,7 +240,7 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
         return refuse(`"${path}" could not be read as a DOCX: ${error instanceof Error ? error.message : String(error)}`);
       }
       const had = files.get(path);
-      files.set(path, { path, doc, saved: doc, onDisk: true });
+      files.set(path, { path, doc, saved: doc, onDisk: true, history: [] });
       current = path;
       return `${had && had.doc !== had.saved ? 'Opened again from the file: the changes that were not saved are gone.' : 'Opened.'} It is the document the tools act on now.\n${findTool('get_overview')!.run(doc, {}, {}).text}`;
     },
@@ -213,7 +249,7 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
       if (extname(path).toLowerCase() !== '.docx') refuse('The path of a new document must end in .docx.');
       if (existsSync(path)) refuse(`"${path}" already exists: open it with open_document, or choose another name.`);
       const doc = createDoc();
-      files.set(path, { path, doc, saved: doc, onDisk: false });
+      files.set(path, { path, doc, saved: doc, onDisk: false, history: [] });
       current = path;
       return `New document, to be saved to ${path}. It is empty: insert_paragraphs with after_paragraph 0 writes in it. Styles: Normal, Title, Subtitle, Heading1, Heading2, Heading3.`;
     },
@@ -236,10 +272,24 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
       }
       return said;
     },
+    async undo(args) {
+      const from = await target(args.document);
+      if (!isFile(from)) refuse('In the editor, each change is a step the person undoes there (⌘Z, or Ctrl+Z). undo is for the files open here.');
+      const file = from as OpenFile;
+      const steps = args.steps === undefined ? 1 : Number(args.steps);
+      if (!Number.isInteger(steps) || steps < 1) refuse('"steps" must be a whole number from 1.');
+      if (!file.history.length) refuse('There is nothing to undo: no tool has changed this file since it was opened.');
+      const done = Math.min(steps, file.history.length);
+      file.doc = file.history.splice(file.history.length - done, done)[0];
+      return `Undid ${done} ${done === 1 ? 'change' : 'changes'}${done < steps ? ` (there were only ${done})` : ''}. ${file.history.length} more can be undone.${file.doc === file.saved ? ' The document is as it was last saved.' : ''}`;
+    },
     async list_documents() {
       const open = [...files.values()].map((file) => `${file.path}${file.path === current ? ' (current)' : ''}${file.doc !== file.saved || !file.onDisk ? ' — changes not saved' : ''}`);
       const editors = (await bridge?.editors()) ?? [];
-      const live = editors.length === 1 ? `An editor is connected: its document is ${editorName(editors[0], false)}.` : `${editors.length} editors are connected:\n${editors.map((editor) => editorName(editor, true)).join('\n')}`;
+      const live =
+        editors.length === 1
+          ? `An editor is connected: its document is ${editorName(editors[0], false)}.`
+          : `${editors.length} editors are connected:\n${editors.map((editor) => editorName(editor, true)).join('\n')}`;
       return [open.length ? `Files open:\n${open.join('\n')}` : 'No files are open.', editors.length ? live : howToConnect()].join('\n');
     },
     close_document(args) {
@@ -251,7 +301,7 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
     },
   };
 
-  const call = async (name: string, args: Record<string, unknown>): Promise<string> => {
+  const call = async (name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> => {
     if (own[name]) return own[name](args);
     if (!findTool(name)) refuse(`There is no tool "${name}".`);
     const { document, ...rest } = args;
@@ -269,31 +319,46 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
       Object.assign(rest, { data: readFileSync(path).toString('base64') });
     }
     if (!isFile(on)) {
-      const answer = await bridge!.call(on.id, name, rest);
+      const answer = await bridge!.call(on.id, name, rest, signal);
       if (!answer.ok) refuse(answer.text);
       return answer.text;
     }
-    const result = runTool(on.doc, name, rest, { pageOf });
-    if (result.doc) on.doc = result.doc;
+    const result = runTool(on.doc, name, rest, { pageOf, layoutOf });
+    if (result.doc && result.doc !== on.doc) {
+      on.history.push(on.doc);
+      if (on.history.length > HISTORY) on.history.shift();
+      on.doc = result.doc;
+    }
     return result.text;
   };
 
   const listed = [
-    ...OWN.map((tool) => ({ name: tool.name, description: tool.description, inputSchema: { type: 'object', properties: tool.properties, required: tool.required ?? [] } })),
+    ...OWN.map((tool) => ({
+      name: tool.name,
+      title: tool.title,
+      description: tool.description,
+      inputSchema: { type: 'object', properties: tool.properties, required: tool.required ?? [] },
+      annotations: { title: tool.title, openWorldHint: false, ...tool.annotations },
+    })),
     ...TOOLS.map((tool) => ({
       name: tool.name,
+      title: tool.title,
       description: tool.description,
       inputSchema: { type: 'object', properties: { ...toolProperties(tool), document: DOCUMENT }, required: tool.required ?? [] },
-      annotations: { readOnlyHint: !tool.writes },
+      // What a tool changes stays in memory, or is a step to undo in the editor, until it is saved: none of them destroys anything.
+      annotations: { title: tool.title, readOnlyHint: !tool.writes, destructiveHint: false, idempotentHint: !tool.writes || !!tool.idempotent, openWorldHint: false },
     })),
   ];
 
   const INSTRUCTIONS =
     'Tools to read and edit Word documents (.docx). Work on a file with open_document, or on the document a person has open in the editor in their browser by ' +
     `giving "${LIVE}" as the document. Paragraphs go by number: read_document shows them, and the numbers move when paragraphs are inserted or deleted, so read again ` +
-    'before using a number after such a change. To change a text, give it exactly as it reads. The header and the footer are read and changed with "area". ' +
+    'before using a number after such a change; edit_document makes several changes at once in the numbers of one reading. To change a text, give it exactly as it reads. The header and the footer are read and changed with "area". ' +
     'Changes to a file stay in memory until save_document; prefer saving a copy ' +
     'to writing over the original. To review a document without changing it, use add_note.';
+
+  /** The calls of tools under way, by the id of their request: what a client that cancels one stops. */
+  const running = new Map<number | string, AbortController>();
 
   return {
     async handle(message) {
@@ -305,7 +370,7 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
           return answer({
             protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0],
             capabilities: { tools: {} },
-            serverInfo: { name: 'rebodocs', version: '0.9.1' },
+            serverInfo: { name: 'rebodocs', title: 'Rebodocs', version },
             instructions: INSTRUCTIONS,
           });
         }
@@ -316,14 +381,27 @@ export function createDocServer(options: ServerOptions = {}): DocServer {
         case 'tools/call': {
           const name = String(params.name ?? '');
           const args = params.arguments && typeof params.arguments === 'object' ? (params.arguments as Record<string, unknown>) : {};
+          const stop = new AbortController();
+          if (id !== undefined && id !== null) running.set(id, stop);
           try {
-            return answer({ content: [{ type: 'text', text: await call(name, args) }] });
+            const text = await call(name, args, stop.signal);
+            // A request that was cancelled gets no answer.
+            return stop.signal.aborted ? undefined : answer({ content: [{ type: 'text', text }] });
           } catch (error) {
+            if (stop.signal.aborted) return undefined;
             // What the assistant can put right is said to it as the result of the tool; anything else is a fault of the server.
             const known = error instanceof Refused || error instanceof ToolError;
             const text = error instanceof Error ? error.message : String(error);
             return answer({ content: [{ type: 'text', text: known ? text : `The tool failed: ${text}` }], isError: true });
+          } finally {
+            if (id !== undefined && id !== null) running.delete(id);
           }
+        }
+        case 'notifications/cancelled': {
+          // Only a wait for an editor can be stopped: a tool on a file has done its work by the time this is read.
+          const asked = params.requestId;
+          if (typeof asked === 'string' || typeof asked === 'number') running.get(asked)?.abort();
+          return undefined;
         }
         default:
           // Notifications ask for no answer; a request for something else gets told so.

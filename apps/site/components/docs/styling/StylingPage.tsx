@@ -111,8 +111,8 @@ export async function StylingPage() {
         </SectionHead>
         <Vars rows={UI_VARS} />
         <p className={prose}>
-          <strong>A dark theme comes with it.</strong> <code className={mono}>theme=&quot;dark&quot;</code> on <code className={mono}>DocsEditor</code> or <code className={mono}>DocsProvider</code>{' '}
-          (<code className={mono}>editor.theme = &apos;dark&apos;</code> without React), or <code className={mono}>&apos;auto&apos;</code> to follow the system. It sets these variables to dark values
+          <strong>A dark theme comes with it.</strong> <code className={mono}>theme=&quot;dark&quot;</code> on <code className={mono}>DocsEditor</code> or <code className={mono}>DocsProvider</code> (
+          <code className={mono}>editor.theme = &apos;dark&apos;</code> without React), or <code className={mono}>&apos;auto&apos;</code> to follow the system. It sets these variables to dark values
           whose text reads at 4.5:1, makes the tints of the menu and the reds that are not variables readable on dark, and is taken by the bars and menus shown outside the editor too.{' '}
           <code className={mono}>features=&#123;&#123; theme: true &#125;&#125;</code> puts the choice in the menu, for the person to make. A variable set on the element still wins over it.
         </p>
@@ -122,9 +122,21 @@ export async function StylingPage() {
         </p>
         <div className="mt-7 grid max-w-[920px] gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,260px),1fr))' }}>
           {[
-            { title: 'For fingers', text: 'Where the pointer is a finger, the buttons grow: 38 pixels in the toolbar and the bar beside the selection, 34 in the status bar, 44 the items of the menu.', color: 'blue' as const },
-            { title: 'High contrast', text: 'With the colours of the system forced on the page, as Windows does, what is on and what has the keyboard stay visible, whatever the theme.', color: 'green' as const },
-            { title: 'Contrast is yours', text: 'The default colours keep text at 4.5:1 or more. A theme of your own has to as well: check its text against its backgrounds.', color: 'yellow' as const },
+            {
+              title: 'For fingers',
+              text: 'Where the pointer is a finger, the buttons grow: 38 pixels in the toolbar and the bar beside the selection, 34 in the status bar, 44 the items of the menu.',
+              color: 'blue' as const,
+            },
+            {
+              title: 'High contrast',
+              text: 'With the colours of the system forced on the page, as Windows does, what is on and what has the keyboard stay visible, whatever the theme.',
+              color: 'green' as const,
+            },
+            {
+              title: 'Contrast is yours',
+              text: 'The default colours keep text at 4.5:1 or more. A theme of your own has to as well: check its text against its backgrounds.',
+              color: 'yellow' as const,
+            },
           ].map((card) => (
             <div key={card.title} className="rounded-2xl border border-border p-5">
               <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${PASTEL_CLASS[card.color]}`}>{card.title}</span>
@@ -140,7 +152,8 @@ export async function StylingPage() {
           <a href="/docs/headless/" className={LINK}>
             headless hooks
           </a>{' '}
-          each piece is yours to draw, one at a time: a hook gives what to show and what to do, and the JSX and its classes are yours. Six of them, each on a real document, with its whole file under it.
+          each piece is yours to draw, one at a time: a hook gives what to show and what to do, and the JSX and its classes are yours. Six of them, each on a real document, with its whole file under
+          it.
         </SectionHead>
         <LazyPiecesDemo code={Object.fromEntries(examples)} />
         <p className={prose}>The smallest of all, a button:</p>
@@ -158,7 +171,6 @@ export async function StylingPage() {
           <li>The editor’s styles win over the reset’s, which Tailwind keeps in a layer, and your utilities win over the rule of the element the pages are in.</li>
         </ul>
       </section>
-
     </>
   );
 }

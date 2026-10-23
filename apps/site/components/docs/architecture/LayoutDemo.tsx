@@ -30,7 +30,8 @@ export function LayoutDemo() {
             ]}
           />
           <p className="m-0 text-[15px] leading-[1.6] text-ink-soft">
-            Drag the width: the lines change, but after the first time no width is asked again — each word is known. Here the browser measures; in Node, a font file does, and the same code makes the PDF.
+            Drag the width: the lines change, but after the first time no width is asked again — each word is known. Here the browser measures; in Node, a font file does, and the same code makes the
+            PDF.
           </p>
         </>
       }

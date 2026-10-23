@@ -92,7 +92,12 @@ function Panel({ tools }: { tools: ToolDoc[] }) {
         <label htmlFor="runner-tool" className={CAPTION}>
           Tool
         </label>
-        <select id="runner-tool" value={name} onChange={(event) => choose(event.target.value)} className="h-9 min-w-0 flex-1 rounded-lg border border-border-strong bg-white px-2 font-code text-[13px] text-ink">
+        <select
+          id="runner-tool"
+          value={name}
+          onChange={(event) => choose(event.target.value)}
+          className="h-9 min-w-0 flex-1 rounded-lg border border-border-strong bg-white px-2 font-code text-[13px] text-ink"
+        >
           {usable.map((t) => (
             <option key={t.name} value={t.name}>
               {t.name}
@@ -126,7 +131,12 @@ function Panel({ tools }: { tools: ToolDoc[] }) {
         )}
       </div>
       <div className="flex items-center gap-2">
-        <button type="button" disabled={!editor} onClick={call} className="h-9 cursor-pointer rounded-lg border-0 bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-40">
+        <button
+          type="button"
+          disabled={!editor}
+          onClick={call}
+          className="h-9 cursor-pointer rounded-lg border-0 bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-40"
+        >
           Call {name}
         </button>
         <button

@@ -30,9 +30,14 @@ const COMMANDS: { group: string; color: 'green' | 'blue' | 'purple' | 'orange'; 
     color: 'blue',
     rows: [
       ['npm test', 'The tests, with Vitest.'],
+      ['npm run test:browser', 'The editor itself on a page, in a Chrome without a window: keys, clicks, touches and the clipboard.'],
       ['npm run typecheck', 'Types, over every package and every demo.'],
       ['npm run a11y -- <url>', 'axe on pages with the editor in them, in a Chrome without a window: what breaks WCAG 2.2 A and AA.'],
-      ['npm run word-compare -- file.docx', "The editor's layout of a file against Microsoft Word's, line by line. Needs macOS, Word and pdftotext."],
+      [
+        'npm run word-check',
+        'The documents of test-documents/ laid out and compared, line by line, with the PDF Word made of each; fails when one is worse than before. Needs Chrome and pdftotext, not Word.',
+      ],
+      ['npm run word-compare -- file.docx', "The editor's layout of a file against Microsoft Word's, line by line; --word has Word make its PDF, on macOS."],
     ],
   },
   {
@@ -135,7 +140,9 @@ writeFileSync('out.docx', exportDocx(fillVariables(doc, { client: 'Ana Pérez' }
         </div>
         <p className={prose}>Use the component. The element it is in must have a height:</p>
         <div className={`mt-4 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: first }} />
-        <p className={prose}>That gives an empty document. To open a file, pass its bytes as <code className={mono}>docx</code>. Here it is, as written:</p>
+        <p className={prose}>
+          That gives an empty document. To open a file, pass its bytes as <code className={mono}>docx</code>. Here it is, as written:
+        </p>
         <LazyFirstDemo />
         <ul className="m-0 mt-6 grid max-w-[760px] list-disc gap-2.5 pl-5 text-base leading-[1.6] text-ink-soft">
           <li>
@@ -149,8 +156,8 @@ writeFileSync('out.docx', exportDocx(fillVariables(doc, { client: 'Ana Pérez' }
             Without <code className={mono}>locale</code>, the interface is in the first of the browser’s languages it speaks, or in English.
           </li>
           <li>
-            No React? The same package has the whole editor without it: <code className={mono}>import {'{ mountDocs }'} from &apos;@rebodocs/react/mount&apos;</code>, and npm does not install React for it,
-            as it is an optional peer. See{' '}
+            No React? The same package has the whole editor without it: <code className={mono}>import {'{ mountDocs }'} from &apos;@rebodocs/react/mount&apos;</code>, and npm does not install React
+            for it, as it is an optional peer. See{' '}
             <a href="/docs/vanilla/" className={LINK}>
               Without a framework
             </a>
@@ -178,9 +185,8 @@ writeFileSync('out.docx', exportDocx(fillVariables(doc, { client: 'Ana Pérez' }
         <p className={prose}>The engine is the same in the browser, so here is that script, run on the agreement of the demo:</p>
         <LazyEngineDemo />
         <p className={prose}>
-          A variable without a value stays as it is written. Dates and amounts are written in the language of the document, or in English when it says none, unless{' '}
-          <code className={mono}>locale</code> says another. Or use the tool that is
-          already there, which says what it left:
+          A variable without a value stays as it is written. Dates and amounts are written in the language of the document, or in English when it says none, unless <code className={mono}>locale</code>{' '}
+          says another. Or use the tool that is already there, which says what it left:
         </p>
         <div className="mt-4 max-w-[760px]">
           <InstallCommand command="npm run generate -- template.docx data.json -o out.pdf" />

@@ -58,8 +58,20 @@ const EMU_PER_POINT = 12700;
 
 /** The colours of the Office theme the colours of a shape may be named by. */
 const THEME: Record<string, string> = {
-  lt1: 'FFFFFF', bg1: 'FFFFFF', dk1: '000000', tx1: '000000', lt2: 'E7E6E6', bg2: 'E7E6E6', dk2: '44546A', tx2: '44546A',
-  accent1: '4472C4', accent2: 'ED7D31', accent3: 'A5A5A5', accent4: 'FFC000', accent5: '5B9BD5', accent6: '70AD47',
+  lt1: 'FFFFFF',
+  bg1: 'FFFFFF',
+  dk1: '000000',
+  tx1: '000000',
+  lt2: 'E7E6E6',
+  bg2: 'E7E6E6',
+  dk2: '44546A',
+  tx2: '44546A',
+  accent1: '4472C4',
+  accent2: 'ED7D31',
+  accent3: 'A5A5A5',
+  accent4: 'FFC000',
+  accent5: '5B9BD5',
+  accent6: '70AD47',
 };
 const PRESET: Record<string, string> = { black: '000000', white: 'FFFFFF', red: 'FF0000', blue: '0000FF', green: '008000', gray: '808080' };
 
@@ -158,7 +170,8 @@ export function drawingIds(doc: Doc): number[] {
     for (const p of paragraphs) for (const run of p.runs) for (const found of run.props.object?.matchAll(/<wp:docPr\b[^>]*?\bid="(\d+)"/g) ?? []) ids.push(Number(found[1]));
   };
   scan(doc.paragraphs);
-  for (const story of [doc.header, doc.footer, doc.firstPage?.header, doc.firstPage?.footer, ...(doc.footnotes ?? []), ...(doc.textBoxes ?? [])]) if (story) scan(story.paragraphs);
+  for (const story of [doc.header, doc.footer, doc.firstPage?.header, doc.firstPage?.footer, ...(doc.footnotes ?? []), ...(doc.endnotes ?? []), ...(doc.textBoxes ?? [])])
+    if (story) scan(story.paragraphs);
   for (const p of doc.paragraphs) for (const story of [p.section?.header, p.section?.footer, p.section?.firstPage?.header, p.section?.firstPage?.footer]) if (story) scan(story.paragraphs);
   return ids;
 }
@@ -184,16 +197,18 @@ export function drawnTextBoxes(doc: Doc): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   const scan = (paragraphs: Paragraph[]) => {
-    for (const p of paragraphs) for (const run of p.runs) {
-      const id = textBoxId(run.props.object);
-      if (id !== undefined && !seen.has(id)) {
-        seen.add(id);
-        out.push(id);
+    for (const p of paragraphs)
+      for (const run of p.runs) {
+        const id = textBoxId(run.props.object);
+        if (id !== undefined && !seen.has(id)) {
+          seen.add(id);
+          out.push(id);
+        }
       }
-    }
   };
   scan(doc.paragraphs);
-  for (const story of [doc.header, doc.footer, doc.firstPage?.header, doc.firstPage?.footer, ...(doc.footnotes ?? []), ...(doc.textBoxes ?? [])]) if (story) scan(story.paragraphs);
+  for (const story of [doc.header, doc.footer, doc.firstPage?.header, doc.firstPage?.footer, ...(doc.footnotes ?? []), ...(doc.endnotes ?? []), ...(doc.textBoxes ?? [])])
+    if (story) scan(story.paragraphs);
   for (const p of doc.paragraphs) for (const story of [p.section?.header, p.section?.footer, p.section?.firstPage?.header, p.section?.firstPage?.footer]) if (story) scan(story.paragraphs);
   return out;
 }

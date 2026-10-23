@@ -7,6 +7,7 @@ import { sectionEnds } from './stories';
 import {
   type Columns,
   type Doc,
+  type NoteNumbering,
   type PageSetup,
   type Paragraph,
   type Position,
@@ -113,6 +114,44 @@ export function setOwnFirstPage(doc: Doc, index: number, on: boolean): Doc {
   return { ...doc, paragraphs };
 }
 
+/** How section `index` numbers the notes of `kind` its text refers to: undefined for 1, 2, 3 at the foot of the page and i, ii, iii at the end, the count going on from the section before. */
+export function noteNumberingOf(doc: Doc, kind: 'footnote' | 'endnote', index: number): NoteNumbering | undefined {
+  const field = kind === 'footnote' ? 'footnoteNumbering' : 'endnoteNumbering';
+  const end = markOfSection(doc, index);
+  return end < 0 ? doc[field] : doc.paragraphs[end].section![field];
+}
+
+/** Section `index` numbering the notes of `kind` its text refers to as `numbering` says; undefined for the plain count. Notes at the end do not start again on each page. */
+export function setNoteNumbering(doc: Doc, kind: 'footnote' | 'endnote', index: number, numbering: NoteNumbering | undefined): Doc {
+  const field = kind === 'footnote' ? 'footnoteNumbering' : 'endnoteNumbering';
+  const plain = kind === 'footnote' ? 'decimal' : 'lowerRoman';
+  const made =
+    numbering &&
+    defined<NoteNumbering>({
+      format: numbering.format === plain ? undefined : numbering.format,
+      start: numbering.start && numbering.start > 1 ? Math.floor(numbering.start) : undefined,
+      restart: numbering.restart === 'page' && kind === 'endnote' ? undefined : numbering.restart,
+    });
+  const next = made && Object.keys(made).length ? made : undefined;
+  if (JSON.stringify(next ?? {}) === JSON.stringify(noteNumberingOf(doc, kind, index) ?? {})) return doc;
+  const end = markOfSection(doc, index);
+  if (end < 0) {
+    const { [field]: _, ...rest } = doc;
+    return next ? { ...rest, [field]: next } : rest;
+  }
+  const { [field]: _, ...rest } = doc.paragraphs[end].section!;
+  const paragraphs = doc.paragraphs.slice();
+  paragraphs[end] = { ...paragraphs[end], section: next ? { ...rest, [field]: next } : rest };
+  return { ...doc, paragraphs };
+}
+
+/** The document with its notes at the end set out at the end of each section, or of the document. */
+export function setEndnotesAt(doc: Doc, at: 'sections' | 'document'): Doc {
+  if ((doc.endnotesAt ?? 'document') === at) return doc;
+  const { endnotesAt: _, ...rest } = doc;
+  return at === 'sections' ? { ...rest, endnotesAt: 'sections' } : rest;
+}
+
 /** The columns of the section paragraph `para` is in: one when it runs the whole width. */
 export function columnsAt(doc: Doc, para: number): Columns {
   return sectionOf(doc, para).columns ?? ONE_COLUMN;
@@ -177,7 +216,7 @@ function sectionStartOf(doc: Doc, end: number): number {
  */
 export function setColumns(doc: Doc, range: Range, columns: Columns): Doc {
   const want = normalized(columns);
-  let { from, to } = orderedRange(range.from, range.to);
+  const { from, to } = orderedRange(range.from, range.to);
   if (from.para === to.para && from.offset === to.offset) return patchSection(doc, sectionMarkOf(doc, from.para), { columns: want });
 
   const n = doc.paragraphs.length;

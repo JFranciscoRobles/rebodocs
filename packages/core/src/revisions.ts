@@ -99,7 +99,8 @@ const runWithout = (props: RunProps): RunProps =>
     ? defined({ ...props, revision: undefined, revisionAuthor: undefined, revisionDate: undefined, insertedBy: undefined, insertedDate: undefined, revisionMove: undefined })
     : props;
 const markWith = (props: ParagraphProps, type: 'insert' | 'delete', by: Reviser): ParagraphProps => defined({ ...props, markRevision: type, markAuthor: by.author, markDate: by.date });
-const markWithout = (props: ParagraphProps): ParagraphProps => (props.markRevision || props.markAuthor || props.markDate ? defined({ ...props, markRevision: undefined, markAuthor: undefined, markDate: undefined }) : props);
+const markWithout = (props: ParagraphProps): ParagraphProps =>
+  props.markRevision || props.markAuthor || props.markDate ? defined({ ...props, markRevision: undefined, markAuthor: undefined, markDate: undefined }) : props;
 
 // --- Tracking an edit -----------------------------------------------------------------
 
@@ -305,7 +306,9 @@ function formatTracker(by: Reviser) {
     let props = byNow.get(now);
     if (!props) {
       const first: RunFormat = was.formatChange?.before ?? formatOf(was, RUN_FORMAT);
-      props = sameRunFormat(now, first) ? defined({ ...now, formatChange: undefined }) : { ...now, formatChange: defined<FormatChange<RunFormat>>({ author: by.author, date: by.date, before: first }) };
+      props = sameRunFormat(now, first)
+        ? defined({ ...now, formatChange: undefined })
+        : { ...now, formatChange: defined<FormatChange<RunFormat>>({ author: by.author, date: by.date, before: first }) };
       byNow.set(now, props);
     }
     return props;
@@ -313,7 +316,9 @@ function formatTracker(by: Reviser) {
   const paragraph = (was: ParagraphProps, now: ParagraphProps): ParagraphProps => {
     if (sameParagraphFormat(was, now)) return now;
     const first: ParagraphFormat = was.formatChange?.before ?? formatOf(was, PARAGRAPH_FORMAT);
-    return sameParagraphFormat(now, first) ? defined({ ...now, formatChange: undefined }) : { ...now, formatChange: defined<FormatChange<ParagraphFormat>>({ author: by.author, date: by.date, before: first }) };
+    return sameParagraphFormat(now, first)
+      ? defined({ ...now, formatChange: undefined })
+      : { ...now, formatChange: defined<FormatChange<ParagraphFormat>>({ author: by.author, date: by.date, before: first }) };
   };
   /** A paragraph whose text did not change, with what changed in its formatting tracked. */
   const same = (was: Paragraph, now: Paragraph): Paragraph => {
@@ -589,21 +594,38 @@ function trackRows(before: Doc, after: Doc, by: Reviser): { doc: Doc; map: (pos:
     const shape = (x: Table) => JSON.stringify({ ...x, rows: undefined });
     if (shape(old) !== shape(table)) return undefined;
     const oldRows = new Map(old.rows.map((row) => [row.id, row]));
-    if (table.rows.some((row) => oldRows.has(row.id) && oldRows.get(row.id)!.cells.map((c) => c.id).join() !== row.cells.map((c) => c.id).join())) return undefined;
+    if (
+      table.rows.some(
+        (row) =>
+          oldRows.has(row.id) &&
+          oldRows
+            .get(row.id)!
+            .cells.map((c) => c.id)
+            .join() !== row.cells.map((c) => c.id).join(),
+      )
+    )
+      return undefined;
     const rows = table.rows.map((row) => (oldRows.has(row.id) ? row : { ...row, revision: change('insert') }));
     const gone = new Map<number, Paragraph[]>();
     old.rows.forEach((row, i) => {
       if (rows.some((r) => r.id === row.id)) return;
       // A row of one's own put in and taken out again never was; anyone else's stays, taken out.
       if (row.revision?.type === 'insert' && row.revision.author === by.author) return;
-      const previous = old.rows.slice(0, i).reverse().find((r) => rows.some((x) => x.id === r.id));
+      const previous = old.rows
+        .slice(0, i)
+        .reverse()
+        .find((r) => rows.some((x) => x.id === r.id));
       rows.splice(previous ? rows.findIndex((x) => x.id === previous.id) + 1 : 0, 0, { ...row, revision: change('delete') });
       gone.set(
         row.id,
         rowParagraphs(before.paragraphs, t, row.id).map((i) => {
           const p = before.paragraphs[i];
           const runs = p.runs.flatMap((run) =>
-            !run.text || run.props.revision === 'delete' ? [run] : run.props.revision === 'insert' && (run.props.revisionAuthor ?? '') === by.author ? [] : [{ text: run.text, props: runWith(run.props, 'delete', by) }],
+            !run.text || run.props.revision === 'delete'
+              ? [run]
+              : run.props.revision === 'insert' && (run.props.revisionAuthor ?? '') === by.author
+                ? []
+                : [{ text: run.text, props: runWith(run.props, 'delete', by) }],
           );
           return { ...p, runs: normalizeRuns(runs, runWithout(p.runs[0]?.props ?? {})) };
         }),
@@ -783,7 +805,10 @@ export function revisionsIn(paragraphs: Paragraph[], part?: StoryPart): Revision
       if (run.text) add(changesOf(run.props), { para, offset }, { para, offset: offset + run.text.length }, run.text, run.props);
       offset += run.text.length;
     }
-    const mark = p.props.markRevision === 'insert' || p.props.markRevision === 'delete' ? [defined<RevisionChange>({ type: p.props.markRevision, author: p.props.markAuthor ?? '', date: p.props.markDate || undefined })] : [];
+    const mark =
+      p.props.markRevision === 'insert' || p.props.markRevision === 'delete'
+        ? [defined<RevisionChange>({ type: p.props.markRevision, author: p.props.markAuthor ?? '', date: p.props.markDate || undefined })]
+        : [];
     add(mark, { para, offset }, { para: para + 1, offset: 0 }, '¶');
   });
   return out;

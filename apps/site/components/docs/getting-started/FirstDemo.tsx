@@ -22,7 +22,8 @@ export default function FirstDemo() {
     return () => setLocale(was);
   }, []);
 
-  const pill = (active: boolean) => `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold disabled:cursor-default disabled:opacity-50 ${active ? `border-transparent ${PASTEL_CLASS.blue}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
+  const pill = (active: boolean) =>
+    `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold disabled:cursor-default disabled:opacity-50 ${active ? `border-transparent ${PASTEL_CLASS.blue}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
   const name = given ? 'agreement.docx' : 'untitled.docx';
 
   return (
@@ -45,7 +46,12 @@ export default function FirstDemo() {
       </div>
       <div className="border-t border-border bg-surface px-6 py-5">
         <p className={CAPTION}>Console</p>
-        <pre tabIndex={0} aria-label="Console" aria-live="polite" className="m-0 mt-2.5 min-h-[3.4em] overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3.5 font-code text-[12.5px] leading-[1.65] text-[#edece8]">
+        <pre
+          tabIndex={0}
+          aria-label="Console"
+          aria-live="polite"
+          className="m-0 mt-2.5 min-h-[3.4em] overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3.5 font-code text-[12.5px] leading-[1.65] text-[#edece8]"
+        >
           {logged.length ? logged.join('\n') : <span className="text-[#a8a49a]">Save from the menu, or with ⌘S (Ctrl+S): onSave logs the name and the size.</span>}
         </pre>
       </div>

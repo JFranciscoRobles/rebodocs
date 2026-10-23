@@ -234,8 +234,7 @@ function zoomBy(step: number): void {
 // Linux each window has its menu.
 
 async function buildMenu(): Promise<Menu> {
-  const item = (id: string, label: string, action: () => unknown, accelerator?: string) =>
-    MenuItem.new({ id, text: label, accelerator, action: () => void action() });
+  const item = (id: string, label: string, action: () => unknown, accelerator?: string) => MenuItem.new({ id, text: label, accelerator, action: () => void action() });
   const separator = () => PredefinedMenuItem.new({ item: 'Separator' });
 
   const app = IS_MAC
@@ -313,10 +312,7 @@ async function buildMenu(): Promise<Menu> {
     ? [
         await Submenu.new({
           text: text('window'),
-          items: [
-            await PredefinedMenuItem.new({ item: 'Minimize', text: text('minimize') }),
-            await PredefinedMenuItem.new({ item: 'Maximize', text: text('maximize') }),
-          ],
+          items: [await PredefinedMenuItem.new({ item: 'Minimize', text: text('minimize') }), await PredefinedMenuItem.new({ item: 'Maximize', text: text('maximize') })],
         }),
       ]
     : [];

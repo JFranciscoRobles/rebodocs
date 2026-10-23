@@ -3,8 +3,27 @@ import { type Server, createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { type Doc, addNote, createDoc, createParagraph, deleteRange, docImage, exportDocx, importDocx, insertImage, insertTable, insertText, letterheadImage, letterheadOf, noteRanges, paragraphText, removeLetterhead, setLetterhead, splitParagraph } from '@rebodocs/core';
-import { type CollabServer, createCollabServer } from '../src/server';
+import {
+  type Doc,
+  addNote,
+  createDoc,
+  createParagraph,
+  deleteRange,
+  docImage,
+  exportDocx,
+  importDocx,
+  insertImage,
+  insertTable,
+  insertText,
+  letterheadImage,
+  letterheadOf,
+  noteRanges,
+  paragraphText,
+  removeLetterhead,
+  setLetterhead,
+  splitParagraph,
+} from '@rebodocs/core/internal';
+import { type CollabEvent, type CollabServer, createCollabServer } from '../src/server';
 import { backendStorage } from '../src/storage';
 import { type CollabHost, type HostHistory, type HostSelection, type PeerCaret, type Session, createRoom, joinRoom, pingServer } from '../src/session';
 
@@ -56,6 +75,23 @@ class Host implements CollabHost {
   get texts() {
     return this.doc.paragraphs.map(paragraphText);
   }
+}
+
+/** Comes into a room by hand, as an editor would: what the server says first, and a way to go. */
+async function enter_(url: string, room: string, client = `amano${Math.random().toString(36).slice(2, 8)}`): Promise<{ client: string; key: string; epoch: number; leave: () => void }> {
+  const stop = new AbortController();
+  const response = await fetch(`${url}/collab/rooms/${room}/events?client=${client}`, { signal: stop.signal });
+  if (!response.ok) throw Object.assign(new Error(`${response.status}`), { status: response.status });
+  const reader = response.body!.getReader();
+  let text = '';
+  while (!text.includes('\n\n')) text += new TextDecoder().decode((await reader.read()).value);
+  const hello = JSON.parse(
+    text
+      .split('\n')
+      .find((line) => line.startsWith('data: '))!
+      .slice(6),
+  ) as { client: string; key: string; epoch: number };
+  return { ...hello, leave: () => stop.abort() };
 }
 
 async function until(what: () => boolean, ms = 4000): Promise<void> {
@@ -194,7 +230,11 @@ describe('a room', () => {
       expect(pictures).toEqual([1, 2]);
       expect(host.doc.notes!.map((note) => note.text).sort()).toEqual(['de Ana', 'de Luis']);
       expect(new Set(host.doc.notes!.map((note) => note.id)).size).toBe(2);
-      expect(noteRanges(host.doc).map((note) => note.range.from.para).sort()).toEqual([0, 1]);
+      expect(
+        noteRanges(host.doc)
+          .map((note) => note.range.from.para)
+          .sort(),
+      ).toEqual([0, 1]);
     }
     // And it is still a file Word's format allows: it reads back with both of each.
     const back = importDocx(luis.host.exportDocx());
@@ -293,7 +333,7 @@ describe('a room', () => {
     expect(late.host.texts).toEqual(ana.host.texts);
   }, 60000);
 
-  it('loads the room again when its document here turns out not to be the room\'s, keeping what was typed', async () => {
+  it("loads the room again when its document here turns out not to be the room's, keeping what was typed", async () => {
     server.close();
     server = createCollabServer({ port: 0, dataDir: dir, idle: 60, checkAfter: 20 });
     await server.ready;
@@ -307,7 +347,9 @@ describe('a room', () => {
       const response = await real(input, init);
       if (!String(input).includes('/base?') || bases++ > 0) return response;
       const wrong = importDocx(new Uint8Array(await response.arrayBuffer()));
-      return new Response(exportDocx({ ...wrong, paragraphs: [wrong.paragraphs[0], { ...wrong.paragraphs[1], runs: [{ text: 'DOS', props: wrong.paragraphs[1].runs[0].props }] }] }) as BodyInit, { headers: response.headers });
+      return new Response(exportDocx({ ...wrong, paragraphs: [wrong.paragraphs[0], { ...wrong.paragraphs[1], runs: [{ text: 'DOS', props: wrong.paragraphs[1].runs[0].props }] }] }) as BodyInit, {
+        headers: response.headers,
+      });
     }) as typeof fetch;
     try {
       const luis = await join_(room, 'Luis');
@@ -346,6 +388,114 @@ describe('a room', () => {
     expect(luis.host.texts).toEqual(['uno sin red']);
   }, 15000);
 
+  it('folds the changes into the file while people stay, and they go on with what they had', async () => {
+    server.close();
+    const events: CollabEvent[] = [];
+    server = createCollabServer({ port: 0, dataDir: dir, idle: 60, checkAfter: 20, foldAfter: 4, onEvent: (event) => events.push(event) });
+    await server.ready;
+    url = `http://127.0.0.1:${server.port}`;
+    const room = await share('uno', 'dos');
+    const ana = await join_(room, 'Ana');
+    const luis = await join_(room, 'Luis');
+    // New paragraphs, with ids of their own that the file read again does not give them.
+    ana.host.edit((doc) => splitParagraph(doc, { para: 0, offset: 2 }).doc);
+    await settled(ana, luis);
+    luis.host.edit((doc) => insertText(doc, { para: 1, offset: 1 }, 'L').doc);
+    await settled(ana, luis);
+    ana.host.edit((doc) => splitParagraph(doc, { para: 2, offset: 0 }).doc);
+    await settled(ana, luis);
+    // What Luis types next is on its way while the changes are folded: the room takes it only once he has the new file.
+    const real = globalThis.fetch;
+    let hold: Promise<void> | undefined;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/ops') && hold) await hold;
+      return real(input, init);
+    }) as typeof fetch;
+    let release = () => {};
+    hold = new Promise((done) => {
+      release = done;
+    });
+    try {
+      luis.host.edit((doc) => insertText(doc, { para: 1, offset: 0 }, '+').doc);
+      await new Promise((done) => setTimeout(done, 20));
+      hold = undefined;
+      ana.host.edit((doc) => insertText(doc, { para: 2, offset: 0 }, 'nuevo').doc, { para: 2, offset: 5 });
+      await until(() => events.some((event) => event.type === 'fold'));
+    } finally {
+      release();
+      globalThis.fetch = real;
+    }
+    expect(events.find((event) => event.type === 'fold')).toEqual({ type: 'fold', room, changes: 4, people: 2 });
+    const ids = (person: { host: Host }) => person.host.doc.paragraphs.map((p) => p.id).join();
+    await until(() => ids(ana) === 'p0,p1,p2,p3' && ids(luis) === 'p0,p1,p2,p3');
+    await settled(ana, luis);
+    expect(ana.host.texts).toEqual(['un', '+oL', 'nuevo', 'dos']);
+    // What each can undo is still theirs.
+    ana.host.history!.undo();
+    await settled(ana, luis);
+    expect(luis.host.texts).toEqual(['un', '+oL', '', 'dos']);
+    luis.host.history!.undo();
+    await settled(ana, luis);
+    expect(ana.host.texts).toEqual(['un', 'oL', '', 'dos']);
+    // Nobody loaded the room again because it was wrong, and whoever comes now has it as it is.
+    expect(ana.session.resyncs + luis.session.resyncs).toBe(0);
+    const eva = await join_(room, 'Eva');
+    expect(eva.host.texts).toEqual(ana.host.texts);
+  });
+
+  it('takes nothing from whoever sends as someone else, or comes in with their id', async () => {
+    const room = await share('uno');
+    const ana = await join_(room, 'Ana');
+    const luis = await join_(room, 'Luis');
+    await until(() => luis.session.peers.length === 1);
+    const anaId = luis.session.peers[0].client;
+    const post = (what: string, data: object) => fetch(`${url}/collab/rooms/${room}/${what}`, { method: 'POST', body: JSON.stringify(data) }).then((r) => r.status);
+    const splice = { t: 'splice', id: 'p0', at: 0, remove: 3, insert: [{ text: 'robado', props: {} }] };
+    expect(await post('ops', { client: anaId, epoch: 1, rev: 0, seq: 99, ops: [splice] })).toBe(409);
+    expect(await post('ops', { client: anaId, key: 'inventada', epoch: 1, rev: 0, seq: 99, ops: [splice] })).toBe(409);
+    expect(await post('presence', { client: anaId, sel: null, name: 'Falsa' })).toBe(409);
+    await expect(enter_(url, room, anaId)).rejects.toThrow('409');
+    // Ana is still who she was, and her editor still takes what she types.
+    ana.host.edit((doc) => insertText(doc, { para: 0, offset: 3 }, '!').doc);
+    await settled(ana, luis);
+    expect(luis.host.texts).toEqual(['uno!']);
+    expect(luis.session.peers[0].name).toBe('Ana');
+  });
+
+  it('turns away more sendings than an editor makes, and a place too big to be one', async () => {
+    const room = await share('uno');
+    const someone = await enter_(url, room);
+    try {
+      const presence = (sel: unknown) =>
+        fetch(`${url}/collab/rooms/${room}/presence`, { method: 'POST', body: JSON.stringify({ client: someone.client, key: someone.key, sel }) }).then(
+          (r) => r.status,
+          () => 0,
+        );
+      expect(await presence({ page: 0, anchor: { id: 'p0', offset: 0 }, focus: { id: 'p0', offset: 'x'.repeat(100000) } })).not.toBe(200);
+      const statuses: number[] = [];
+      for (let round = 0; round < 10 && !statuses.includes(429); round++) statuses.push(...(await Promise.all(Array.from({ length: 200 }, () => presence(null)))));
+      expect(statuses).toContain(429);
+    } finally {
+      someone.leave();
+    }
+  });
+
+  it('says who comes and goes', async () => {
+    server.close();
+    const events: CollabEvent[] = [];
+    server = createCollabServer({ port: 0, dataDir: dir, idle: 60, onEvent: (event) => events.push(event) });
+    await server.ready;
+    url = `http://127.0.0.1:${server.port}`;
+    const room = await share('uno');
+    const ana = await join_(room, 'Ana');
+    ana.host.edit((doc) => insertText(doc, { para: 0, offset: 3 }, '!').doc);
+    await until(() => ana.session.pending === 0);
+    ana.session.leave();
+    await until(() => events.some((event) => event.type === 'fold'));
+    expect(events.map((event) => event.type)).toEqual(['join', 'leave', 'fold']);
+    expect(events[0]).toMatchObject({ room, name: 'Ana', readOnly: false });
+  });
+
   it('asks for the word to start sharing when it has one, and for nothing to join', async () => {
     server.close();
     server = createCollabServer({ port: 0, token: 'una-palabra-larga' });
@@ -368,6 +518,9 @@ describe('the documents of another system', () => {
   /** What each PUT said about the session, in order: nothing for those of while people work. */
   let ends: (string | undefined)[];
   let down: boolean;
+  /** Tickets the system no longer lets in, and those it now lets only watch. */
+  let revoked: Set<string>;
+  let watching: Set<string>;
   let server: CollabServer;
   let url: string;
   let sessions: Session[];
@@ -377,6 +530,8 @@ describe('the documents of another system', () => {
     puts = 0;
     ends = [];
     down = false;
+    revoked = new Set();
+    watching = new Set();
     system = createServer((req, res) => {
       const [, , id, action] = req.url!.split('/');
       const chunks: Buffer[] = [];
@@ -386,8 +541,8 @@ describe('the documents of another system', () => {
         if (down) return void res.writeHead(503).end();
         if (req.method === 'POST' && action === 'access') {
           const { ticket } = JSON.parse(Buffer.concat(chunks).toString()) as { ticket: string };
-          const name = { 'pase-ana': 'Ana Ruiz', 'pase-luis': 'Luis Mora', 'pase-eva': 'Eva Gil' }[ticket];
-          const readOnly = ticket === 'pase-eva' || undefined;
+          const name = revoked.has(ticket) ? undefined : { 'pase-ana': 'Ana Ruiz', 'pase-luis': 'Luis Mora', 'pase-eva': 'Eva Gil' }[ticket];
+          const readOnly = ticket === 'pase-eva' || watching.has(ticket) || undefined;
           return void (name && documents.has(id) ? res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ name, readOnly })) : res.writeHead(403).end());
         }
         if (req.method === 'GET') {
@@ -474,6 +629,48 @@ describe('the documents of another system', () => {
     expect(puts).toBe(2);
   });
 
+  it('asks the system again who may be in, and holds to what it says', async () => {
+    const ana = await enter('contrato-17', 'pase-ana');
+    const luis = await enter('contrato-17', 'pase-luis');
+    revoked.add('pase-ana');
+    watching.add('pase-luis');
+    await server.recheck('contrato-17');
+    await until(() => ana.session.state === 'closed' && luis.session.state === 'on' && luis.session.readOnly);
+    expect(server.rooms()).toEqual([{ id: 'contrato-17', people: ['Luis Mora'] }]);
+    luis.host.edit((doc) => insertText(doc, { para: 0, offset: 0 }, 'Luis: ').doc);
+    await new Promise((done) => setTimeout(done, 100));
+    await server.flush();
+    expect(kept('contrato-17')).toEqual(['uno', 'dos']);
+  });
+
+  it('gives the system the document a moment after the changes stop', async () => {
+    server.close();
+    server = createCollabServer({ port: 0, storage: backendStorage({ url: `http://127.0.0.1:${(system.address() as { port: number }).port}/documentos`, key: KEY }), idle: 60, saveAfter: 50 });
+    await server.ready;
+    url = `http://127.0.0.1:${server.port}`;
+    const ana = await enter('contrato-17', 'pase-ana');
+    ana.host.edit((doc) => insertText(doc, { para: 0, offset: 3 }, '!').doc);
+    await until(() => puts === 1);
+    expect(kept('contrato-17')).toEqual(['uno!', 'dos']);
+    expect(ends).toEqual([undefined]);
+  });
+
+  it('keeps what was typed while away, when the document changed meanwhile', async () => {
+    const ana = await enter('contrato-17', 'pase-ana');
+    const port = server.port;
+    server.close();
+    await until(() => ana.session.state === 'offline');
+    ana.host.edit((doc) => insertText(doc, { para: 1, offset: 3 }, ' sin red').doc);
+    // Others worked on it meanwhile, somewhere else, and the system has their document.
+    documents.set('contrato-17', exportDocx(createDoc([createParagraph('título'), createParagraph('uno, dicho de otro modo'), createParagraph('dos')])));
+    server = createCollabServer({ port, storage: backendStorage({ url: `http://127.0.0.1:${(system.address() as { port: number }).port}/documentos`, key: KEY }), idle: 60 });
+    await server.ready;
+    await until(() => ana.session.state === 'on' && ana.session.pending === 0, 12000);
+    expect(ana.host.texts).toEqual(['título', 'uno, dicho de otro modo', 'dos sin red']);
+    const luis = await enter('contrato-17', 'pase-luis');
+    expect(luis.host.texts).toEqual(ana.host.texts);
+  }, 15000);
+
   it('gives its files to nobody who did not come in, and lets nobody start a room of their own', async () => {
     await enter('contrato-17', 'pase-ana');
     expect((await fetch(`${url}/collab/rooms/contrato-17/base`)).status).toBe(403);
@@ -522,7 +719,7 @@ describe('the documents of another system', () => {
   });
 });
 
-describe('a server mounted in the system\'s own', () => {
+describe("a server mounted in the system's own", () => {
   // As Express gives it a request under `app.use('/collab', …)`: without the prefix, and with the body read.
   let system: Server;
   let server: CollabServer;

@@ -12,9 +12,9 @@
 // empty paragraph) are left out, except the cells of a table, which keep its
 // shape.
 
-import { type Doc, type Paragraph } from './model';
+import type { Doc, Paragraph } from './model';
 import { headingLevels } from './outline';
-import { footnoteReferences } from './footnotes';
+import { endnoteReferences, footnoteReferences } from './footnotes';
 import { textBoxId } from './textboxes';
 
 /** An id as a PDF string of bytes, which is what ids are: the ones made here are letters, digits and hyphens. */
@@ -88,6 +88,8 @@ export class StructTree {
     const levels = headingLevels(doc);
     const referenced = new Map<number, string[]>();
     for (const ref of footnoteReferences(doc)) (referenced.get(ref.para) ?? referenced.set(ref.para, []).get(ref.para)!).push(ref.id);
+    // A note at the end is named apart: its ids are counted apart from those at the foot of the page.
+    for (const ref of endnoteReferences(doc)) (referenced.get(ref.para) ?? referenced.set(ref.para, []).get(ref.para)!).push(`endnote:${ref.id}`);
     doc.paragraphs.forEach((p, para) => {
       const container = p.cell ? this.cellOf(doc, p.cell) : this.root;
       const level = levels.get(p.props.styleId ?? '');
@@ -243,7 +245,11 @@ export class StructTree {
     number(this.root);
     for (const [element, id] of ids) {
       const kids = element.kids.map((kid) =>
-        'type' in kid ? `${ids.get(kid)} 0 R` : 'mcid' in kid ? `<< /Type /MCR /Pg ${pageIds[kid.page]} 0 R /MCID ${kid.mcid} >>` : `<< /Type /OBJR /Pg ${pageIds[kid.page]} 0 R /Obj ${kid.annot} 0 R >>`,
+        'type' in kid
+          ? `${ids.get(kid)} 0 R`
+          : 'mcid' in kid
+            ? `<< /Type /MCR /Pg ${pageIds[kid.page]} 0 R /MCID ${kid.mcid} >>`
+            : `<< /Type /OBJR /Pg ${pageIds[kid.page]} 0 R /Obj ${kid.annot} 0 R >>`,
       );
       const table = [element.scope && `/Scope /${element.scope}`, element.rowSpan && `/RowSpan ${element.rowSpan}`, element.colSpan && `/ColSpan ${element.colSpan}`].filter(Boolean).join(' ');
       const attributes = [table && `<< /O /Table ${table} >>`, element.bbox && `<< /O /Layout /BBox [${element.bbox.join(' ')}] >>`].filter(Boolean);
@@ -266,8 +272,18 @@ export class StructTree {
     write(parentTree, `<< /Nums [${nums.join(' ')}] >>`);
     const ided = [...ids.keys()].filter((element) => element.id);
     const idTree = ided.length ? reserve() : 0;
-    if (idTree) write(idTree, `<< /Names [${ided.sort((a, b) => (a.id! < b.id! ? -1 : 1)).map((element) => `${byteString(element.id!)} ${ids.get(element)} 0 R`).join(' ')}] >>`);
-    write(rootId, `<< /Type /StructTreeRoot /K ${ids.get(this.root)} 0 R /ParentTree ${parentTree} 0 R /ParentTreeNextKey ${pageIds.length + this.annotations.length}${idTree ? ` /IDTree ${idTree} 0 R` : ''} >>`);
+    if (idTree)
+      write(
+        idTree,
+        `<< /Names [${ided
+          .sort((a, b) => (a.id! < b.id! ? -1 : 1))
+          .map((element) => `${byteString(element.id!)} ${ids.get(element)} 0 R`)
+          .join(' ')}] >>`,
+      );
+    write(
+      rootId,
+      `<< /Type /StructTreeRoot /K ${ids.get(this.root)} 0 R /ParentTree ${parentTree} 0 R /ParentTreeNextKey ${pageIds.length + this.annotations.length}${idTree ? ` /IDTree ${idTree} 0 R` : ''} >>`,
+    );
     return rootId;
   }
 }

@@ -43,9 +43,11 @@ export interface BucketEnv {
 export function openBucket(env: BucketEnv = process.env): Bucket {
   const missing = (['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const).filter((name) => !env[name]);
   if (missing.length) throw new Error(`Missing in the environment: ${missing.join(', ')}. Copy .env.example to .env and fill it in.`);
-  if (env.S3_ENDPOINT && !/^https?:\/\/[^\s/]+\/?$/.test(env.S3_ENDPOINT)) throw new Error('S3_ENDPOINT in the environment is not an address like https://<account-id>.r2.cloudflarestorage.com, with no bucket after it.');
+  if (env.S3_ENDPOINT && !/^https?:\/\/[^\s/]+\/?$/.test(env.S3_ENDPOINT))
+    throw new Error('S3_ENDPOINT in the environment is not an address like https://<account-id>.r2.cloudflarestorage.com, with no bucket after it.');
   // The public address of an R2 bucket serves its files to anyone; it is not where the S3 API is.
-  if (/\.r2\.dev\/?$/.test(env.S3_ENDPOINT ?? '')) throw new Error('S3_ENDPOINT in the environment is the public address of the bucket (r2.dev). The S3 API is at https://<account-id>.r2.cloudflarestorage.com.');
+  if (/\.r2\.dev\/?$/.test(env.S3_ENDPOINT ?? ''))
+    throw new Error('S3_ENDPOINT in the environment is the public address of the bucket (r2.dev). The S3 API is at https://<account-id>.r2.cloudflarestorage.com.');
   const Bucket = env.S3_BUCKET!;
   const client = new S3Client({
     endpoint: env.S3_ENDPOINT || undefined,

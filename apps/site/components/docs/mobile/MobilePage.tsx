@@ -90,8 +90,8 @@ const stop = onKeyboard(() => console.log(keyboardInset()));  // pixels the keyb
 
       <section aria-labelledby="bar" className="mt-24">
         <SectionHead id="bar" badge="Bar" color="yellow" title="The bar for a finger">
-          A selection made by touch brings up the bar beside it, which then also offers Copy, Cut, Paste, Paste as text and Select all: there are no keys for them. A tap on the caret brings it up
-          with Paste and Select all, as a phone does.
+          A selection made by touch brings up the bar beside it, which then also offers Copy, Cut, Paste, Paste as text and Select all: there are no keys for them. A tap on the caret brings it up with
+          Paste and Select all, as a phone does.
         </SectionHead>
         <p className={prose}>
           It is the same bar a tap of ⌘ (Ctrl) brings up beside a selection with a keyboard, with what it offers for the text, the table or the picture selected. A touch anywhere else puts it away.

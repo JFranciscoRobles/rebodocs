@@ -43,11 +43,7 @@ const read = await addFonts([{ family: 'Raleway', src: '/fonts/Raleway-Regular.t
       'css',
       LIGHT_THEME,
     ),
-    highlight(
-      `addFonts([{ family: 'Raleway' }]);   // listed, and waited for before the text is measured`,
-      'ts',
-      LIGHT_THEME,
-    ),
+    highlight(`addFonts([{ family: 'Raleway' }]);   // listed, and waited for before the text is measured`, 'ts', LIGHT_THEME),
     highlight(
       `import { importDocx, readFont, renderPdf } from '@rebodocs/core';
 
@@ -62,8 +58,8 @@ const { pdf, missingFonts } = renderPdf(importDocx(bytes), fonts);`,
     <>
       <h1 className="m-0 mt-3 font-display text-[clamp(36px,4vw,48px)] font-extrabold leading-[1.08] tracking-[-0.03em]">Fonts</h1>
       <p className="m-0 mt-3.5 max-w-[700px] text-lg leading-[1.6] text-muted">
-        The editor measures and paints with the browser&apos;s fonts, so any font the machine has already works. For one it does not have, your brand&apos;s typeface or a letterhead&apos;s, give the editor
-        the file.
+        The editor measures and paints with the browser&apos;s fonts, so any font the machine has already works. For one it does not have, your brand&apos;s typeface or a letterhead&apos;s, give the
+        editor the file.
       </p>
       <div className={`mt-6 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: prop }} />
       <div className="mt-4">
@@ -136,7 +132,8 @@ const { pdf, missingFonts } = renderPdf(importDocx(bytes), fonts);`,
         </h3>
         <p className={prose}>
           A family is given one face at a time: regular, bold, italic, each its own file. A face not given is imitated from the regular one, on screen by the browser, as on any web page, and in a PDF
-          the same way: the letters drawn thicker, or slanted. An imitation is not the face its designer drew: give the four (bold italic is <code className={mono}>bold: true, italic: true</code>) for text in all of them.
+          the same way: the letters drawn thicker, or slanted. An imitation is not the face its designer drew: give the four (bold italic is <code className={mono}>bold: true, italic: true</code>) for
+          text in all of them.
         </p>
       </section>
 
@@ -167,15 +164,15 @@ const { pdf, missingFonts } = renderPdf(importDocx(bytes), fonts);`,
           </table>
         </div>
         <p className={prose}>
-          A PDF without the file names the standard font nearest the name: Courier for a monospaced one, Times for a serif, Helvetica for the rest. Words stay where the editor measured them, so lines keep
-          their length, though the letters are not the font&apos;s. Printing from the browser uses the font as shown, whatever its kind.
+          A PDF without the file names the standard font nearest the name: Courier for a monospaced one, Times for a serif, Helvetica for the rest. Words stay where the editor measured them, so lines
+          keep their length, though the letters are not the font&apos;s. Printing from the browser uses the font as shown, whatever its kind.
         </p>
         <h3 id="docx" className="m-0 mt-12 scroll-mt-24 font-display text-xl font-bold tracking-[-0.01em]">
           The DOCX
         </h3>
         <p className={prose}>
-          The faces go in when some text of the document is in their family, its tables, headers, footers and styles included, as Word embeds fonts: someone who opens the file without the font installed sees it
-          all the same. A font whose licence says it may not be embedded, or only as pictures, stays out.
+          The faces go in when some text of the document is in their family, its tables, headers, footers and styles included, as Word embeds fonts: someone who opens the file without the font
+          installed sees it all the same. A font whose licence says it may not be embedded, or only as pictures, stays out.
         </p>
         <div className="mt-6 max-w-[860px] overflow-hidden rounded-2xl border border-border">
           <table className="w-full border-collapse text-left">
@@ -188,7 +185,10 @@ const { pdf, missingFonts } = renderPdf(importDocx(bytes), fonts);`,
             <tbody className="text-[15px] leading-normal text-ink-soft">
               {[
                 ['true (default)', 'Whole, as Word embeds it. Whoever opens the file can type anything in it.'],
-                ["'subset'", 'Cut down to the characters of the document and of the keyboard, as Word’s “Embed only the characters used”: a much smaller file. A character typed later that it does not keep shows in another font for whoever lacks the font. Whole when the licence says it may not be cut down.'],
+                [
+                  "'subset'",
+                  'Cut down to the characters of the document and of the keyboard, as Word’s “Embed only the characters used”: a much smaller file. A character typed later that it does not keep shows in another font for whoever lacks the font. Whole when the licence says it may not be cut down.',
+                ],
                 ['false', 'Not at all.'],
               ].map(([value, goes]) => (
                 <tr key={value} className="border-t border-[#f0eee9]">
@@ -200,9 +200,12 @@ const { pdf, missingFonts } = renderPdf(importDocx(bytes), fonts);`,
           </table>
         </div>
         <p className={prose}>
-          On <code className={mono}>DocsEditor</code> and <code className={mono}>DocsProvider</code> it is a prop, followed when it changes; on the editor, <code className={mono}>editor.embedFonts</code>.
+          On <code className={mono}>DocsEditor</code> and <code className={mono}>DocsProvider</code> it is a prop, followed when it changes; on the editor,{' '}
+          <code className={mono}>editor.embedFonts</code>.
         </p>
-        <Callout title="PDF needs .ttf or .otf.">A .woff2 shows and measures as well, but the PDF draws its text in a standard font. Serve a .ttf for the editor even when the page uses .woff2.</Callout>
+        <Callout title="PDF needs .ttf or .otf.">
+          A .woff2 shows and measures as well, but the PDF draws its text in a standard font. Serve a .ttf for the editor even when the page uses .woff2.
+        </Callout>
       </section>
 
       <section aria-labelledby="fonts-a-docx-carries" className="mt-24">
@@ -224,6 +227,11 @@ const { pdf, missingFonts } = renderPdf(importDocx(bytes), fonts);`,
             On a server
           </a>
           : <code className={mono}>missingFonts</code>, what stands in, and the fonts of the system.
+        </p>
+        <p className={prose}>
+          Text is kerned as Word kerns it: the pairs of letters the font file lists are set closer, a space and the letter after it too, in a run as big as its <code className={mono}>w:kern</code> or
+          bigger. The PDF moves the letters of each pair together, from the file. In the editor the browser kerns them, from another table of the font, and leaves out the pairs with a space of Times
+          New Roman, so a line of it can be a fraction of a point apart from Word&apos;s on screen, not in the PDF.
         </p>
       </section>
 
@@ -267,7 +275,7 @@ const { pdf, missingFonts } = renderPdf(importDocx(bytes), fonts);`,
             'There is no taking a font away once given; a page reload starts without it.',
             'A font that loads after the document is open lays every page out again: lines and page breaks can move under the person’s eyes. Give fonts before opening, or wait for addFonts.',
             'The file is fetched by the browser: an address on another domain needs CORS.',
-            'A DOCX carries each face whole unless embedFonts is \'subset\': a font of 300 KB makes the file 300 KB larger.',
+            "A DOCX carries each face whole unless embedFonts is 'subset': a font of 300 KB makes the file 300 KB larger.",
           ].map((item) => (
             <li key={item} className="flex items-start gap-2.5 text-[15px] leading-[1.55] text-ink-soft">
               <span aria-hidden="true" className="mt-2 size-1.5 flex-none rounded-full bg-[#c9c6bf]" />

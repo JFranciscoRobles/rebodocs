@@ -32,15 +32,29 @@ import {
   setParagraphStyle,
   styleIdAt,
   variableNames,
-} from '../src';
+} from '../src/internal';
 
 const p = (text: string, props = {}): Paragraph => ({ props: {}, runs: [{ text, props }] });
 
 describe('templates', () => {
   const template = (): Doc => ({
     ...createDoc([
-      { props: {}, runs: [{ text: 'Entre {{cliente}} y ', props: {} }, { text: '{{ empresa }}', props: { bold: true } }, { text: ', por {{importe}}.', props: {} }] },
-      { props: {}, runs: [{ text: 'Firma: {{cli', props: {} }, { text: ANCHOR_CHAR, props: { object: '<w:bookmarkStart/>', anchor: true } }, { text: 'ente}} {no} {{}} {{a b.c-d_1}}', props: {} }] },
+      {
+        props: {},
+        runs: [
+          { text: 'Entre {{cliente}} y ', props: {} },
+          { text: '{{ empresa }}', props: { bold: true } },
+          { text: ', por {{importe}}.', props: {} },
+        ],
+      },
+      {
+        props: {},
+        runs: [
+          { text: 'Firma: {{cli', props: {} },
+          { text: ANCHOR_CHAR, props: { object: '<w:bookmarkStart/>', anchor: true } },
+          { text: 'ente}} {no} {{}} {{a b.c-d_1}}', props: {} },
+        ],
+      },
     ]),
     footer: { paragraphs: [p('Contrato de {{cliente}} · {{fecha}}')] },
   });
@@ -96,7 +110,13 @@ describe('templates', () => {
     expect(variableUses(doc, 'a')).toBe(2);
     const filled = fillVariables(doc, { a: 'A', b: 'B', c: 'C', d: 'D', e: 'E' });
     const text = (story?: { paragraphs: Paragraph[] }) => story?.paragraphs.map(paragraphText).join('/');
-    expect([text(filled), text(filled.paragraphs[0].section!.header), text(filled.firstPage!.header), text(filled.footnotes![0]), text(filled.textBoxes![0])]).toEqual(['Body A/Last', 'Section E', 'First B', 'Note C', 'Box D A']);
+    expect([text(filled), text(filled.paragraphs[0].section!.header), text(filled.firstPage!.header), text(filled.footnotes![0]), text(filled.textBoxes![0])]).toEqual([
+      'Body A/Last',
+      'Section E',
+      'First B',
+      'Note C',
+      'Box D A',
+    ]);
     expect(variableNames(filled)).toEqual([]);
     expect(findAllVariables(doc).map((use) => [use.name, use.part ?? 'text'])).toEqual([
       ['a', 'text'],
@@ -305,9 +325,15 @@ describe('formatting while typing', () => {
   it('turns marked text into bold, italic and strike-through', () => {
     const bold = typed('una **palabra clave**');
     expect(docText(bold.doc)).toBe('una palabra clave');
-    expect(bold.doc.paragraphs[0].runs.map((r) => [r.text, !!r.props.bold])).toEqual([['una ', false], ['palabra clave', true]]);
+    expect(bold.doc.paragraphs[0].runs.map((r) => [r.text, !!r.props.bold])).toEqual([
+      ['una ', false],
+      ['palabra clave', true],
+    ]);
     expect(bold.pos).toEqual({ para: 0, offset: 17 });
-    expect(typed('es *así*').doc.paragraphs[0].runs.map((r) => [r.text, !!r.props.italic])).toEqual([['es ', false], ['así', true]]);
+    expect(typed('es *así*').doc.paragraphs[0].runs.map((r) => [r.text, !!r.props.italic])).toEqual([
+      ['es ', false],
+      ['así', true],
+    ]);
     expect(typed('~~no~~').doc.paragraphs[0].runs.map((r) => [r.text, !!r.props.strike])).toEqual([['no', true]]);
     // Marks with nothing between them, or with space against them, are left alone.
     expect(docText(typed('2 * 3 * 4').doc)).toBe('2 * 3 * 4');
@@ -320,7 +346,13 @@ describe('outline', () => {
   const doc = () => {
     let d = createDoc(['Informe', 'Intro', 'texto 1', 'Detalle', 'texto 2', 'Método', 'texto 3', 'Fin', 'texto 4'].map((t) => p(t)));
     d = setParagraphStyle(d, 0, 0, 'Title');
-    for (const [i, id] of [[1, 'Heading1'], [3, 'Heading2'], [5, 'Heading1'], [7, 'Heading1']] as const) d = setParagraphStyle(d, i, i, id);
+    for (const [i, id] of [
+      [1, 'Heading1'],
+      [3, 'Heading2'],
+      [5, 'Heading1'],
+      [7, 'Heading1'],
+    ] as const)
+      d = setParagraphStyle(d, i, i, id);
     return d;
   };
 
@@ -336,7 +368,11 @@ describe('outline', () => {
     const down = moveSection(d, 1, 7);
     expect(docText(down.doc).split('\n')).toEqual(['Informe', 'Método', 'texto 3', 'Intro', 'texto 1', 'Detalle', 'texto 2', 'Fin', 'texto 4']);
     expect(down.para).toBe(3);
-    expect(docText(moveSection(d, 5, 1).doc).split('\n').slice(0, 4)).toEqual(['Informe', 'Método', 'texto 3', 'Intro']);
+    expect(
+      docText(moveSection(d, 5, 1).doc)
+        .split('\n')
+        .slice(0, 4),
+    ).toEqual(['Informe', 'Método', 'texto 3', 'Intro']);
     expect(docText(moveSection(d, 3).doc).split('\n').slice(-3)).toEqual(['texto 4', 'Detalle', 'texto 2']);
     // Onto itself or inside itself: nothing moves.
     expect(moveSection(d, 1, 3).doc).toBe(d);

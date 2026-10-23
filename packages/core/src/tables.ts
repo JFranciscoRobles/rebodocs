@@ -80,13 +80,7 @@ function emptyLike(template: Paragraph, cell: CellRef): Paragraph {
  * `fill` makes for it, and the paragraphs of cells that are gone go with them.
  * `at` is where the paragraphs go when the table has none yet.
  */
-function reshape(
-  doc: Doc,
-  tableIndex: number,
-  table: Table,
-  fill: (row: TableRow, cell: TableCell, ref: CellRef) => Paragraph,
-  at?: number,
-): Doc {
+function reshape(doc: Doc, tableIndex: number, table: Table, fill: (row: TableRow, cell: TableCell, ref: CellRef) => Paragraph, at?: number): Doc {
   let first = -1;
   let last = -1;
   const kept = new Map<string, Paragraph[]>();
@@ -260,9 +254,7 @@ export function deleteRow(doc: Doc, para: number): { doc: Doc; pos: Position } {
   if (below) {
     rows[rowIndex] = {
       ...below,
-      cells: below.cells.map((cell, i) =>
-        cell.merge === 'continue' && cellAtColumn(row, columnOf(below, i))?.merge === 'start' ? { ...cell, merge: 'start' as const } : cell,
-      ),
+      cells: below.cells.map((cell, i) => (cell.merge === 'continue' && cellAtColumn(row, columnOf(below, i))?.merge === 'start' ? { ...cell, merge: 'start' as const } : cell)),
     };
   }
   const next = reshape(doc, loc.tableIndex, { ...table, rows }, (_row, _cell, ref) => emptyLike(doc.paragraphs[para], ref));
@@ -426,8 +418,7 @@ export function cellRect(doc: Doc, paraA: number, paraB: number): CellRect | und
   return rect;
 }
 
-const inRect = (rect: CellRect, rowIndex: number, start: number, cell: TableCell) =>
-  rowIndex >= rect.rowFrom && rowIndex <= rect.rowTo && start >= rect.colFrom && start + cell.span <= rect.colTo;
+const inRect = (rect: CellRect, rowIndex: number, start: number, cell: TableCell) => rowIndex >= rect.rowFrom && rowIndex <= rect.rowTo && start >= rect.colFrom && start + cell.span <= rect.colTo;
 
 /** True when the block is more than one cell, which is when it can be merged. */
 export function canMergeCells(doc: Doc, paraA: number, paraB: number): boolean {

@@ -1,19 +1,12 @@
 import {
   type Doc,
   type FindOptions,
-  type Fragment,
-  type CellBox,
-  type Band,
-  type FloatBox,
   type Layout,
   type LayoutCache,
   type OutlineItem,
-  type Line,
-  type Turn,
   type ListKind,
   type PageNumbering,
   type PageSetup,
-  type PdfImage,
   type ParagraphStyle,
   type ParagraphProps,
   type Position,
@@ -22,13 +15,11 @@ import {
   type ResolvedParagraphProps,
   type ResolvedRunProps,
   type RunProps,
-  adjacentLine,
   applyRunProps,
   autoformat,
   bandLayout,
   canMergeCells,
   canSplitCell,
-  caretRect,
   clampPosition,
   comparePositions,
   createDoc,
@@ -37,31 +28,25 @@ import {
   deleteRange,
   deleteRow,
   deleteTable,
-  docImage,
   docEnd,
   docStart,
-  embeddedFonts,
   exportDocx,
   exportMarkdown,
-  exportPdf,
   type ActiveFormat,
   type TocOptions,
   insertToc,
   tocRange,
-  tocTarget,
   updateToc,
+  type EndnotePart,
   type FootnotePart,
-  type Paragraph,
-  type Run,
-  type Story,
   type StoryPart,
   storyKind,
+  endnoteIdOf,
+  endnotePart,
   footnoteIdOf,
   restoreVersion as versionOver,
-  type TextBoxBand,
   type TextBoxPart,
   insertTextBox,
-  textBoxId,
   textBoxIdOf,
   textParts,
   textBoxPart,
@@ -79,13 +64,14 @@ import {
   trackDocEdit,
   trackEdit,
   footnoteNumbers,
-  footnoteReferenceId,
   altText,
   setAltText,
   hasOwnFirstPage,
+  insertEndnote,
   insertFootnote,
+  shownEndnotes,
   shownFootnotes,
-  pageAt,
+  noteLabels,
   hasOwnStories,
   sectionCount,
   sectionIndexOf,
@@ -95,17 +81,14 @@ import {
   setSectionPage,
   storyOf,
   footnotePart,
-  splitPart,
   textByFamily,
   storySource,
   storyPart,
   withStory,
-  floatAt,
   moveFloat,
   resizeFloat,
   type PictureWrap,
   pictureWrap,
-  reanchorFloat,
   setPictureWrap,
   cleanHref,
   linkAt,
@@ -127,12 +110,10 @@ import {
   findAll,
   findAllVariables,
   documentLanguage,
-  findBlockMarks,
   templateBlocks,
   type Block,
   type TemplateData,
   findVariables,
-  hitTest,
   importDocx,
   letterheadImage,
   letterheadMargins,
@@ -140,6 +121,7 @@ import {
   letterheadOf,
   insertColumn,
   insertFragment,
+  insertText as insertInParagraph,
   imageExtension,
   imageTypeOf,
   insertImage,
@@ -148,20 +130,15 @@ import {
   insertSignatures,
   insertTable,
   layoutDocument,
-  layoutReflow,
   leaveList,
-  lineEndOffset,
   lineForPosition,
   mapFieldOffset,
   mergeCells,
-  movePicture,
   moveSection,
   listKindAt,
   locateCell,
   moveChar,
   moveWord,
-  neighbourCell,
-  offsetAtX,
   orderedRange,
   outline,
   outsideField,
@@ -169,22 +146,16 @@ import {
   paragraphLength,
   paragraphText,
   paragraphStyles,
-  pictureAt,
   propsAt,
   replaceAll,
   replaceRange,
   sectionAt,
-  resizeColumn,
-  resizeRow,
   setRowHeight,
-  resizeTable,
-  MIN_ROW_HEIGHT,
   resizePicture,
   resolveParagraph,
   resolveRun,
   runsInRange,
   sameCell,
-  selectionRects,
   setCellProps,
   setPageNumbering,
   setParagraphProps,
@@ -199,7 +170,6 @@ import {
   splitParagraph,
   storyOnPage,
   styleIdAt,
-  tableGeometry,
   setVariableFormat,
   variableFormats,
   variableNames,
@@ -209,16 +179,13 @@ import {
   textInRange,
   toggleList,
   wordRangeAt,
-  xAtOffset,
   removeLetterhead,
   setLetterhead,
   type Border,
   type CellPatch,
   cellOfTable,
-  type LayoutPage,
   type Columns,
   ONE_COLUMN,
-  boxLines,
   columnsAt,
   insertColumnBreak,
   insertSectionBreak,
@@ -228,19 +195,28 @@ import {
   clipHtml,
   clipOf,
   clipText,
+  clipWithoutTables,
   insertClip,
-  parseClip,
   serializeClip,
-} from '@rebodocs/core';
-import { getLocale, onLocaleChange, speaks, styleName, t, withRegion } from './i18n';
+  noteNumberingOf,
+  setNoteNumbering,
+  setEndnotesAt,
+  type NoteNumbering,
+} from '@rebodocs/core/internal';
+import { getLocale, onLocaleChange, speaks, t, withRegion } from './i18n';
 import { dropParagraphDialog } from './paragraphdialog';
-import { type Announcer, type Spoken, VISUALLY_HIDDEN, createAnnouncer, injectA11yStyle, installRegionKeys, markRegion, spokenChar, spokenText } from './a11y';
+import { type Announcer, VISUALLY_HIDDEN, createAnnouncer, injectA11yStyle, installRegionKeys, markRegion, spokenChar, spokenText } from './a11y';
 import { clipFromHtml } from './paste';
-import { fontFaces, fontFile, onFontsChange } from './fonts';
-import { IS_MAC, keyboardInset } from './platform';
-import { CanvasMeasurer, cssFont } from './measurer';
-import { type SpellChecker, type SpelledWord, wordsToCheck } from './spellcheck';
-import { type Theme, applyTheme, inkOn } from './theme';
+import { fontFaces, onFontsChange } from './fonts';
+import { documentPdf } from './pdfexport';
+import { IS_MAC } from './platform';
+import { CanvasMeasurer } from './measurer';
+import type { SpellChecker } from './spellcheck';
+import { Spelling } from './spelling';
+import { Painter } from './painter';
+import { Keys } from './keys';
+import { Pointer } from './pointer';
+import { type Theme, applyTheme } from './theme';
 
 /** Someone else's caret on the document: who they are, and where their selection is. */
 export interface PeerCaret {
@@ -287,7 +263,10 @@ export const MIN_ZOOM = 0.25;
 export const MAX_ZOOM = 4;
 
 /** What the selection is in and typing goes to: the text of the document, its header or footer, or a note at the foot of a page. */
-export type EditArea = 'body' | 'header' | 'footer' | 'footnote' | 'textbox';
+export type EditArea = 'body' | 'header' | 'footer' | 'footnote' | 'endnote' | 'textbox';
+
+/** The areas that are a story of their own, by its id: a note at the foot of the page or at the end, and a text box. */
+export const ownStory = (area: EditArea): area is 'footnote' | 'endnote' | 'textbox' => area === 'footnote' || area === 'endnote' || area === 'textbox';
 
 interface Snapshot {
   doc: Doc;
@@ -297,32 +276,14 @@ interface Snapshot {
   areaNote?: string;
 }
 
-const PT_TO_PX = 4 / 3;
+export const PT_TO_PX = 4 / 3;
 
 function moveOffset(pos: Position, delta: number): Position {
   return { para: pos.para, offset: pos.offset + delta };
 }
-/** The variables of a header, a footer or a note as a page shows it, kept while it is the same: every page draws them again. */
-const shownVariables = new WeakMap<Story['paragraphs'], { range: Range }[]>();
-function variablesOf(story: Pick<Doc, 'paragraphs'>): { range: Range }[] {
-  let found = shownVariables.get(story.paragraphs);
-  if (!found) shownVariables.set(story.paragraphs, (found = [...findVariables(story), ...findBlockMarks(story)]));
-  return found;
-}
-
-/** The variables of paragraphs `first` to `last` only: each is inside one paragraph, and the others are on pages not drawn. */
-function variablesIn(story: Pick<Doc, 'paragraphs'>, [first, last]: [number, number]): { range: Range }[] {
-  const some = { paragraphs: story.paragraphs.slice(first, last + 1) };
-  const back = (pos: Position): Position => ({ ...pos, para: pos.para + first });
-  return [...findVariables(some), ...findBlockMarks(some)].map(({ range }) => ({ range: { from: back(range.from), to: back(range.to) } }));
-}
 
 const TYPING_MERGE_MS = 1000;
-/** How long after the last key the words not known yet are asked about. */
-const SPELL_WAIT_MS = 250;
-const SCROLL_MARGIN = 24;
-/** How the key that follows a link is written: the command key, or Ctrl where there is none. */
-const MOD_KEY = IS_MAC ? '⌘' : 'Ctrl';
+export const SCROLL_MARGIN = 24;
 /** The space around and between the pages, in CSS pixels; it does not grow with the zoom. */
 const PAGE_GAP = 24;
 /** The same in a window as narrow as a phone's, where every pixel beside the page is one less of it. */
@@ -330,48 +291,14 @@ const NARROW_GAP = 8;
 const NARROW_WINDOW = 600;
 /** How much of a wheel turn doubles the zoom, with Ctrl or a pinch. */
 const WHEEL_ZOOM = 300;
-/** The tag on the edge of the header or the footer while it is being edited. */
-const MAX_FIND_MARKS = 400;
-/** How near the edge of a column, in pixels, the pointer takes hold of it. */
-const COLUMN_GRIP = 3;
-/** How near the bottom right corner of a table, in pixels, it can be taken to make the whole table larger or smaller. */
-const TABLE_GRIP = 6;
-/** The smallest a picture is dragged to, in points, and how far a press must move to become a drag. */
-const MIN_PICTURE = 8;
-const DRAG_START = 4;
-/** The longest side, in pixels, a picture keeps in a PDF. */
-const MAX_PDF_PIXELS = 2400;
-/** How far into the left margin, in points, the bar beside a line with a tracked change goes. */
-const CHANGE_BAR_GAP = 14;
 const STYLE_ID = 'dx-editor-style';
-/**
- * What the hidden field the keyboard writes to always holds, ahead of what is
- * typed: a character that shows nothing. An on-screen keyboard says nothing
- * of a Backspace in an empty field; with this in it, it takes the character
- * away, and that is how the key is known.
- */
-const INPUT_MARK = '\u200B';
 /** The keys that turn the mode for screen readers on and off, as in Google Docs. */
 const READER_KEYS = IS_MAC ? '⌘⌥Z' : 'Ctrl+Alt+Z';
 /** How many editors were made, so that the ids of each are its own. */
 let editors = 0;
-/** A finger held still this long selects the word under it; one that moves this far, in pixels, is scrolling. */
-const HOLD_MS = 450;
-const TOUCH_SLOP = 10;
-/** What this editor puts on the clipboard for itself: the copied text, whole, with its formatting. */
-const CLIP_TYPE = 'application/x-rebodocs+json';
-/** Taps this close together, in time and in pixels, count as one: the second selects a word, the third a paragraph. */
-const TAP_AGAIN_MS = 350;
-const TAP_AGAIN_PX = 28;
-/** How long the handle under the caret stays after a tap. */
-const CARET_HANDLE_MS = 4000;
-/** How near the edge of the window, in pixels, dragging a handle scrolls it, and how fast. */
-const HANDLE_SCROLL_EDGE = 44;
-const HANDLE_SCROLL_STEP = 14;
 /** The width, in points, of the margin the notes are shown in beside each page. */
-const NOTE_MARGIN = 170;
-/** With the text as wide as the window: the room on each side of it, in points, and how far its size goes. */
-const FLOW_MARGIN = 12;
+export const NOTE_MARGIN = 170;
+/** With the text as wide as the window: how far its size goes. */
 const FLOW_MIN_ZOOM = 0.6;
 const FLOW_MAX_ZOOM = 3;
 
@@ -484,11 +411,10 @@ export class Editor {
   view: ViewMode = 'column';
   /** Whether the notes are shown in a margin beside the pages. */
   showNotes = false;
-  private marginEls: HTMLElement[] = [];
   /** Set while the zoom follows the size of the window. */
   fit: ZoomFit | undefined;
   /** Set while nothing typed or done may change the document. */
-  private locked = false;
+  /** @internal */ locked = false;
   /** Set while Delete is being done: a caret goes after what it takes out, which stays while changes are tracked. */
   private forward = false;
   /** Whether typing "# ", "- " or **text** formats as Markdown would. */
@@ -515,7 +441,7 @@ export class Editor {
     this.languageTag = tag;
     this.syncLanguage();
     // Spelled in another language, the words are another matter.
-    if (this.speller) this.renderSelection();
+    if (this.spelling.checker) this.painter.renderSelection();
   }
 
   private languageTag: string | undefined;
@@ -538,7 +464,7 @@ export class Editor {
     if (!tag || tag === this.textLanguage) return;
     this.chosenLanguage = tag;
     this.syncLanguage();
-    if (this.speller) this.renderSelection();
+    if (this.spelling.checker) this.painter.renderSelection();
     this.emit();
   }
 
@@ -560,73 +486,46 @@ export class Editor {
   /** Where the selection is. In the header or the footer, the commands act on its text. */
   area: EditArea = 'body';
   /** The page whose header or footer shows the caret; every page has the same one. */
-  private areaPage = 0;
+  /** @internal */ areaPage = 0;
   /** The note at the foot of the page whose text the caret is in, by its id. */
-  private areaNote: string | undefined;
+  /** @internal */ areaNote: string | undefined;
   private textView: { doc: Doc; part: StoryPart; view: Doc } | undefined;
   /** What is being searched for, and where it is found in the text the selection is in. */
   private finding: { query: string; options: FindOptions } | undefined;
-  private found: Range[] = [];
-  /** A drag under way that is not a selection: the edge of a column, the corner of a picture, or a picture. */
-  private columnDrag: { table: number; boundary: number; startX: number; scale: number; guide: HTMLElement } | undefined;
-  /** The bottom edge of a table row being dragged: the row, how tall it is drawn, and the line that shows where it goes. */
-  private rowDrag: { table: number; row: number; height: number; startY: number; scale: number; guide: HTMLElement } | undefined;
-  /** The corner of a table being dragged: the table, where it is on the page in pixels, and the box that shows its new size. */
-  private tableDrag: { table: number; startX: number; startY: number; width: number; height: number; guide: HTMLElement } | undefined;
-  private pictureResize: { pos: Position; corner: string; startX: number; box: Rect; frame: HTMLElement; width: number; height: number; max: number; floating: boolean } | undefined;
-  /** A floating picture being dragged to another place on its page. */
-  private floatDrag: { pos: Position; x: number; y: number; active: boolean; box: Rect } | undefined;
-  private pictureDrag: { from: Position; x: number; y: number; active: boolean; to?: Position } | undefined;
+  /** @internal */ found: Range[] = [];
 
-  private measurer = new CanvasMeasurer();
-  private layoutCache: LayoutCache = createLayoutCache();
+  /** @internal */ measurer = new CanvasMeasurer();
+  /** @internal */ layoutCache: LayoutCache = createLayoutCache();
   /** The lines of the paragraphs at the width of the window, kept apart from those at the width of the page. */
-  private flowCache: LayoutCache = createLayoutCache();
-  private flowWidth = 0;
+  /** @internal */ flowCache: LayoutCache = createLayoutCache();
+  /** @internal */ flowWidth = 0;
   /** The room around and between the pages, in pixels: less of it in a narrow window. */
   private gap = PAGE_GAP;
   /** The pages of the document while it is not shown in them, worked out when something asks. */
-  private pagedView: { doc: Doc; layout: Layout } | undefined;
+  /** @internal */ pagedView: { doc: Doc; layout: Layout } | undefined;
   /** The zoom the pages had before the text was set to the window, to go back to. */
   private pagedZoom: { zoom: number; fit: ZoomFit | undefined } | undefined;
-  private root: HTMLElement;
-  private pagesEl: HTMLElement;
-  private input: HTMLTextAreaElement;
-  private caretEl: HTMLElement;
-  private pageEls: HTMLElement[] = [];
-  /** Inside each page element, what holds its contents at their real size, scaled by the zoom. */
-  private sheetEls: HTMLElement[] = [];
+  /** @internal */ root: HTMLElement;
+  /** @internal */ pagesEl: HTMLElement;
+  /** @internal */ input: HTMLTextAreaElement;
+  /** @internal */ caretEl: HTMLElement;
+  /** @internal */ pageEls: HTMLElement[] = [];
   private resizeObserver: ResizeObserver;
-  private selLayers: HTMLElement[] = [];
-  /** What each page element currently shows: the line boxes and where they sit, and the table cells. */
-  private painted: ({ lines: { raw: object; y: number; turn?: Turn }[]; cells: CellBox[]; floats: number; rules: string } | undefined)[] = [];
-  /**
-   * The pages that have their text in the page, from the first to the last: those in view and a screen
-   * either side. The others are boxes of their size, empty until they come near, so a long document
-   * costs what the part of it in view costs.
-   */
-  private drawn: [number, number] = [0, -1];
-  // --- Spelling ---
-  private speller: SpellChecker | undefined;
-  /** What the dictionary said of each word, by the language it was asked in. */
-  private spelled = new Map<string, Map<string, boolean>>();
-  /** Words seen on the pages drawn and not yet asked about, and whether a question is on its way. */
-  private spellWaiting = new Set<string>();
-  private spellAsking = false;
-  private spellTimer = 0;
-  /** Words the person said to leave alone in this document. */
-  private spellIgnored = new Set<string>();
-  /** The suggestions for each word, once asked. */
-  private spellSuggestions = new Map<string, Promise<string[]>>();
-  /** Where the caret was left by typing: the word it ends is not marked until it is finished. */
-  private typedAt: Position | undefined;
-  /** Every page drawn, whatever is in view: to print them. */
-  private drawAll = false;
-  private scrollFrame = 0;
-  /** Object URLs of the pictures of the loaded document, by the part they are in and their XML. */
-  private imageUrls = new Map<string, string | null>();
-  /** Fonts the loaded document carries with it, registered with the page while it is open. */
-  private fontFaces: FontFace[] = [];
+  /** What is drawn: the pages near the view, and over them the selection, the caret and the others. */
+  /** @internal */ readonly painter = new Painter(this);
+  /** The hidden field the keys, typed text and the clipboard go to. */
+  private readonly keys = new Keys(this);
+  /** The mouse and the fingers on the pages. */
+  /** @internal */ readonly pointer = new Pointer(this);
+  /** The words spelled wrong in what is shown. */
+  /** @internal */ spelling = new Spelling({
+    language: () => this.textLanguage,
+    paragraphs: () => this.text.paragraphs,
+    checking: () => this.area === 'body' && !this.locked,
+    underline: (range) => this.painter.underline(range),
+    redraw: () => this.painter.renderSelection(),
+    connected: () => this.root.isConnected,
+  });
 
   private undoStack: Snapshot[] = [];
   private redoStack: Snapshot[] = [];
@@ -639,58 +538,39 @@ export class Editor {
    */
   history: { undo(): void; redo(): void; readonly canUndo: boolean; readonly canRedo: boolean } | undefined;
   /** Where the other people working on the document are. */
-  private peers: PeerCaret[] = [];
+  /** @internal */ peers: PeerCaret[] = [];
   private lastEdit = { kind: '', time: 0 };
   /** Formatting toggled with a collapsed selection, applied to the next typed text. */
-  private pendingProps: RunProps | null = null;
+  /** @internal */ pendingProps: RunProps | null = null;
   /** Column kept while moving vertically. */
-  private goalX: number | null = null;
-  private composing = false;
-  /** Set by the keys of a paste without formatting, for the paste that follows them. */
-  private plainPaste = false;
+  /** @internal */ goalX: number | null = null;
+  /** @internal */ composing = false;
   /** What a screen reader is told. */
-  private announcer!: Announcer;
+  /** @internal */ announcer!: Announcer;
   /** The keys to leave the document, for a screen reader. */
   private hint = document.createElement('div');
-  /** How the last key moved the caret, for saying what it moved over. */
-  private moved: 'char' | 'word' | 'line' | 'all' | undefined;
-  /** The page last said, so that a new one is said once. */
-  private spokenPage = -1;
   /**
    * With the mode for screen readers on: the paragraph the caret is in, as the
    * hidden field holds it, and the part of it selected there. Off, the field
    * holds only a mark, and what the caret meets is said by the editor.
    */
-  private mirror: { text: string; start: number; end: number } | undefined;
-  /** What of the text in the hidden field is already in the document: a word still being composed, as far as it has got. */
-  private typed = '';
-  /** Where the caret was left by what was typed, which is where the rest of it goes. */
-  private typedEnd: Position | undefined;
-  private dragging = false;
+  /** @internal */ mirror: { text: string; start: number; end: number } | undefined;
   /** True from a touch of the screen until the mouse is used: the selection then has handles to drag it by. */
   byTouch = false;
   /** Called when a selection was made by touch, for what offers something to do with it. */
   onTouchSelect: (() => void) | undefined;
   /** Called when a word spelled wrong is pressed with the other button: the caret is in it, for its suggestions to be offered. */
   onSpellingMenu: (() => void) | undefined;
-  private touch: { x: number; y: number; moved: boolean; held: boolean; timer: number } | undefined;
-  private pinch: { distance: number; zoom: number; frame: number; next: number; x: number; y: number } | undefined;
-  private lastTap = { time: 0, x: 0, y: 0, count: 0 };
-  /** The handles of the selection: at its anchor and at its focus, and one under the caret. */
-  private handles: Record<'anchor' | 'focus' | 'caret', HTMLElement>;
-  private handleLayer = document.createElement('div');
-  private caretHandleUntil = 0;
-  private caretHandleTimer = 0;
   private listeners = new Set<() => void>();
   /** Its own labels over the pages are written again when the language changes. */
   private stopLocale = onLocaleChange(() => {
     this.input.setAttribute('aria-label', t('a11y.document'));
     this.hint.textContent = t('a11y.hint', { reader: READER_KEYS });
     speaks(this.hint);
-    this.renderSelection();
+    this.painter.renderSelection();
   });
   /** A font the application gives changes how wide its text is: everything is measured again. */
-  private stopFonts = onFontsChange(() => this.refont());
+  private stopFonts = onFontsChange(() => this.painter.refont());
 
   constructor(container: HTMLElement, doc: Doc = createDoc()) {
     injectStyle();
@@ -714,9 +594,9 @@ export class Editor {
     this.caretEl.className = 'dx-caret';
     this.pagesEl.append(this.input, this.caretEl);
     // In a layer as large as the pages and no larger: a handle at their edge does not make them wider.
-    this.handleLayer.className = 'dx-handles';
-    this.pagesEl.appendChild(this.handleLayer);
-    this.handles = { anchor: this.handle('anchor'), focus: this.handle('focus'), caret: this.handle('caret') };
+    this.pointer.handleLayer.className = 'dx-handles';
+    this.pagesEl.appendChild(this.pointer.handleLayer);
+    this.pointer.handles = { anchor: this.pointer.handle('anchor'), focus: this.pointer.handle('focus'), caret: this.pointer.handle('caret') };
     this.root.appendChild(this.pagesEl);
     this.announcer = createAnnouncer(this.root);
     // What the keys to leave the document are, said when it is reached.
@@ -729,29 +609,15 @@ export class Editor {
     this.input.setAttribute('aria-describedby', this.hint.id);
     markRegion(this.root, 'document', () => this.input);
     installRegionKeys();
-    this.resetInput();
+    this.keys.resetInput();
 
-    this.pagesEl.addEventListener('mousedown', this.onMouseDown);
-    window.addEventListener('mousemove', this.onMouseMove);
-    window.addEventListener('mouseup', this.onMouseUp);
-    this.input.addEventListener('keydown', this.onKeyDown);
-    this.input.addEventListener('input', this.onInput);
-    this.input.addEventListener('compositionstart', () => (this.composing = true));
-    this.input.addEventListener('compositionend', this.onCompositionEnd);
-    this.pagesEl.addEventListener('touchstart', this.onTouchStart, { passive: false });
-    this.pagesEl.addEventListener('touchmove', this.onTouchMove, { passive: false });
-    this.pagesEl.addEventListener('touchend', this.onTouchEnd, { passive: false });
-    this.pagesEl.addEventListener('touchcancel', this.onTouchCancel);
-    // Safari's own pinch, which would make the whole page of the browser larger.
-    this.pagesEl.addEventListener('gesturestart', (e) => e.preventDefault());
-    window.visualViewport?.addEventListener('resize', this.onViewport);
-    this.input.addEventListener('copy', this.onCopy);
-    this.input.addEventListener('cut', this.onCut);
-    this.input.addEventListener('paste', this.onPaste);
+    this.pointer.listen();
+    this.keys.listen();
+    window.visualViewport?.addEventListener('resize', this.painter.onViewport);
     this.input.addEventListener('focus', () => this.root.classList.add('dx-focused'));
     this.input.addEventListener('blur', () => this.root.classList.remove('dx-focused'));
     this.root.addEventListener('wheel', this.onWheel, { passive: false });
-    this.root.addEventListener('scroll', this.onScroll, { passive: true });
+    this.root.addEventListener('scroll', this.painter.onScroll, { passive: true });
     this.pagesEl.addEventListener('contextmenu', this.onContextMenu);
     this.resizeObserver = new ResizeObserver(() => {
       this.fitGap();
@@ -762,15 +628,15 @@ export class Editor {
         this.pageEls.forEach((_, i) => this.sizePage(i));
         return;
       }
-      this.render();
-      this.renderSelection();
+      this.painter.render();
+      this.painter.renderSelection();
       this.emit();
     });
     this.resizeObserver.observe(this.root);
 
     this.fitGap();
-    this.render();
-    this.renderSelection();
+    this.painter.render();
+    this.painter.renderSelection();
   }
 
   private fitGap(): void {
@@ -786,25 +652,20 @@ export class Editor {
     this.announcer.destroy();
     dropParagraphDialog(this);
     this.stopFonts();
-    this.hideNoteTip();
-    window.removeEventListener('mousemove', this.onMouseMove);
-    window.removeEventListener('mouseup', this.onMouseUp);
-    window.visualViewport?.removeEventListener('resize', this.onViewport);
-    window.clearTimeout(this.touch?.timer);
-    window.clearTimeout(this.caretHandleTimer);
-    if (this.pinch) cancelAnimationFrame(this.pinch.frame);
+    this.pointer.stop();
+    window.visualViewport?.removeEventListener('resize', this.painter.onViewport);
     this.root.removeEventListener('wheel', this.onWheel);
-    this.root.removeEventListener('scroll', this.onScroll);
-    cancelAnimationFrame(this.scrollFrame);
-    window.clearTimeout(this.spellTimer);
+    this.root.removeEventListener('scroll', this.painter.onScroll);
+    cancelAnimationFrame(this.painter.scrollFrame);
+    this.spelling.stop();
     this.resizeObserver.disconnect();
-    this.releaseImages();
-    for (const face of this.fontFaces) document.fonts.delete(face);
+    this.painter.releaseImages();
+    for (const face of this.painter.fontFaces) document.fonts.delete(face);
     this.pagesEl.remove();
     this.root.classList.remove('dx-editor', 'dx-focused', 'dx-touch', 'dx-theme-dark', 'dx-theme-auto');
   }
 
-  private themeName: Theme = 'light';
+  /** @internal */ themeName: Theme = 'light';
   /**
    * The colours of the interface: 'light', 'dark', or 'auto' for the one the
    * system is set to. The bars and menus made for this editor take it too,
@@ -852,13 +713,13 @@ export class Editor {
     if (on === this.screenReader) return;
     this.mirror = on ? { text: '', start: 0, end: 0 } : undefined;
     this.root.classList.toggle('dx-reader', on);
-    this.resetInput();
+    this.keys.resetInput();
     this.announcer.say(t(on ? 'a11y.readerOn' : 'a11y.readerOff'), true);
     this.emit();
   }
 
   /** Puts in the hidden field the paragraph the caret is in, and the selection in it, when the mode for screen readers is on. */
-  private syncMirror(): void {
+  /** @internal */ syncMirror(): void {
     if (!this.mirror || this.composing) return;
     const { anchor, focus } = this.selection;
     const text = paragraphText(this.text.paragraphs[focus.para]);
@@ -876,7 +737,7 @@ export class Editor {
    * place of the selection there, or, when something else changed, as the
    * corrections of a keyboard do, what differs from what it held.
    */
-  private readerInput(): void {
+  /** @internal */ readerInput(): void {
     const mirror = this.mirror;
     if (!mirror || this.composing) return;
     const { text: was, start, end } = mirror;
@@ -928,7 +789,7 @@ export class Editor {
     this.root.classList.toggle('dx-readonly', on);
   }
 
-  // --- How the changes are shown --------------------------------------------
+  // --- How the changes are shown ------------------------------------------
 
   private changesShown: ChangesView = 'all';
   private shownCache?: { doc: Doc; view: ChangesView; shown: Doc };
@@ -951,13 +812,13 @@ export class Editor {
     const shown = this.shown;
     if (this.area !== 'body') this.setArea('body');
     this.selection = { anchor: clampPosition(shown, this.selection.anchor), focus: clampPosition(shown, this.selection.focus) };
-    this.render();
-    this.renderSelection();
+    this.painter.render();
+    this.painter.renderSelection();
     this.emit();
   }
 
   /** The document as it is shown: itself, or with its changes decided as `changesView` says. */
-  private get shown(): Doc {
+  /** @internal */ get shown(): Doc {
     if (this.changesShown === 'all') return this.doc;
     if (this.shownCache?.doc !== this.doc || this.shownCache.view !== this.changesShown) {
       this.shownCache = { doc: this.doc, view: this.changesShown, shown: decideAllRevisions(this.doc, this.changesShown === 'accepted') };
@@ -968,8 +829,8 @@ export class Editor {
   // --- Document -----------------------------------------------------------
 
   load(doc: Doc): void {
-    this.releaseImages();
-    this.painted = [];
+    this.painter.releaseImages();
+    this.painter.painted = [];
     this.doc = doc;
     this.finding = undefined;
     this.found = [];
@@ -977,7 +838,7 @@ export class Editor {
     this.areaPage = 0;
     this.areaNote = undefined;
     this.syncArea();
-    this.loadEmbeddedFonts();
+    this.painter.loadEmbeddedFonts();
     // A language chosen for the document before is not this one's.
     this.chosenLanguage = undefined;
     this.startLanguage = withRegion(getLocale());
@@ -987,8 +848,8 @@ export class Editor {
     this.redoStack = [];
     this.pendingProps = null;
     this.goalX = null;
-    this.render();
-    this.renderSelection();
+    this.painter.render();
+    this.painter.renderSelection();
     this.root.scrollTop = 0;
     this.emit();
   }
@@ -1021,7 +882,7 @@ export class Editor {
    * what is being looked at stays where it is on the screen, unless `reveal`.
    */
   replace(doc: Doc, selection: Selection, reveal = false): void {
-    const before = this.caretBox().top - this.root.scrollTop;
+    const before = this.painter.caretBox().top - this.root.scrollTop;
     const inView = before >= 0 && before <= this.root.clientHeight;
     const scroll = this.root.scrollTop;
     this.doc = doc;
@@ -1029,7 +890,7 @@ export class Editor {
     this.afterDocChange(reveal);
     if (reveal) return;
     // Lines that came or went above the caret would move it under the person's eyes.
-    this.root.scrollTop = inView ? scroll + (this.caretBox().top - scroll - before) : scroll;
+    this.root.scrollTop = inView ? scroll + (this.painter.caretBox().top - scroll - before) : scroll;
   }
 
   /**
@@ -1042,11 +903,13 @@ export class Editor {
       if (this.area !== 'body') this.setArea('body');
     } else {
       const note = footnoteIdOf(part);
+      const end = endnoteIdOf(part);
       const box = textBoxIdOf(part);
       if (note !== undefined) this.setArea('footnote', undefined, note);
+      else if (end !== undefined) this.setArea('endnote', undefined, end);
       else if (box !== undefined) this.setArea('textbox', undefined, box);
       else {
-        const kind = storyKind(part as Exclude<StoryPart, FootnotePart | TextBoxPart>);
+        const kind = storyKind(part as Exclude<StoryPart, FootnotePart | EndnotePart | TextBoxPart>);
         const page = this.paged.pages.findIndex((_, i) => storyPart(this.paged, kind, i) === part);
         if (page < 0) return;
         this.setArea(kind, page);
@@ -1172,13 +1035,18 @@ export class Editor {
   setPeers(peers: PeerCaret[]): void {
     if (!peers.length && !this.peers.length) return;
     this.peers = peers;
-    this.renderSelection();
+    this.painter.renderSelection();
   }
 
   /** The page each paragraph of `doc` would start on, from 1, laid out as this editor lays documents out. */
   pagesOf(doc: Doc): (para: number) => number {
-    const { lines, paraFirstLine } = doc === this.doc ? this.paged : layoutDocument(doc, this.measurer);
+    const { lines, paraFirstLine } = this.layoutOf(doc);
     return (para) => (lines[paraFirstLine[para]]?.page ?? 0) + 1;
+  }
+
+  /** `doc` laid out in pages as this editor lays documents out: the one it shows, for the document it has open. */
+  layoutOf(doc: Doc): Layout {
+    return doc === this.doc ? this.paged : layoutDocument(doc, this.measurer);
   }
 
   loadDocx(data: ArrayBuffer | Uint8Array): void {
@@ -1217,8 +1085,8 @@ export class Editor {
     const flow = this.view === 'flow';
     if (flow) this.setView('column');
     // Every page, not only those near the view.
-    this.drawAll = true;
-    this.paint();
+    this.painter.drawAll = true;
+    this.painter.paint();
     const holder = document.createElement('div');
     holder.className = 'dx-print';
     const style = document.createElement('style');
@@ -1231,10 +1099,10 @@ export class Editor {
       return { width, height, name: sizes.get(key)! };
     };
     const first = sizeOf(0);
-    this.sheetEls.forEach((_, i) => sizeOf(i));
+    this.painter.sheetEls.forEach((_, i) => sizeOf(i));
     style.textContent = `@page{size:${first.width}pt ${first.height}pt;margin:0}` + [...sizes].map(([size, name]) => `@page ${name}{size:${size};margin:0}`).join('');
     holder.appendChild(style);
-    for (const [i, sheet] of this.sheetEls.entries()) {
+    for (const [i, sheet] of this.painter.sheetEls.entries()) {
       const { width, height, name } = sizeOf(i);
       const page = document.createElement('div');
       page.className = 'dx-print-page';
@@ -1249,9 +1117,9 @@ export class Editor {
       page.appendChild(copy);
       holder.appendChild(page);
     }
-    this.drawAll = false;
+    this.painter.drawAll = false;
     if (flow) this.setView('flow');
-    else this.paint();
+    else this.painter.paint();
     document.body.appendChild(holder);
     window.addEventListener('afterprint', () => holder.remove(), { once: true });
     window.print();
@@ -1266,7 +1134,7 @@ export class Editor {
    * the window, what it would show. The pages are what is printed, numbered
    * and counted, whatever is on the screen.
    */
-  private get paged(): Layout {
+  /** @internal */ get paged(): Layout {
     if (this.view !== 'flow') return this.layout;
     const shown = this.shown;
     if (this.pagedView?.doc !== shown) this.pagedView = { doc: shown, layout: layoutDocument(shown, this.measurer, this.layoutCache) };
@@ -1274,7 +1142,7 @@ export class Editor {
   }
 
   /** How wide the window is, in points of the document at the size it is shown. */
-  private windowWidth(): number {
+  /** @internal */ windowWidth(): number {
     return Math.floor(this.root.clientWidth / (PT_TO_PX * this.zoom)) || this.doc.page.width;
   }
 
@@ -1318,12 +1186,12 @@ export class Editor {
 
   /** True when the selection is one picture and nothing else. */
   get pictureSelected(): boolean {
-    return !!this.selectedPicture();
+    return !!this.painter.selectedPicture();
   }
 
   /** What the selected picture is, for whoever cannot see it, as Word keeps it ("Alt Text"): what a screen reader says of it. Undefined without one. */
   get pictureDescription(): string | undefined {
-    const picture = this.selectedPicture();
+    const picture = this.painter.selectedPicture();
     if (!picture) return undefined;
     let offset = 0;
     for (const run of this.text.paragraphs[picture.pos.para].runs) {
@@ -1335,7 +1203,7 @@ export class Editor {
 
   /** Gives the selected picture a description for whoever cannot see it, or takes it away with an empty one. Not a change to track: Word does not. */
   setPictureDescription(text: string): void {
-    const picture = this.selectedPicture();
+    const picture = this.painter.selectedPicture();
     if (!picture || this.locked) return;
     const doc = setAltText(this.text, picture.pos, text);
     if (doc !== this.text) this.commit(doc, this.selection, '', false);
@@ -1343,7 +1211,7 @@ export class Editor {
 
   /** Gives the selected picture `fraction` of the width of the column it is in, keeping its shape. */
   fitSelectedPicture(fraction: number): void {
-    const picture = this.selectedPicture();
+    const picture = this.painter.selectedPicture();
     // The size a picture has is the one it has on its page: it is given another there.
     if (!picture || !(fraction > 0) || this.view === 'flow') return;
     const column = this.textColumn();
@@ -1359,13 +1227,13 @@ export class Editor {
    * picture is selected.
    */
   get pictureWrap(): PictureWrap | undefined {
-    const picture = this.selectedPicture();
+    const picture = this.painter.selectedPicture();
     return picture && pictureWrap(this.text, picture.pos);
   }
 
   /** Says how the selected picture sits in the text. It stays where it is on the page, as far as it can. */
   setPictureWrap(wrap: PictureWrap): void {
-    const picture = this.selectedPicture();
+    const picture = this.painter.selectedPicture();
     if (!picture || this.view === 'flow') return;
     let doc = setPictureWrap(this.text, picture.pos, wrap);
     if (doc === this.text) return;
@@ -1387,7 +1255,7 @@ export class Editor {
   }
 
   /** Where the floating picture anchored at `pos` of `text`, a changed copy of what is being edited, would be drawn. */
-  private floatBoxIn(text: Doc, pos: Position): Rect | undefined {
+  /** @internal */ floatBoxIn(text: Doc, pos: Position): Rect | undefined {
     const layout = layoutDocument(this.merged(text), this.measurer);
     // In a header or a footer, the one of the page being edited: its positions are those of the page.
     const flow = (this.areaKey && bandLayout(layout, this.areaKey, this.areaPage)) || layout;
@@ -1396,11 +1264,6 @@ export class Editor {
       if (float) return { page: this.pageOf(page.index), x: float.x, y: float.y, width: float.width, height: float.height };
     }
     return undefined;
-  }
-
-  /** The page of the section table `table` is in. */
-  private pageOfTable(table: number): PageSetup {
-    return pageAt(this.doc, Math.max(0, this.doc.paragraphs.findIndex((p) => p.cell?.table === table)));
   }
 
   /** How many sections the document is set out in. */
@@ -1463,6 +1326,28 @@ export class Editor {
     if (area !== 'body') this.setArea(area, page);
   }
 
+  /** Where the notes at the end go: after the last line of the document, or after that of each section. */
+  get endnotesAt(): 'document' | 'sections' {
+    return this.doc.endnotesAt ?? 'document';
+  }
+
+  /** Sets the notes at the end out at the end of the document, or at the end of each section. */
+  setEndnotesAt(at: 'document' | 'sections'): void {
+    const doc = setEndnotesAt(this.doc, at);
+    if (doc !== this.doc) this.commitDoc(doc, this.selection);
+  }
+
+  /** How the section numbers the notes of `kind` its text refers to: undefined for 1, 2, 3 at the foot of the page and i, ii, iii at the end, the count going on from the section before. */
+  noteNumbering(kind: 'footnote' | 'endnote'): NoteNumbering | undefined {
+    return noteNumberingOf(this.doc, kind, this.sectionIndex);
+  }
+
+  /** Numbers the notes of `kind` of the section as `numbering` says: their format, the number they start at, and whether the count starts again in it, or on each page for notes at the foot of the page. */
+  setNoteNumbering(kind: 'footnote' | 'endnote', numbering: NoteNumbering | undefined): void {
+    const doc = setNoteNumbering(this.doc, kind, this.sectionIndex, numbering);
+    if (doc !== this.doc) this.commitDoc(doc, this.selection);
+  }
+
   /** True when the caret is in a paragraph with nothing in it. */
   get paragraphEmpty(): boolean {
     return this.collapsed && this.text.paragraphs[this.selection.focus.para].runs.every((run) => !run.text);
@@ -1507,10 +1392,10 @@ export class Editor {
     this.pagesEl.classList.toggle('dx-grid', view === 'grid');
     this.pagesEl.classList.toggle('dx-flow', view === 'flow');
     if (this.fit) this.zoom = this.clampZoom(this.fitZoom(this.fit));
-    if (flowed) this.render();
+    if (flowed) this.painter.render();
     this.pageEls.forEach((_, i) => this.sizePage(i));
-    this.renderSelection();
-    this.scrollCaretIntoView();
+    this.painter.renderSelection();
+    this.painter.scrollCaretIntoView();
     this.emit();
   }
 
@@ -1521,8 +1406,8 @@ export class Editor {
     // The pages share the window with the margin: a zoom that follows it is worked out again.
     if (this.fit) this.zoom = this.clampZoom(this.fitZoom(this.fit));
     this.pageEls.forEach((_, i) => this.sizePage(i));
-    this.renderSelection();
-    this.scrollCaretIntoView();
+    this.painter.renderSelection();
+    this.painter.scrollCaretIntoView();
     this.emit();
   }
 
@@ -1530,8 +1415,8 @@ export class Editor {
    * Changes the zoom keeping under a point of the window what was under it:
    * what two fingers, or the pointer with the wheel, are on.
    */
-  private zoomAt(zoom: number, clientX: number, clientY: number): void {
-    const page = this.pageEls[this.pageAt(clientY)];
+  /** @internal */ zoomAt(zoom: number, clientX: number, clientY: number): void {
+    const page = this.pageEls[this.pointer.pageAt(clientY)];
     const was = page.getBoundingClientRect();
     const fx = (clientX - was.left) / was.width;
     const fy = (clientY - was.top) / was.height;
@@ -1542,13 +1427,13 @@ export class Editor {
     this.root.scrollTop += now.top + fy * now.height - clientY;
   }
 
-  private clampZoom(zoom: number): number {
+  /** @internal */ clampZoom(zoom: number): number {
     const [min, max] = this.view === 'flow' ? [FLOW_MIN_ZOOM, FLOW_MAX_ZOOM] : [MIN_ZOOM, MAX_ZOOM];
     return Math.min(max, Math.max(min, Number.isFinite(zoom) ? zoom : 1));
   }
 
   /** The zoom at which the pages across the window, or one whole page, just fit in it. */
-  private fitZoom(fit: ZoomFit): number {
+  /** @internal */ fitZoom(fit: ZoomFit): number {
     // The page the caret is on, or the widest when they are all to fit across.
     const { height } = this.setupOf(this.currentPage - 1);
     const width = fit === 'width' ? Math.max(...this.layout.pages.map((_, i) => this.setupOf(i).width)) : this.setupOf(this.currentPage - 1).width;
@@ -1567,24 +1452,24 @@ export class Editor {
     const middle = (scrollTop + clientHeight / 2) / scrollHeight;
     this.zoom = next;
     // Text as wide as the window is broken into other lines at another size.
-    if (this.view === 'flow') this.render();
+    if (this.view === 'flow') this.painter.render();
     else this.pageEls.forEach((_, i) => this.sizePage(i));
-    this.renderSelection();
+    this.painter.renderSelection();
     this.root.scrollTop = middle * this.root.scrollHeight - clientHeight / 2;
     this.emit();
     return true;
   }
 
   /** The size and margins of page `i` of what is shown: those of its section. */
-  private setupOf(i: number): PageSetup {
+  /** @internal */ setupOf(i: number): PageSetup {
     return this.layout.pages[i]?.setup ?? this.layout.page;
   }
 
-  private sizePage(i: number): void {
+  /** @internal */ sizePage(i: number): void {
     const { width, height } = this.setupOf(i);
     this.pageEls[i].style.width = `${width * this.zoom}pt`;
     this.pageEls[i].style.height = `${height * this.zoom}pt`;
-    const sheet = this.sheetEls[i].style;
+    const sheet = this.painter.sheetEls[i].style;
     sheet.width = `${width}pt`;
     sheet.height = `${height}pt`;
     sheet.transform = this.zoom === 1 ? '' : `scale(${this.zoom})`;
@@ -1593,14 +1478,14 @@ export class Editor {
   }
 
   private onWheel = (e: WheelEvent): void => {
-    this.hideNoteTip();
+    this.pointer.hideNoteTip();
     // Ctrl and the wheel, which is also what a pinch on a trackpad sends.
     if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     this.zoomAt(this.zoom * Math.exp(-e.deltaY / WHEEL_ZOOM), e.clientX, e.clientY);
   };
 
-  // --- Header and footer ---------------------------------------------------
+  // --- Header and footer --------------------------------------------------
 
   /**
    * Moves the selection into the header or the footer, on `page` (counting
@@ -1611,9 +1496,9 @@ export class Editor {
   setArea(area: EditArea, page?: number, note?: string): void {
     if (this.view === 'flow' && area !== 'body') return;
     // A note is edited on the page its text starts on, unless another page that shows some of it is asked for; a text box, on one it is on.
-    const own = area === 'footnote' || area === 'textbox';
+    const own = ownStory(area);
     if (own && (note === undefined || this.notePage(note, page, area) === undefined)) return;
-    const at = own ? this.notePage(note!, page, area)! : Math.max(0, Math.min(page ?? this.currentPage - 1, this.pageCount - 1));
+    const at = own ? this.notePage(note!, page, area as 'footnote' | 'endnote' | 'textbox')! : Math.max(0, Math.min(page ?? this.currentPage - 1, this.pageCount - 1));
     if (area === this.area && (area === 'body' || at === this.areaPage) && (!own || note === this.areaNote)) return;
     this.dropEmptyStory();
     this.area = area;
@@ -1627,7 +1512,7 @@ export class Editor {
       this.areaNote = undefined;
     }
     this.syncArea();
-    this.render();
+    this.painter.render();
     this.refind();
     // Back in the text, the caret goes to the page that was being looked at.
     const first = area === 'body' ? this.paged.pages[at]?.lines[0] : undefined;
@@ -1638,7 +1523,7 @@ export class Editor {
   }
 
   /** The document the selection is in: the real one, or the header or footer seen as one. */
-  private get text(): Doc {
+  /** @internal */ get text(): Doc {
     const part = this.part;
     const doc = this.shown;
     if (!part) return doc;
@@ -1655,27 +1540,35 @@ export class Editor {
    * every page shows, or the first page's own when the document gives it one
    * and that is the page being edited.
    */
-  private get part(): StoryPart | undefined {
+  /** @internal */ get part(): StoryPart | undefined {
     if (this.area === 'footnote') return footnotePart(this.areaNote!);
+    if (this.area === 'endnote') return endnotePart(this.areaNote!);
     if (this.area === 'textbox') return textBoxPart(this.areaNote!);
     return this.area === 'body' ? undefined : storyPart(this.paged, this.area, this.areaPage);
   }
 
   /** What `bandLayout` knows the area being edited by, when it is not the text. */
-  private get areaKey(): 'header' | 'footer' | FootnotePart | TextBoxPart | undefined {
-    return this.area === 'body' ? undefined : this.area === 'footnote' ? footnotePart(this.areaNote!) : this.area === 'textbox' ? textBoxPart(this.areaNote!) : this.area;
+  private get areaKey(): 'header' | 'footer' | FootnotePart | EndnotePart | TextBoxPart | undefined {
+    if (this.area === 'body') return undefined;
+    if (this.area === 'footnote') return footnotePart(this.areaNote!);
+    if (this.area === 'endnote') return endnotePart(this.areaNote!);
+    return this.area === 'textbox' ? textBoxPart(this.areaNote!) : this.area;
   }
 
-  /** The page that shows note `id`, or text box `id`: `page` when it shows it, otherwise the first that does. */
-  private notePage(id: string, page?: number, area: 'footnote' | 'textbox' = 'footnote'): number | undefined {
-    const shows = (i: number) => (area === 'textbox' ? this.paged.pages[i]?.textBoxes?.some((box) => box.id === id) : this.paged.pages[i]?.footnotes?.notes.some((note) => note.id === id));
+  /** The page that shows note `id`, at the foot or at the end, or text box `id`: `page` when it shows it, otherwise the first that does. */
+  private notePage(id: string, page?: number, area: 'footnote' | 'endnote' | 'textbox' = 'footnote'): number | undefined {
+    const shows = (i: number) => {
+      const at = this.paged.pages[i];
+      if (area === 'textbox') return at?.textBoxes?.some((box) => box.id === id);
+      return (area === 'endnote' ? at?.endnotes : at?.footnotes)?.notes.some((note) => note.id === id);
+    };
     if (page !== undefined && shows(page)) return page;
     const first = this.paged.pages.findIndex((_, i) => shows(i));
     return first < 0 ? undefined : first;
   }
 
   /** The layout the selection is in: every page, or the header or footer of the page being edited. */
-  private get flow(): Layout {
+  /** @internal */ get flow(): Layout {
     return (this.areaKey && bandLayout(this.layout, this.areaKey, this.areaPage)) || this.layout;
   }
 
@@ -1696,7 +1589,7 @@ export class Editor {
    * differ in a header or footer with a page number, whose digits are not the
    * ones the document holds.
    */
-  private mapOffset(pos: Position, shown: boolean): Position {
+  /** @internal */ mapOffset(pos: Position, shown: boolean): Position {
     const story = this.part && storyOf(this.doc, this.part);
     if (!story) return pos;
     const model = story.paragraphs[pos.para];
@@ -1706,7 +1599,7 @@ export class Editor {
   }
 
   /** The page of the document a page of the flow is. */
-  private pageOf(flowPage: number): number {
+  /** @internal */ pageOf(flowPage: number): number {
     return this.area === 'body' ? flowPage : this.areaPage;
   }
 
@@ -1722,7 +1615,7 @@ export class Editor {
   private dropEmptyStory(): void {
     const part = this.part;
     // A note is there while its reference is, whatever it holds; and a text box while its drawing is.
-    if (!part || this.area === 'footnote' || this.area === 'textbox') return;
+    if (!part || ownStory(this.area)) return;
     const paragraphs = storyOf(this.doc, part)?.paragraphs ?? [];
     if (paragraphs.length !== 1 || paragraphs[0].origin !== undefined || paragraphs[0].runs.some((run) => run.text)) return;
     this.doc = withStory(this.doc, part, undefined);
@@ -1733,46 +1626,9 @@ export class Editor {
     this.root.classList.toggle('dx-editing', this.area === 'header' || this.area === 'footer');
     this.root.classList.toggle('dx-editing-header', this.area === 'header');
     this.root.classList.toggle('dx-editing-footer', this.area === 'footer');
-    this.root.classList.toggle('dx-editing-footnote', this.area === 'footnote');
+    // A note at the end is edited as one at the foot of the page is.
+    this.root.classList.toggle('dx-editing-footnote', this.area === 'footnote' || this.area === 'endnote');
     this.root.classList.toggle('dx-editing-textbox', this.area === 'textbox');
-  }
-
-  /** The text box under a point of the window, the one on top when several are, and whether the point is on its edge. */
-  private textBoxAt(clientX: number, clientY: number): { page: number; id: string; edge: boolean } | undefined {
-    const page = this.pageAt(clientY);
-    const boxes = this.layout.pages[page]?.textBoxes;
-    if (!boxes?.length) return undefined;
-    const rect = this.pageEls[page].getBoundingClientRect();
-    const scale = this.setupOf(page).width / rect.width;
-    const x = (clientX - rect.left) * scale;
-    const y = (clientY - rect.top) * scale;
-    // Within a few pixels of the line round it, at any zoom.
-    const near = 5 * scale;
-    const hit = [...boxes].reverse().find(({ frame: f }) => x >= f.x - near && x <= f.x + f.width + near && y >= f.y - near && y <= f.y + f.height + near);
-    if (!hit) return undefined;
-    const { frame: f } = hit;
-    const edge = x < f.x + near || x > f.x + f.width - near || y < f.y + near || y > f.y + f.height - near;
-    return { page, id: hit.id, edge };
-  }
-
-  /** Which page a point of the window is on, and which part of it: its header, its text or its footer. */
-  private zoneAt(clientY: number): { page: number; area: EditArea; note?: string } {
-    const page = this.pageAt(clientY);
-    if (this.view === 'flow') return { page, area: 'body' };
-    const rect = this.pageEls[page].getBoundingClientRect();
-    const { height, marginTop, marginBottom } = this.setupOf(page);
-    const y = (clientY - rect.top) * (height / rect.height);
-    const { header, footer, footnotes } = this.layout.pages[page];
-    // The notes at the foot of the page, from the line above them down: each as far down as its last line.
-    if (footnotes && y >= footnotes.rule.y) {
-      const note = footnotes.notes.find((_, k) => k === footnotes.notes.length - 1 || y < Math.max(...footnotes.notes[k + 1].lines.map((l) => l.y), 0));
-      const bottomOf = Math.max(...footnotes.notes.flatMap((n) => n.lines.map((l) => l.y + l.height)));
-      if (note && y <= bottomOf) return { page, area: 'footnote', note: note.id };
-    }
-    // A header taller than its margin reaches as far as its last line, and so does the footer.
-    const top = Math.max(marginTop, ...(header?.lines ?? []).map((l) => l.y + l.height));
-    const bottom = Math.min(height - marginBottom, ...(footer?.lines ?? []).map((l) => l.y));
-    return { page, area: y < top ? 'header' : y >= bottom ? 'footer' : 'body' };
   }
 
   /** The text selected, as plain text. */
@@ -1791,13 +1647,13 @@ export class Editor {
   }
 
   setSelection(anchor: Position, focus: Position = anchor): void {
-    this.typedAt = undefined;
+    this.spelling.typedAt = undefined;
     this.selection = { anchor: clampPosition(this.text, anchor), focus: clampPosition(this.text, focus) };
     this.pendingProps = null;
     this.goalX = null;
     this.lastEdit.kind = '';
-    this.renderSelection();
-    this.scrollCaretIntoView();
+    this.painter.renderSelection();
+    this.painter.scrollCaretIntoView();
     this.emit();
   }
 
@@ -1845,6 +1701,15 @@ export class Editor {
         this.emit();
       }
     }
+  }
+
+  /** A new line in the same paragraph, as Shift+Enter makes in Word: what `insertText('\n')` would make another paragraph. */
+  insertLineBreak(): void {
+    const range = this.range;
+    const { field: _, ...props } = this.pendingProps ?? this.activeRunProps();
+    const doc = this.collapsed ? this.text : deleteRange(this.text, range);
+    const result = insertInParagraph(doc, outsideField(doc, range.from), '\n', props);
+    this.commit(result.doc, { anchor: result.pos, focus: result.pos });
   }
 
   insertParagraphBreak(): void {
@@ -1954,7 +1819,7 @@ export class Editor {
   find(query: string, options: FindOptions = {}): number {
     this.finding = query ? { query, options } : undefined;
     this.refind();
-    this.renderSelection();
+    this.painter.renderSelection();
     this.emit();
     return this.found.length;
   }
@@ -2216,7 +2081,7 @@ export class Editor {
     return true;
   }
 
-  // --- Table of contents ----------------------------------------------------
+  // --- Table of contents --------------------------------------------------
 
   /** Whether the document has a table of contents. */
   get hasToc(): boolean {
@@ -2295,7 +2160,7 @@ export class Editor {
   goToHeading(para: number): void {
     if (this.area !== 'body') this.setArea('body');
     this.setSelection({ para, offset: 0 });
-    this.root.scrollTop = this.caretBox().top - SCROLL_MARGIN * 2;
+    this.root.scrollTop = this.painter.caretBox().top - SCROLL_MARGIN * 2;
   }
 
   /** Moves the section a heading opens to just before the paragraph `before`, or to the end. */
@@ -2309,7 +2174,7 @@ export class Editor {
 
   /** Scrolls so the caret is in the middle of the window, for a place that was jumped to. */
   private centerCaret(): void {
-    const { top } = this.caretBox();
+    const { top } = this.painter.caretBox();
     if (top < this.root.scrollTop || top > this.root.scrollTop + this.root.clientHeight - SCROLL_MARGIN * 3) {
       this.root.scrollTop = top - this.root.clientHeight / 2;
     }
@@ -2459,69 +2324,10 @@ export class Editor {
    */
   async exportPdf(title?: string): Promise<Uint8Array> {
     this.updateToc();
-    const layout = this.paged;
-    const doc = this.doc;
-    // The pictures are read first: decoding one takes the browser a moment.
-    const pictures = new Map<string, PdfImage>();
-    const wanted = new Map<string, { xml: string; part?: FloatBox['part'] }>();
-    for (const page of layout.pages) {
-      for (const [band, usual] of [[page.header, 'header'], [page, undefined], [page.footer, 'footer']] as const) {
-        if (!band) continue;
-        // The first page may have a header of its own, whose pictures live in another part.
-        const part = (band as Band).part ?? usual;
-        for (const float of band.floats) wanted.set(`${float.part ?? ''}\n${float.xml}`, { xml: float.xml, part: float.part });
-        for (const line of band.lines) {
-          for (const f of line.fragments) {
-            if (f.kind === 'object' && f.width > 0) wanted.set(`${part ?? ''}\n${f.props.object}`, { xml: f.props.object, part });
-          }
-        }
-      }
-    }
-    for (const [key, { xml, part }] of wanted) {
-      const media = docImage(doc, xml, part);
-      if (!media) continue;
-      try {
-        const bitmap = await createImageBitmap(new Blob([media.bytes as BlobPart], { type: media.type }));
-        const shrink = Math.min(1, MAX_PDF_PIXELS / Math.max(bitmap.width, bitmap.height));
-        if (media.type === 'image/jpeg' && shrink === 1) {
-          pictures.set(key, { width: bitmap.width, height: bitmap.height, jpeg: media.bytes });
-        } else {
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.max(1, Math.round(bitmap.width * shrink));
-          canvas.height = Math.max(1, Math.round(bitmap.height * shrink));
-          const ctx = canvas.getContext('2d');
-          if (!ctx) continue;
-          ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-          const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const rgb = new Uint8Array(canvas.width * canvas.height * 3);
-          const alpha = new Uint8Array(canvas.width * canvas.height);
-          for (let i = 0, p = 0; i < alpha.length; i++, p += 4) {
-            rgb[i * 3] = data[p];
-            rgb[i * 3 + 1] = data[p + 1];
-            rgb[i * 3 + 2] = data[p + 2];
-            alpha[i] = data[p + 3];
-          }
-          pictures.set(key, { width: canvas.width, height: canvas.height, rgb, alpha });
-        }
-        bitmap.close();
-      } catch {
-        // A picture the browser cannot read is left out, as it is on the page.
-      }
-    }
-    const fonts = doc.source ? embeddedFonts(doc.source) : [];
-    return exportPdf(layout, {
-      measurer: this.measurer,
-      title,
-      doc,
-      language: this.textLanguage,
-      font: (spec) => {
-        const family = fonts.filter((font) => font.family.toLowerCase() === spec.family.toLowerCase());
-        // The ones the document carries, then the ones the application gave.
-        return (family.find((font) => font.bold === spec.bold && font.italic === spec.italic) ?? family.find((font) => !font.bold && !font.italic))?.bytes ?? fontFile(spec);
-      },
-      image: (xml, part) => pictures.get(`${part ?? ''}\n${xml}`),
-    });
+    return documentPdf(this.paged, this.doc, { measurer: this.measurer, title, language: this.textLanguage });
   }
+
+  // --- Styles -------------------------------------------------------------
 
   /** The paragraph styles on offer, the default one first. */
   get styles(): ParagraphStyle[] {
@@ -2542,6 +2348,8 @@ export class Editor {
     const doc = setParagraphStyle(this.text, from.para, to.para, id);
     if (doc !== this.text) this.commit(doc, this.selection);
   }
+
+  // --- Tables -------------------------------------------------------------
 
   /** True when the caret is in a table, where rows and columns can be added and removed. */
   get inTable(): boolean {
@@ -2697,6 +2505,8 @@ export class Editor {
     this.commit(doc, { anchor: pos, focus: pos });
   }
 
+  // --- Lists and indents --------------------------------------------------
+
   /** The kind of list every paragraph of the selection is in, if they all share one. */
   activeListKind(): ListKind | undefined {
     const { from, to } = this.range;
@@ -2771,6 +2581,8 @@ export class Editor {
    * selected, and takes the caret into it to write it. Notes are numbered in
    * the order of their references in the text.
    */
+  // --- Text boxes, notes, breaks and the page -----------------------------
+
   /**
    * Puts a text box in at the caret, anchored to its paragraph and with the
    * text going round it, and takes the caret into it. Says its id.
@@ -2787,7 +2599,13 @@ export class Editor {
 
   /** The text boxes of the document, each with its id and its text. */
   get textBoxes(): { id: string; text: string }[] {
-    return (this.doc.textBoxes ?? []).map((box) => ({ id: box.id, text: box.paragraphs.map((p) => p.runs.map((run) => run.text).join('')).join('\n').replace(/[\u2060\uFFFC]/g, '') }));
+    return (this.doc.textBoxes ?? []).map((box) => ({
+      id: box.id,
+      text: box.paragraphs
+        .map((p) => p.runs.map((run) => run.text).join(''))
+        .join('\n')
+        .replace(/[\u2060\uFFFC]/g, ''),
+    }));
   }
 
   insertFootnote(text = ''): void {
@@ -2802,10 +2620,44 @@ export class Editor {
     this.setSelection(end);
   }
 
+  /** Puts a note at the end of the document at the caret, and goes to its text, after its number, to write it. */
+  insertEndnote(text = ''): void {
+    if (this.area !== 'body') return;
+    const doc = this.collapsed ? this.doc : deleteRange(this.doc, this.range);
+    const result = insertEndnote(doc, outsideField(doc, this.range.from), text);
+    this.commitDoc(result.doc, { anchor: result.pos, focus: result.pos });
+    if (this.view === 'flow') return;
+    this.setArea('endnote', undefined, result.id);
+    const note = this.text.paragraphs;
+    const end = { para: note.length - 1, offset: paragraphLength(note[note.length - 1]) };
+    this.setSelection(end);
+  }
+
+  /** The notes at the end of the document that the text refers to, in the order of their numbers, each with what it shows as its number (i, ii, iii). */
+  get endnotes(): { id: string; number: number; label: string; text: string }[] {
+    const labels = noteLabels(this.doc, 'endnote');
+    return shownEndnotes(this.doc).map((note, k) => ({
+      id: note.id,
+      number: k + 1,
+      label: labels.get(note.id)!,
+      text: note.paragraphs
+        .map((p) => paragraphText(p).replace(/[\u2060\uFFFC]/g, ''))
+        .join('\n')
+        .trim(),
+    }));
+  }
+
   /** The notes at the foot of the pages that the text refers to, in the order of their numbers. */
   get footnotes(): { id: string; number: number; text: string }[] {
     const numbers = footnoteNumbers(this.doc);
-    return shownFootnotes(this.doc).map((note) => ({ id: note.id, number: numbers.get(note.id)!, text: note.paragraphs.map((p) => paragraphText(p).replace(/[\u2060\uFFFC]/g, '')).join('\n').trim() }));
+    return shownFootnotes(this.doc).map((note) => ({
+      id: note.id,
+      number: numbers.get(note.id)!,
+      text: note.paragraphs
+        .map((p) => paragraphText(p).replace(/[\u2060\uFFFC]/g, ''))
+        .join('\n')
+        .trim(),
+    }));
   }
 
   /** Starts a new page at the caret. */
@@ -2906,11 +2758,13 @@ export class Editor {
    * in it, as in Google Docs: going back up after a sublist is one key, not a
    * trip to the start of the line.
    */
-  private tabChangesLevel(): boolean {
+  /** @internal */ tabChangesLevel(): boolean {
     const { from, to } = this.range;
     for (let i = from.para; i <= to.para; i++) if (!this.text.paragraphs[i].props.numId) return false;
     return true;
   }
+
+  // --- Undo ---------------------------------------------------------------
 
   undo(): void {
     const could = this.canUndo;
@@ -2957,8 +2811,8 @@ export class Editor {
    * tracked, what it took out stays, marked, and what it put in is marked,
    * unless `tracked` is false: accepting and rejecting are no changes to track.
    */
-  private commit(text: Doc, selection: Selection, kind = '', tracked = true): void {
-    this.typedAt = kind === 'type' ? selection.focus : undefined;
+  /** @internal */ commit(text: Doc, selection: Selection, kind = '', tracked = true): void {
+    this.spelling.typedAt = kind === 'type' ? selection.focus : undefined;
     if (tracked && this.doc.trackRevisions && !this.locked && text !== this.text) {
       const edit = trackEdit(this.text, text, this.reviser());
       const caret = comparePositions(selection.anchor, selection.focus) === 0 ? (this.forward ? 'forward' : 'back') : undefined;
@@ -2974,7 +2828,7 @@ export class Editor {
   }
 
   /** Commits a change to the document as a whole. */
-  private commitDoc(doc: Doc, selection: Selection, kind = ''): void {
+  /** @internal */ commitDoc(doc: Doc, selection: Selection, kind = ''): void {
     if (this.locked) return;
     const now = Date.now();
     const merge = kind !== '' && kind === this.lastEdit.kind && now - this.lastEdit.time < TYPING_MERGE_MS;
@@ -2998,10 +2852,10 @@ export class Editor {
     this.goalX = null;
     this.lastEdit.kind = '';
     this.refind();
-    this.render();
+    this.painter.render();
     // The page whose header was being edited may be gone; a note may have gone to another page, or away with its reference.
     this.areaPage = Math.min(this.areaPage, this.pageCount - 1);
-    if (this.area === 'footnote' || this.area === 'textbox') {
+    if (ownStory(this.area)) {
       const page = this.notePage(this.areaNote!, this.areaPage, this.area);
       if (page === undefined) {
         this.area = 'body';
@@ -3010,449 +2864,16 @@ export class Editor {
         this.selection = { anchor: clampPosition(this.doc, this.selection.anchor), focus: clampPosition(this.doc, this.selection.focus) };
       } else this.areaPage = page;
     }
-    this.renderSelection();
-    if (reveal) this.scrollCaretIntoView();
+    this.painter.renderSelection();
+    if (reveal) this.painter.scrollCaretIntoView();
     this.emit();
   }
 
-  private emit(): void {
+  /** @internal */ emit(): void {
     for (const listener of this.listeners) listener();
   }
 
-  // --- Rendering ----------------------------------------------------------
-
-  private render(): void {
-    if (this.view === 'flow') {
-      this.flowWidth = this.windowWidth();
-      this.layout = layoutReflow(this.shown, this.measurer, { width: this.flowWidth, margin: FLOW_MARGIN }, this.flowCache);
-    } else {
-      this.layout = layoutDocument(this.shown, this.measurer, this.layoutCache);
-    }
-    // The page may have changed size under a zoom that follows the window.
-    if (this.fit) this.zoom = this.clampZoom(this.fitZoom(this.fit));
-    this.paint();
-  }
-
-  /** Which pages are in view, with a screen above and below; all of them when there is no view to go by. */
-  private pagesInView(): [number, number] {
-    const last = this.pageEls.length - 1;
-    const view = this.root.getBoundingClientRect();
-    if (this.drawAll || view.height === 0 || last < 0) return [0, last];
-    const top = view.top - view.height;
-    const bottom = view.bottom + view.height;
-    let first = -1;
-    let end = -1;
-    // From the top down: pages go down the window in their order, or row by row side by side.
-    for (let i = 0; i <= last; i++) {
-      const rect = this.pageEls[i].getBoundingClientRect();
-      if (rect.bottom < top) continue;
-      if (rect.top > bottom) break;
-      if (first < 0) first = i;
-      end = i;
-    }
-    return first < 0 ? [0, -1] : [first, end];
-  }
-
-  private isDrawn(page: number): boolean {
-    return page >= this.drawn[0] && page <= this.drawn[1];
-  }
-
-  /** Scrolling brings other pages near: they are drawn, and the ones gone far are emptied. */
-  private onScroll = (): void => {
-    if (this.scrollFrame) return;
-    this.scrollFrame = requestAnimationFrame(() => {
-      this.scrollFrame = 0;
-      const [first, last] = this.pagesInView();
-      if (first === this.drawn[0] && last === this.drawn[1]) return;
-      this.paint();
-      this.renderSelection();
-    });
-  };
-
-  /** Puts the text of the pages near the view in them, and takes it out of the others. */
-  private paint(): void {
-    const { pages } = this.layout;
-    while (this.pageEls.length > pages.length) {
-      this.pageEls.pop()!.remove();
-      this.sheetEls.pop();
-      this.selLayers.pop();
-    }
-    this.painted.length = Math.min(this.painted.length, pages.length);
-    // Every page in its place and at its size first: which are in view depends on it.
-    pages.forEach((_, i) => {
-      let el = this.pageEls[i];
-      if (!el) {
-        el = document.createElement('div');
-        el.className = 'dx-page';
-        // Positioned pieces of text a screen reader cannot follow: what the caret meets is said instead.
-        el.setAttribute('aria-hidden', 'true');
-        this.pagesEl.insertBefore(el, this.input);
-        const sheet = document.createElement('div');
-        sheet.className = 'dx-sheet';
-        el.appendChild(sheet);
-        this.pageEls.push(el);
-        this.sheetEls.push(sheet);
-        this.selLayers.push(document.createElement('div'));
-      }
-      this.sizePage(i);
-    });
-    this.drawn = this.pagesInView();
-    pages.forEach((layoutPage, i) => {
-      if (!this.isDrawn(i)) {
-        // Far from the view: an empty sheet, drawn again when it comes near.
-        if (this.painted[i]) this.sheetEls[i].replaceChildren(this.selLayers[i]);
-        this.painted[i] = undefined;
-        return;
-      }
-
-      // A page whose lines are the same boxes at the same place already shows them.
-      // Everything the page shows: its header, its text and its footer.
-      // Text boxes under the text first, the others over it, after everything else.
-      const boxes = layoutPage.textBoxes ?? [];
-      const parts: { name: 'header' | 'body' | 'footer' | 'footnote' | 'textbox'; band: Band | LayoutPage | undefined }[] = [
-        ...boxes.filter((box) => box.behind).map((band) => ({ name: 'textbox' as const, band })),
-        ...(['header', 'body', 'footer'] as const).map((name) => ({ name, band: name === 'body' ? layoutPage : layoutPage[name] })),
-        ...(layoutPage.footnotes?.notes ?? []).map((band) => ({ name: 'footnote' as const, band })),
-        ...boxes.filter((box) => !box.behind).map((band) => ({ name: 'textbox' as const, band })),
-      ];
-      const bands = parts.map((part) => part.band).filter((band) => band !== undefined);
-      const lines = bands.flatMap((band) => band.lines);
-      const cells = bands.flatMap((band) => band.cells);
-      const floats = bands.flatMap((band) => band.floats);
-      const before = this.painted[i];
-      if (
-        before?.lines.length === lines.length &&
-        before.cells.length === cells.length &&
-        before.floats === floats.length &&
-        lines.every((l, k) => l.raw === before.lines[k].raw && l.y === before.lines[k].y && l.turn?.x === before.lines[k].turn?.x && l.turn?.y === before.lines[k].turn?.y) &&
-        cells.every((c, k) => {
-          const was = before.cells[k];
-          return c.y === was.y && c.height === was.height && c.x === was.x && c.width === was.width && c.borders === was.borders && c.shade === was.shade && c.lines === was.lines;
-        }) &&
-        JSON.stringify([layoutPage.rules ?? [], layoutPage.footnotes?.rule ?? null, boxes.map((box) => [box.frame, box.look])]) === before.rules
-      ) {
-        return;
-      }
-      this.painted[i] = { lines: lines.map((l) => ({ raw: l.raw, y: l.y, turn: l.turn })), cells, floats: floats.length, rules: JSON.stringify([layoutPage.rules ?? [], layoutPage.footnotes?.rule ?? null, boxes.map((box) => [box.frame, box.look])]) };
-
-      const sheet = document.createDocumentFragment();
-      // Each part in a box of its own, so the ones not being edited can be dimmed.
-      for (const { name, band } of parts) {
-        if (!band) continue;
-        const content = document.createElement('div');
-        content.className = `dx-band dx-band-${name}`;
-        // A text box: what fills it and the line round it, centred on its edge as in Word.
-        if (name === 'textbox') {
-          const { frame, look } = band as TextBoxBand;
-          const edge = look.line?.width ?? 0;
-          const node = document.createElement('div');
-          node.className = 'dx-textbox';
-          node.dataset.box = (band as TextBoxBand).id;
-          Object.assign(node.style, {
-            left: `${frame.x - edge / 2}pt`,
-            top: `${frame.y - edge / 2}pt`,
-            width: `${frame.width + edge}pt`,
-            height: `${frame.height + edge}pt`,
-            background: look.fill ? `#${look.fill}` : 'transparent',
-            border: look.line ? `${edge}pt solid #${look.line.color}` : '0',
-          });
-          content.appendChild(node);
-        }
-        // The pictures that go under the text first; the ones over it, once it is drawn. A text box is not one: it was drawn above.
-        for (const float of band.floats) if (float.behind && textBoxId(float.xml) === undefined) content.appendChild(this.pictureElement(float.xml, float, float.part));
-        for (const cell of band.cells) {
-          const box = document.createElement('div');
-          const sides = boxLines(cell);
-          const whole = !!(sides.top && sides.right && sides.bottom && sides.left);
-          // A cell without borders shows where it is with a faint line, which is not part of the document.
-          box.className = !cell.lines && cell.borders ? 'dx-cell dx-cell-lines' : whole ? 'dx-cell' : 'dx-cell dx-cell-guide';
-          if (cell.shade) box.style.background = `#${cell.shade}`;
-          box.style.left = `${cell.x}pt`;
-          box.style.top = `${cell.y}pt`;
-          box.style.width = `${cell.width}pt`;
-          box.style.height = `${cell.height}pt`;
-          content.appendChild(box);
-          if (cell.lines) content.appendChild(this.cellLinesElement(cell));
-        }
-        // The line above the notes at the foot of the page.
-        const notesRule = (band as LayoutPage).footnotes?.rule;
-        if (notesRule) {
-          const line = document.createElement('div');
-          line.className = 'dx-notes-rule';
-          Object.assign(line.style, { left: `${notesRule.x}pt`, top: `${notesRule.y}pt`, width: `${notesRule.width}pt`, height: `${notesRule.height}pt` });
-          content.appendChild(line);
-        }
-        // The lines down between the columns of a section.
-        for (const rule of (band as LayoutPage).rules ?? []) {
-          const line = document.createElement('div');
-          line.className = 'dx-rule';
-          line.style.left = `${rule.x - 0.25}pt`;
-          line.style.top = `${rule.top}pt`;
-          line.style.height = `${rule.bottom - rule.top}pt`;
-          content.appendChild(line);
-        }
-        /** The text set vertically of each cell: turned about its corner, and cut to its cell. */
-        const turned = new Map<Turn, HTMLElement>();
-        const holder = (line: Line): HTMLElement => {
-          const cell = line.turn && line.cell !== undefined ? band.cells[line.cell] : undefined;
-          if (!line.turn || !cell) return content;
-          let inner = turned.get(line.turn);
-          if (!inner) {
-            const clip = document.createElement('div');
-            clip.className = 'dx-turn';
-            Object.assign(clip.style, { left: `${cell.x}pt`, top: `${cell.y}pt`, width: `${cell.width}pt`, height: `${cell.height}pt` });
-            inner = document.createElement('div');
-            inner.className = 'dx-turn';
-            // Placed back at the corner of the page, so that what it holds is in page coordinates.
-            Object.assign(inner.style, { left: `${-cell.x}pt`, top: `${-cell.y}pt`, transformOrigin: `${line.turn.x}pt ${line.turn.y}pt`, transform: `rotate(${line.turn.angle}deg)` });
-            clip.appendChild(inner);
-            content.appendChild(clip);
-            turned.set(line.turn, inner);
-          }
-          return inner;
-        };
-        // A line with a tracked change has a bar beside it in the margin, as in Word: one that only
-        // put in or took out a paragraph mark has nothing else to show it by.
-        const paragraphsOf = name === 'body' ? this.shown.paragraphs : (band as Band).part ? storyOf(this.shown, (band as Band).part!)?.paragraphs : undefined;
-        const barAt = this.setupOf(i).marginLeft - CHANGE_BAR_GAP;
-        for (const line of band.lines) {
-          const into = holder(line);
-          const para = paragraphsOf?.[line.para];
-          if (!line.turn && (line.fragments.some((f) => f.props.revision || f.props.formatChange) || para?.props.formatChange || (line.lastInParagraph && para?.props.markRevision))) {
-            const bar = document.createElement('div');
-            bar.className = 'dx-change-bar';
-            Object.assign(bar.style, { left: `${barAt}pt`, top: `${line.y}pt`, height: `${line.height}pt` });
-            content.appendChild(bar);
-          }
-          if (line.label) into.appendChild(this.textElement(line.label, line));
-          for (const f of line.fragments) {
-            if (f.mark) {
-              // The number of a note: smaller, and raised.
-              into.appendChild(this.textElement({ ...f, kind: 'text', text: f.mark.text, font: f.mark.font, wordSpacing: 0 }, { ...line, baseline: line.baseline - f.mark.rise }));
-            } else if (f.kind === 'object' && f.width > 0 && textBoxId(f.props.object) === undefined) {
-              const box = { x: f.x, y: line.baseline - f.ascent, width: f.width, height: f.ascent };
-              into.appendChild(this.pictureElement(f.props.object, box, name === 'body' ? undefined : ((band as Band).part ?? (name as 'header' | 'footer'))));
-            } else if (f.kind === 'text') {
-              into.appendChild(this.textElement(f, line));
-            } else if (f.leader) {
-              into.appendChild(this.textElement({ ...f, kind: 'text', ...f.leader, wordSpacing: 0 }, line));
-            }
-          }
-        }
-        for (const float of band.floats) if (!float.behind && textBoxId(float.xml) === undefined) content.appendChild(this.pictureElement(float.xml, float, float.part));
-        sheet.appendChild(content);
-      }
-      // The selection and the other marks go over everything, and darken what is under them as a marker pen
-      // does: under the text they would be hidden by a letterhead that covers the page, or by text with a
-      // background of its own, white included.
-      sheet.appendChild(this.selLayers[i]);
-      this.sheetEls[i].replaceChildren(sheet);
-    });
-  }
-
-  /** The lines of a cell that has its own, each side with its line, centred on the edge of the cell. */
-  private cellLinesElement(cell: CellBox): HTMLElement {
-    const sides = boxLines(cell);
-    const room = (line: Border | undefined) => (!line ? 0 : line.style === 'double' ? line.width * 3 : line.width);
-    const [top, right, bottom, left] = [sides.top, sides.right, sides.bottom, sides.left].map(room);
-    const node = document.createElement('div');
-    node.className = 'dx-cell';
-    const s = node.style;
-    s.left = `${cell.x - left / 2}pt`;
-    s.top = `${cell.y - top / 2}pt`;
-    s.width = `${cell.width + (left + right) / 2}pt`;
-    s.height = `${cell.height + (top + bottom) / 2}pt`;
-    for (const [side, line] of Object.entries(sides) as [string, Border][]) {
-      // CSS draws a double line as two in a border three times as thick as each.
-      s.setProperty(`border-${side}`, `${Math.max(0.5, room(line))}pt ${line.style === 'single' ? 'solid' : line.style} #${line.color}`);
-    }
-    return node;
-  }
-
-  private textElement(f: Fragment, line: Line): HTMLElement {
-    const span = document.createElement('span');
-    span.className = 'dx-frag';
-    span.textContent = f.text;
-    const s = span.style;
-    s.font = cssFont(f.font);
-    s.lineHeight = `${f.ascent + f.descent}pt`;
-    s.left = `${f.x}pt`;
-    s.top = `${line.baseline - f.ascent}pt`;
-    s.color = `#${f.props.color}`;
-    if (f.props.highlight) s.backgroundColor = `#${f.props.highlight}`;
-    const decoration = `${f.props.underline ? 'underline ' : ''}${f.props.strike ? 'line-through' : ''}`.trim();
-    if (decoration) s.textDecoration = decoration;
-    if (f.wordSpacing) s.wordSpacing = `${f.wordSpacing}pt`;
-    const href = linkHref(f.props);
-    if (href !== undefined) span.dataset.href = href;
-    return span;
-  }
-
-  /** The picture of an object, at `box` in page coordinates. `part` is where the object lives, when not in the body. */
-  private pictureElement(xml: string, box: Pick<FloatBox, 'x' | 'y' | 'width' | 'height'>, part?: FloatBox['part']): HTMLElement {
-    const key = `${part ?? ''}\n${xml}`;
-    let url = this.imageUrls.get(key);
-    if (url === undefined) {
-      const image = docImage(this.doc, xml, part);
-      url = image ? URL.createObjectURL(new Blob([image.bytes as BlobPart], { type: image.type })) : null;
-      this.imageUrls.set(key, url);
-    }
-    // Pictures in a format the browser cannot show keep their place as an empty box.
-    const el = document.createElement(url ? 'img' : 'div');
-    if (url) (el as HTMLImageElement).src = url;
-    el.className = 'dx-object';
-    el.style.left = `${box.x}pt`;
-    el.style.top = `${box.y}pt`;
-    el.style.width = `${box.width}pt`;
-    el.style.height = `${box.height}pt`;
-    return el;
-  }
-
-  /**
-   * Registers the fonts embedded in the document that this machine lacks, then
-   * lays the document out again: until they load, their text is measured and
-   * painted with a stand-in.
-   */
-  private loadEmbeddedFonts(): void {
-    for (const face of this.fontFaces) document.fonts.delete(face);
-    this.fontFaces = [];
-    const { source } = this.doc;
-    if (!source) return;
-    const faces = embeddedFonts(source)
-      .filter((font) => !this.measurer.hasFont(font.family))
-      .map(
-        (font) =>
-          new FontFace(font.family, font.bytes.buffer as ArrayBuffer, {
-            weight: font.bold ? 'bold' : 'normal',
-            style: font.italic ? 'italic' : 'normal',
-          }),
-      );
-    if (!faces.length) return;
-    void Promise.allSettled(faces.map((face) => face.load())).then((results) => {
-      // Another document may have been opened while these were loading.
-      if (this.doc.source !== source) return;
-      results.forEach((result, i) => {
-        if (result.status !== 'fulfilled') return;
-        document.fonts.add(faces[i]);
-        this.fontFaces.push(faces[i]);
-      });
-      if (this.fontFaces.length) this.refont();
-    });
-  }
-
-  /** Lays the document out again from nothing: the fonts behind the names of its text are no longer the same. */
-  private refont(): void {
-    this.measurer.reset();
-    this.layoutCache = createLayoutCache();
-    this.flowCache = createLayoutCache();
-    this.pagedView = undefined;
-    this.painted = [];
-    this.render();
-    this.renderSelection();
-    this.emit();
-  }
-
-  private releaseImages(): void {
-    for (const url of this.imageUrls.values()) if (url) URL.revokeObjectURL(url);
-    this.imageUrls.clear();
-  }
-
-  /**
-   * The notes beside the pages, each level with the text it is about and
-   * pushed down where the one above leaves no room: the margin Word shows
-   * its comments in.
-   */
-  private renderMargin(): void {
-    const on = this.showNotes && this.view !== 'grid' && this.view !== 'flow' && this.area === 'body';
-    this.root.classList.toggle('dx-notes-on', on);
-    this.pageEls.forEach((page, i) => {
-      page.style.marginRight = on ? `${NOTE_MARGIN * this.zoom}pt` : '';
-      let margin = this.marginEls[i];
-      if (!on) {
-        margin?.remove();
-        delete this.marginEls[i];
-        return;
-      }
-      if (!margin?.isConnected) {
-        margin = document.createElement('div');
-        margin.className = 'dx-margin';
-        page.appendChild(margin);
-        this.marginEls[i] = margin;
-      }
-      margin.style.width = `${NOTE_MARGIN}pt`;
-      margin.style.transform = this.zoom === 1 ? '' : `scale(${this.zoom})`;
-      margin.replaceChildren();
-    });
-    this.marginEls.length = Math.min(this.marginEls.length, this.pageEls.length);
-    if (!on || !this.doc.notes?.length) return;
-    const active = this.activeNote;
-    const byId = new Map(this.doc.notes.map((note) => [note.id, note]));
-    const flow = this.flow;
-    /** Where the next note of each page can start, in pixels from its top. */
-    const free: number[] = [];
-    const paras = this.drawnParas();
-    for (const { id, range } of noteRanges(this.doc)) {
-      // The card of a note on a page not drawn waits until the page comes near.
-      if (paras && (this.mapOffset(range.to, true).para < paras[0] || this.mapOffset(range.from, true).para > paras[1])) continue;
-      const note = byId.get(id);
-      // A note is level with where its text starts; one on no text at all, with where it is.
-      const at = selectionRects(flow, this.measurer, { from: this.mapOffset(range.from, true), to: this.mapOffset(range.to, true) })[0] ?? caretRect(flow, this.measurer, this.mapOffset(range.from, true));
-      const margin = note && at && this.isDrawn(this.pageOf(at.page)) && this.marginEls[this.pageOf(at.page)];
-      if (!note || !margin) continue;
-      const page = this.pageOf(at.page);
-      const card = document.createElement('div');
-      card.className = id === active ? 'dx-mnote dx-on' : 'dx-mnote';
-      card.dataset.note = id;
-      card.style.borderLeftColor = `#${note.color ?? NOTE_COLORS[0]}`;
-      const by = document.createElement('div');
-      by.className = 'dx-mnote-by';
-      by.textContent = note.author;
-      const text = document.createElement('div');
-      text.className = 'dx-mnote-text';
-      text.textContent = note.text;
-      card.append(by, text);
-      // A press on it is not a press on the page: the caret stays until the note is chosen.
-      card.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      });
-      card.addEventListener('click', () => {
-        this.selectNote(id);
-        this.focus();
-      });
-      margin.appendChild(card);
-      const top = Math.max(at.y * PT_TO_PX - 2, free[page] ?? 0);
-      card.style.top = `${top}px`;
-      free[page] = top + card.offsetHeight + 6;
-    }
-  }
-
-  /** A small button over the table of contents, at the right of its first line, that brings it up to date. */
-  private renderTocChip(): void {
-    if (this.area !== 'body' || this.locked) return;
-    const range = tocRange(this.doc);
-    if (!range) return;
-    const at = caretRect(this.flow, this.measurer, this.mapOffset({ para: range.first, offset: 0 }, true));
-    const chip = document.createElement('div');
-    chip.className = 'dx-toc-chip';
-    chip.dataset.name = 'toc-update';
-    chip.setAttribute('role', 'button');
-    chip.textContent = `↻ ${t('toc.update')}`;
-    chip.style.right = `${this.setupOf(at.page).marginRight}pt`;
-    chip.style.top = `${at.y - 19}pt`;
-    // A press on it is not a press on the page.
-    chip.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    });
-    chip.addEventListener('click', () => {
-      this.updateToc();
-      this.focus();
-    });
-    this.selLayers[this.pageOf(at.page)].appendChild(chip);
-  }
-
-  // --- Spelling -------------------------------------------------------------
+  // --- Spelling -----------------------------------------------------------
 
   /**
    * What says which words are spelled wrong; none, and nothing is marked.
@@ -3460,117 +2881,24 @@ export class Editor {
    * typing stops, in the language of the text (`textLanguage`).
    */
   get spellChecker(): SpellChecker | undefined {
-    return this.speller;
+    return this.spelling.checker;
   }
 
   set spellChecker(checker: SpellChecker | undefined) {
-    if (checker === this.speller) return;
-    this.speller = checker;
-    this.spelled.clear();
-    this.spellWaiting.clear();
-    this.spellSuggestions.clear();
-    this.renderSelection();
-  }
-
-  /** The words of a paragraph to check, kept while it is the same. */
-  private spellWords = new WeakMap<Paragraph, SpelledWord[]>();
-  private wordsOfParagraph(para: Paragraph): SpelledWord[] {
-    let words = this.spellWords.get(para);
-    if (!words) {
-      // Text taken out, while the change waits, is not checked.
-      const gone: [number, number][] = [];
-      let at = 0;
-      for (const run of para.runs) {
-        if (run.props.revision === 'delete') gone.push([at, at + run.text.length]);
-        at += run.text.length;
-      }
-      words = wordsToCheck(paragraphText(para)).filter((word) => !gone.some(([from, to]) => word.from < to && word.to > from));
-      this.spellWords.set(para, words);
-    }
-    return words;
-  }
-
-  /** What the dictionary said of a word in the language of the text: undefined until it has said. */
-  private spelledRight(word: string): boolean | undefined {
-    if (this.spellIgnored.has(word)) return true;
-    return this.spelled.get(this.textLanguage)?.get(word);
-  }
-
-  /** Marks the words spelled wrong on the pages drawn, and asks about those not known yet. */
-  private markSpelling(paras: [number, number] | undefined): void {
-    if (!this.speller || this.area !== 'body' || !paras || this.locked) return;
-    const typed = this.typedAt;
-    for (let p = paras[0]; p <= paras[1]; p++) {
-      const para = this.text.paragraphs[p];
-      if (!para) continue;
-      for (const word of this.wordsOfParagraph(para)) {
-        // The word being written is not finished yet.
-        if (typed && typed.para === p && typed.offset === word.to) continue;
-        const right = this.spelledRight(word.word);
-        if (right === undefined) this.spellWaiting.add(word.word);
-        if (right !== false) continue;
-        for (const rect of selectionRects(this.flow, this.measurer, { from: { para: p, offset: word.from }, to: { para: p, offset: word.to } })) {
-          if (!this.isDrawn(rect.page)) continue;
-          const div = document.createElement('div');
-          div.className = 'dx-spell';
-          div.style.left = `${rect.x}pt`;
-          div.style.top = `${rect.y + rect.height - 3}pt`;
-          div.style.width = `${rect.width}pt`;
-          this.selLayers[rect.page].appendChild(div);
-        }
-      }
-    }
-    if (this.spellWaiting.size) {
-      window.clearTimeout(this.spellTimer);
-      this.spellTimer = window.setTimeout(() => void this.askSpelling(), SPELL_WAIT_MS);
-    }
-  }
-
-  /** Asks the dictionary about the words waiting, in one question, and marks what it says. */
-  private async askSpelling(): Promise<void> {
-    const speller = this.speller;
-    if (!speller || this.spellAsking || !this.spellWaiting.size) return;
-    const language = this.textLanguage;
-    const words = [...this.spellWaiting];
-    this.spellWaiting.clear();
-    this.spellAsking = true;
-    let known = this.spelled.get(language);
-    if (!known) this.spelled.set(language, (known = new Map()));
-    try {
-      const answers = await speller.check(words, language);
-      words.forEach((word, i) => known.set(word, answers[i] !== false));
-    } catch {
-      // A dictionary that cannot be had marks nothing, rather than every word.
-      for (const word of words) known.set(word, true);
-    } finally {
-      this.spellAsking = false;
-    }
-    if (speller !== this.speller || !this.root.isConnected) return;
-    this.renderSelection();
-    if (this.spellWaiting.size) void this.askSpelling();
+    if (this.spelling.use(checker)) this.painter.renderSelection();
   }
 
   /** The word spelled wrong the caret is in, or at the end of; undefined when there is none, or it is not known yet. */
   get misspelling(): { word: string; range: Range } | undefined {
-    if (!this.speller || this.area !== 'body' || !this.collapsed) return undefined;
+    if (this.area !== 'body' || !this.collapsed) return undefined;
     const { para, offset } = this.selection.focus;
-    const paragraph = this.text.paragraphs[para];
-    const word = paragraph && this.wordsOfParagraph(paragraph).find((one) => one.from <= offset && offset <= one.to);
-    if (!word || this.spelledRight(word.word) !== false) return undefined;
-    return { word: word.word, range: { from: { para, offset: word.from }, to: { para, offset: word.to } } };
+    return this.spelling.wrongAt(para, offset);
   }
 
   /** What the word spelled wrong at the caret could be instead, the likeliest first. */
   spellingSuggestions(): Promise<string[]> {
     const wrong = this.misspelling;
-    if (!wrong || !this.speller) return Promise.resolve([]);
-    const key = `${this.textLanguage}\n${wrong.word}`;
-    let asked = this.spellSuggestions.get(key);
-    if (!asked) {
-      asked = Promise.resolve(this.speller.suggest(wrong.word, this.textLanguage)).catch(() => []);
-      this.spellSuggestions.set(key, asked);
-    }
-    return asked;
+    return wrong ? this.spelling.suggest(wrong.word) : Promise.resolve([]);
   }
 
   /** Puts `text` in place of the word spelled wrong at the caret: an edit like any other, undone with ⌘Z and tracked when changes are. */
@@ -3585,1512 +2913,39 @@ export class Editor {
   ignoreMisspelling(): void {
     const wrong = this.misspelling;
     if (!wrong) return;
-    this.spellIgnored.add(wrong.word);
-    this.renderSelection();
+    this.spelling.ignore(wrong.word);
+    this.painter.renderSelection();
     this.emit();
   }
 
   /** Whether the dictionary takes new words, for "Add to dictionary". */
   get canAddWords(): boolean {
-    return !!this.speller?.add;
+    return !!this.spelling.checker?.add;
   }
 
   /** Gives the word spelled wrong at the caret to the dictionary, as spelled right from now on. */
   addMisspelling(): void {
     const wrong = this.misspelling;
-    if (!wrong || !this.speller?.add) return;
-    this.speller.add(wrong.word, this.textLanguage);
-    this.spelled.get(this.textLanguage)?.set(wrong.word, true);
-    this.renderSelection();
+    if (!wrong || !this.spelling.add(wrong.word)) return;
+    this.painter.renderSelection();
     this.emit();
   }
 
   /** The other button on a word spelled wrong: the caret goes into it and its suggestions are offered, in place of the browser's menu. */
   private onContextMenu = (e: MouseEvent): void => {
-    if (!this.speller || this.area !== 'body') return;
-    const pos = this.positionFromPoint(e.clientX, e.clientY);
-    const paragraph = this.text.paragraphs[pos.para];
-    const word = paragraph && this.wordsOfParagraph(paragraph).find((one) => one.from <= pos.offset && pos.offset <= one.to);
-    if (!word || this.spelledRight(word.word) !== false) return;
+    if (!this.spelling.checker || this.area !== 'body') return;
+    const pos = this.pointer.positionFromPoint(e.clientX, e.clientY);
+    if (!this.spelling.wrongAt(pos.para, pos.offset)) return;
     e.preventDefault();
     this.focus();
     this.setSelection(pos);
     this.onSpellingMenu?.();
   };
 
-  /** The paragraphs of the body the drawn pages show, first and last, as the pages show them; undefined when that is not known. */
-  private drawnParas(): [number, number] | undefined {
-    if (this.area !== 'body') return undefined;
-    let first = Infinity;
-    let last = -Infinity;
-    for (let i = this.drawn[0]; i <= this.drawn[1]; i++) {
-      for (const line of this.layout.pages[i]?.lines ?? []) {
-        first = Math.min(first, line.para);
-        last = Math.max(last, line.para);
-      }
-    }
-    return first <= last ? [first, last] : undefined;
-  }
-
-  private renderSelection(): void {
-    // The view may have moved under a change of zoom or of view: the pages near it are drawn first.
-    const near = this.pagesInView();
-    if (near[0] !== this.drawn[0] || near[1] !== this.drawn[1]) this.paint();
-    for (const layer of this.selLayers) if (layer.firstChild) layer.replaceChildren();
-    const paras = this.drawnParas();
-    /** Whether a stretch of the body, given as the document has it, is on no page drawn: nothing to mark for it. */
-    const away = (range: { from: Position; to: Position }) => !!paras && (this.mapOffset(range.to, true).para < paras[0] || this.mapOffset(range.from, true).para > paras[1]);
-    // The text box being written in shows where its edges are.
-    for (const node of this.pagesEl.querySelectorAll<HTMLElement>('.dx-textbox')) node.classList.toggle('dx-on', this.area === 'textbox' && node.dataset.box === this.areaNote);
-    const { from, to } = this.range;
-    const flow = this.flow;
-    for (const rect of selectionRects(flow, this.measurer, { from: this.mapOffset(from, true), to: this.mapOffset(to, true) })) {
-      if (!this.isDrawn(this.pageOf(rect.page))) continue;
-      const div = document.createElement('div');
-      div.className = 'dx-sel';
-      div.style.left = `${rect.x}pt`;
-      div.style.top = `${rect.y}pt`;
-      div.style.width = `${rect.width}pt`;
-      div.style.height = `${rect.height}pt`;
-      this.selLayers[this.pageOf(rect.page)].appendChild(div);
-    }
-    // The variables of a template stand out from the text around them, in the part being edited and in the others the pages show.
-    const markVariable = (rect: Rect, page: number) => {
-      if (!this.isDrawn(page)) return;
-      const div = document.createElement('div');
-      div.className = 'dx-var';
-      div.style.left = `${rect.x}pt`;
-      div.style.top = `${rect.y}pt`;
-      div.style.width = `${rect.width}pt`;
-      div.style.height = `${rect.height}pt`;
-      this.selLayers[page]?.prepend(div);
-    };
-    for (const variable of paras ? variablesIn(this.text, paras) : variablesOf(this.text)) {
-      if (away(variable.range)) continue;
-      for (const rect of selectionRects(flow, this.measurer, { from: this.mapOffset(variable.range.from, true), to: this.mapOffset(variable.range.to, true) })) markVariable(rect, this.pageOf(rect.page));
-    }
-    this.markSpelling(paras);
-    if (this.view !== 'flow') this.layout.pages.forEach((page, i) => {
-      if (!this.isDrawn(i)) return;
-      const bands: ['header' | 'footer' | FootnotePart | TextBoxPart, StoryPart][] = [
-        ['header', storyPart(this.paged, 'header', i)],
-        ['footer', storyPart(this.paged, 'footer', i)],
-        ...(page.footnotes?.notes ?? []).map((note): [FootnotePart, StoryPart] => [note.part, note.part]),
-        ...(page.textBoxes ?? []).map((box): [TextBoxPart, StoryPart] => [box.part, box.part]),
-      ];
-      for (const [key, part] of bands) {
-        if (part === this.part && (i === this.areaPage || this.area === 'footnote' || this.area === 'textbox')) continue;
-        const story = storyOf(this.shown, part);
-        const band = story && bandLayout(this.layout, key, i);
-        if (!band) continue;
-        const shown = storyOnPage(story, i + 1, this.pageCount);
-        for (const variable of variablesOf(shown)) {
-          if (band.paraFirstLine[variable.range.from.para] === undefined) continue;
-          for (const rect of selectionRects(band, this.measurer, variable.range)) markVariable(rect, i);
-        }
-      }
-    });
-    // The text each note is about, and more so the one the caret is in.
-    if (this.area === 'body' && this.doc.notes?.length) {
-      const active = this.activeNote;
-      const colors = new Map(this.doc.notes.map((note) => [note.id, note.color ?? NOTE_COLORS[0]]));
-      for (const note of noteRanges(this.doc)) {
-        const color = colors.get(note.id);
-        if (!color || away(note.range)) continue;
-        const rgb = [0, 2, 4].map((i) => parseInt(color.slice(i, i + 2), 16)).join(',');
-        for (const rect of selectionRects(flow, this.measurer, { from: this.mapOffset(note.range.from, true), to: this.mapOffset(note.range.to, true) })) {
-          if (!this.isDrawn(this.pageOf(rect.page))) continue;
-          const div = document.createElement('div');
-          div.className = note.id === active ? 'dx-note dx-note-on' : 'dx-note';
-          div.dataset.note = note.id;
-          div.style.background = `rgba(${rgb},${note.id === active ? 0.4 : 0.2})`;
-          div.style.borderBottomColor = `rgba(${rgb},.85)`;
-          div.style.left = `${rect.x}pt`;
-          div.style.top = `${rect.y}pt`;
-          div.style.width = `${rect.width}pt`;
-          div.style.height = `${rect.height}pt`;
-          this.selLayers[this.pageOf(rect.page)].prepend(div);
-        }
-      }
-    }
-    // Every place the search finds, under the selection; past a few hundred they stop being told apart anyway.
-    for (const match of this.found.slice(0, MAX_FIND_MARKS)) {
-      if (this.area === 'body' && away(match)) continue;
-      for (const rect of selectionRects(flow, this.measurer, { from: this.mapOffset(match.from, true), to: this.mapOffset(match.to, true) })) {
-        if (!this.isDrawn(this.pageOf(rect.page))) continue;
-        const div = document.createElement('div');
-        div.className = 'dx-find';
-        div.style.left = `${rect.x}pt`;
-        div.style.top = `${rect.y}pt`;
-        div.style.width = `${rect.width}pt`;
-        div.style.height = `${rect.height}pt`;
-        this.selLayers[this.pageOf(rect.page)].prepend(div);
-      }
-    }
-    // A selected picture gets a frame with a handle on each corner, to drag it to another size.
-    const picture = this.selectedPicture();
-    if (picture) {
-      const frame = document.createElement('div');
-      frame.className = 'dx-objsel';
-      frame.style.left = `${picture.box.x}pt`;
-      frame.style.top = `${picture.box.y}pt`;
-      frame.style.width = `${picture.box.width}pt`;
-      frame.style.height = `${picture.box.height}pt`;
-      // Its size and its place are those it has on its page, and are changed there.
-      for (const corner of this.view === 'flow' ? [] : ['nw', 'ne', 'sw', 'se']) {
-        const handle = document.createElement('div');
-        handle.className = `dx-objh dx-objh-${corner}`;
-        handle.dataset.corner = corner;
-        frame.appendChild(handle);
-      }
-      this.selLayers[picture.box.page].appendChild(frame);
-    }
-    this.renderPeers();
-    if (this.area === 'header' || this.area === 'footer') {
-      // A line along the edge of what is being edited, with its name.
-      const { height, marginTop, marginBottom } = this.setupOf(this.areaPage);
-      const lines = flow.lines;
-      const y = this.area === 'header' ? Math.max(marginTop, ...lines.map((l) => l.y + l.height)) : Math.min(height - marginBottom, ...lines.map((l) => l.y));
-      const edge = document.createElement('div');
-      edge.className = `dx-edge dx-edge-${this.area}`;
-      edge.style.top = `${y}pt`;
-      const label = document.createElement('span');
-      // The first page's own says so: it is not the one the other pages show.
-      const base = this.part && splitPart(this.part).base;
-      const own = base === 'firstHeader' || base === 'firstFooter';
-      // In a document of several sections, of which one.
-      const section = this.sectionCount > 1 ? ` · ${t('area.section', { n: this.sectionIndex + 1 })}` : '';
-      label.textContent = t(this.area === 'header' ? (own ? 'area.firstHeader' : 'area.header') : own ? 'area.firstFooter' : 'area.footer') + section;
-      edge.appendChild(label);
-      this.selLayers[this.areaPage].appendChild(edge);
-    }
-
-    this.renderMargin();
-    this.renderTocChip();
-    this.placeCaret(this.selection.focus, this.collapsed);
-    this.syncMirror();
-    this.renderHandles();
-
-    // Restart the blink so the caret stays solid while it moves.
-    this.caretEl.style.animation = 'none';
-    void this.caretEl.offsetWidth;
-    this.caretEl.style.animation = '';
-  }
-
-  /** The carets and selections of the other people on the document, each in its colour and under its name. */
-  private renderPeers(): void {
-    for (const peer of this.peers) {
-      // In a header or a footer, on the page they are editing it on; it is the same on the others.
-      const page = Math.max(0, Math.min(peer.page, this.pageCount - 1));
-      const kind = peer.part && storyKind(peer.part);
-      const own = kind === 'footnote' || kind === 'textbox';
-      const band = peer.part && bandLayout(this.layout, own ? (peer.part as FootnotePart | TextBoxPart) : (kind as 'header' | 'footer'), page);
-      if (peer.part && (!band || (!own && storyPart(this.layout, kind as 'header' | 'footer', page) !== peer.part))) continue;
-      const flow = band || this.layout;
-      const story = peer.part ? storyOf(this.doc, peer.part) : this.doc;
-      if (!story) continue;
-      const shown = (pos: Position): Position => {
-        const at = clampPosition({ ...this.doc, paragraphs: story.paragraphs }, pos);
-        if (!peer.part) return at;
-        // The digits of a page number are not the ones the document holds.
-        const onPage = storyOnPage(story, page + 1, this.pageCount).paragraphs[at.para];
-        const model = story.paragraphs[at.para];
-        return onPage && onPage !== model ? { para: at.para, offset: mapFieldOffset(model, onPage, at.offset) } : at;
-      };
-      const pageOf = (flowPage: number) => (peer.part ? page : flowPage);
-      const color = `#${peer.color}`;
-      const range = orderedRange(shown(peer.anchor), shown(peer.focus));
-      if (comparePositions(range.from, range.to) !== 0) {
-        for (const rect of selectionRects(flow, this.measurer, range)) {
-          const div = document.createElement('div');
-          div.className = 'dx-peer-sel';
-          Object.assign(div.style, { left: `${rect.x}pt`, top: `${rect.y}pt`, width: `${rect.width}pt`, height: `${rect.height}pt`, background: color });
-          this.selLayers[pageOf(rect.page)]?.prepend(div);
-        }
-      }
-      const caret = caretRect(flow, this.measurer, shown(peer.focus));
-      const bar = document.createElement('div');
-      bar.className = 'dx-peer';
-      Object.assign(bar.style, { left: `${caret.x}pt`, top: `${caret.y}pt`, height: `${caret.height || 1.5}pt`, ...(caret.width ? { width: `${caret.width}pt`, marginLeft: '0' } : {}), background: color });
-      const label = document.createElement('span');
-      label.textContent = peer.name || t('collab.someone');
-      label.style.background = color;
-      // Black on the light ones, white on the dark: the name is read on any of them.
-      label.style.color = inkOn(peer.color);
-      bar.appendChild(label);
-      this.selLayers[pageOf(caret.page)]?.appendChild(bar);
-    }
-  }
-
-  /** Puts the caret, and the hidden input the keyboard writes to, at a position; `show` says whether it is drawn. */
-  /**
-   * Where the caret is in what the window scrolls over, in pixels. Read from
-   * where it was placed, not from how it is laid out: while the document does
-   * not have the keyboard the caret is not shown, and a thing not shown is nowhere.
-   */
-  private caretBox(): { top: number; height: number; left: number } {
-    return { top: this.pagesEl.offsetTop + (parseFloat(this.caretEl.style.top) || 0), height: parseFloat(this.caretEl.style.height) || 0, left: this.pagesEl.offsetLeft + (parseFloat(this.caretEl.style.left) || 0) };
-  }
-
-  private placeCaret(pos: Position, show: boolean): void {
-    const caret = caretRect(this.flow, this.measurer, this.mapOffset(pos, true));
-    const pageEl = this.pageEls[this.pageOf(caret.page)];
-    const scale = PT_TO_PX * this.zoom;
-    const left = `${pageEl.offsetLeft + caret.x * scale}px`;
-    const top = `${pageEl.offsetTop + caret.y * scale}px`;
-    // In text set vertically the caret lies across the line.
-    const height = caret.width > 0 ? '1.5px' : `${caret.height * scale}px`;
-    const width = caret.width > 0 ? `${caret.width * scale}px` : '';
-    Object.assign(this.caretEl.style, { left, top, width, height, visibility: show ? 'visible' : 'hidden' });
-    Object.assign(this.input.style, { left, top, height });
-  }
-
-  /** Where on its page the picture at a position of the text is drawn. */
-  private pictureBox(pos: Position): Rect | undefined {
-    const flow = this.flow;
-    const shown = this.mapOffset(pos, true);
-    for (let i = flow.paraFirstLine[shown.para] ?? flow.lines.length; i < flow.lines.length && flow.lines[i].para === shown.para; i++) {
-      const line = flow.lines[i];
-      const f = line.fragments.find((fragment) => fragment.kind === 'object' && fragment.width > 0 && fragment.start === shown.offset);
-      if (f) return { page: this.pageOf(line.page), x: f.x, y: line.baseline - f.ascent, width: f.width, height: f.ascent };
-    }
-    return undefined;
-  }
-
-  /** The picture the selection is, when it is one picture and nothing else: one in the line, or a floating one. */
-  private selectedPicture(): { pos: Position; box: Rect; floating: boolean } | undefined {
-    const { from, to } = this.range;
-    if (from.para !== to.para || to.offset - from.offset !== 1) return undefined;
-    if (pictureAt(this.text, from)) {
-      const box = this.pictureBox(from);
-      return box && { pos: from, box, floating: false };
-    }
-    if (!floatAt(this.text, from)) return undefined;
-    // With the text set to the window, one that floats on its page is shown in its line.
-    if (this.view === 'flow') {
-      const box = this.pictureBox(from);
-      return box && { pos: from, box, floating: true };
-    }
-    const shown = this.mapOffset(from, true);
-    const found = this.floats().find(({ float }) => float.para === shown.para && float.offset === shown.offset);
-    return found && { pos: from, box: found.box, floating: true };
-  }
-
-  /** The floating pictures of what is being edited, the text or a header or footer, each with where it is drawn. */
-  private floats(): { float: FloatBox; box: Rect }[] {
-    return this.flow.pages.flatMap((page) => page.floats.map((float) => ({ float, box: { page: this.pageOf(page.index), x: float.x, y: float.y, width: float.width, height: float.height } })));
-  }
-
-  /** The floating picture under a point of the window, as the position of its anchor in the text. The one on top, when several are. */
-  private floatAtPoint(clientX: number, clientY: number): { pos: Position; box: Rect } | undefined {
-    const index = this.area === 'body' ? this.pageAt(clientY) : this.areaPage;
-    const rect = this.pageEls[index].getBoundingClientRect();
-    const scale = this.setupOf(index).width / rect.width;
-    const x = (clientX - rect.left) * scale;
-    const y = (clientY - rect.top) * scale;
-    // Text over a picture that is under it is what the click is for: the picture is taken where it shows by itself.
-    const onText = (this.flow.pages[this.area === 'body' ? index : 0]?.lines ?? []).some(
-      (line) => y >= line.y && y <= line.y + line.height && line.fragments.some((f) => f.kind === 'text' && f.text.trim() && x >= f.x && x <= f.x + f.width),
-    );
-    const hit = this.floats()
-      .reverse()
-      .find(({ box, float }) => box.page === index && x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height && !(float.behind && onText));
-    return hit && { pos: this.mapOffset({ para: hit.float.para, offset: hit.float.offset }, false), box: hit.box };
-  }
-
-  /** The picture under a point of the window, as its position in the text. */
-  private pictureAtPoint(clientX: number, clientY: number): Position | undefined {
-    const index = this.area === 'body' ? this.pageAt(clientY) : this.areaPage;
-    const rect = this.pageEls[index].getBoundingClientRect();
-    const scale = this.setupOf(index).width / rect.width;
-    const x = (clientX - rect.left) * scale;
-    const y = (clientY - rect.top) * scale;
-    const page = this.flow.pages[this.area === 'body' ? index : 0];
-    for (const line of page?.lines ?? []) {
-      for (const f of line.fragments) {
-        if (f.kind !== 'object' || f.width <= 0) continue;
-        const top = line.baseline - f.ascent;
-        if (x >= f.x && x <= f.x + f.width && y >= top && y <= top + f.ascent) return this.mapOffset({ para: line.para, offset: f.start }, false);
-      }
-    }
-    return undefined;
-  }
-
-  /** The edge of a table column near a point of the window, which can be dragged to make the column wider. */
-  private columnEdgeAt(clientX: number, clientY: number): { table: number; boundary: number; scale: number } | undefined {
-    if (this.area !== 'body') return undefined;
-    const index = this.pageAt(clientY);
-    const rect = this.pageEls[index].getBoundingClientRect();
-    const scale = this.setupOf(index).width / rect.width;
-    const x = (clientX - rect.left) * scale;
-    const y = (clientY - rect.top) * scale;
-    for (const cell of this.layout.pages[index].cells) {
-      if (y < cell.y || y > cell.y + cell.height || Math.abs(x - (cell.x + cell.width)) > COLUMN_GRIP * scale) continue;
-      const row = this.doc.tables?.[cell.table]?.rows[cell.row];
-      if (!row?.cells[cell.cell]) continue;
-      let boundary = row.before;
-      for (let i = 0; i <= cell.cell; i++) boundary += row.cells[i].span;
-      return { table: cell.table, boundary, scale };
-    }
-    return undefined;
-  }
-
-  /** The bottom edge of a table row under the point: dragging it makes the row taller or shorter. */
-  private rowEdgeAt(clientX: number, clientY: number): { table: number; row: number; height: number; scale: number } | undefined {
-    if (this.area !== 'body') return undefined;
-    const index = this.pageAt(clientY);
-    const rect = this.pageEls[index].getBoundingClientRect();
-    const scale = this.setupOf(index).width / rect.width;
-    const x = (clientX - rect.left) * scale;
-    const y = (clientY - rect.top) * scale;
-    const cells = this.layout.pages[index].cells;
-    // The last of them: of a table in a cell and the cell, the inner one.
-    let edge: { table: number; bottom: number } | undefined;
-    for (const cell of cells) {
-      if (x < cell.x || x > cell.x + cell.width || Math.abs(y - (cell.y + cell.height)) > COLUMN_GRIP * scale) continue;
-      edge = { table: cell.table, bottom: cell.y + cell.height };
-    }
-    if (!edge) return undefined;
-    const { table, bottom } = edge;
-    // A cell merged down ends with the last row it covers: the row is the lowest of those ending at the edge.
-    const ending = cells.filter((c) => c.table === table && Math.abs(c.y + c.height - bottom) < 0.5);
-    const row = Math.max(...ending.map((c) => c.row));
-    if (!this.doc.tables?.[table]?.rows[row]) return undefined;
-    // As tall as its cells that cover it alone; a cell merged down is taller.
-    const height = Math.min(...cells.filter((c) => c.table === table && c.row === row).map((c) => c.height));
-    return { table, row, height, scale };
-  }
-
-  /** The bottom right corner of a table under the point: dragging it makes the whole table larger or smaller. */
-  private tableCornerAt(clientX: number, clientY: number): { table: number; scale: number } | undefined {
-    if (this.area !== 'body') return undefined;
-    const index = this.pageAt(clientY);
-    const rect = this.pageEls[index].getBoundingClientRect();
-    const scale = this.setupOf(index).width / rect.width;
-    const x = (clientX - rect.left) * scale;
-    const y = (clientY - rect.top) * scale;
-    const corners = new Map<number, { right: number; bottom: number }>();
-    for (const cell of this.layout.pages[index].cells) {
-      const at = corners.get(cell.table) ?? { right: -Infinity, bottom: -Infinity };
-      corners.set(cell.table, { right: Math.max(at.right, cell.x + cell.width), bottom: Math.max(at.bottom, cell.y + cell.height) });
-    }
-    const grip = TABLE_GRIP * scale;
-    let found: number | undefined;
-    for (const [table, { right, bottom }] of corners) {
-      // The table's last page: the corner is where the table ends.
-      if (this.layout.pages.slice(index + 1).some((p) => p.cells.some((c) => c.table === table))) continue;
-      if (x >= right - grip && x <= right + grip && y >= bottom - grip && y <= bottom + grip) found = table;
-    }
-    return found === undefined ? undefined : { table: found, scale };
-  }
-
-  /** How tall each row of a table is drawn, over all the pages it is on. */
-  private rowHeights(tableIndex: number): number[] {
-    const table = this.doc.tables?.[tableIndex];
-    if (!table) return [];
-    const heights = table.rows.map(() => 0);
-    for (const page of this.layout.pages) {
-      const least = new Map<number, number>();
-      for (const c of page.cells) if (c.table === tableIndex) least.set(c.row, Math.min(least.get(c.row) ?? Infinity, c.height));
-      for (const [row, height] of least) heights[row] += height;
-    }
-    return heights;
-  }
-
-  private scrollCaretIntoView(): void {
-    const { top, height, left } = this.caretBox();
-    const bottom = top + height;
-    // Sideways too, where the page is wider than the window: zoomed in on a phone.
-    if (this.root.scrollWidth > this.root.clientWidth + 1) {
-      if (left - SCROLL_MARGIN < this.root.scrollLeft) this.root.scrollLeft = left - SCROLL_MARGIN;
-      else if (left + SCROLL_MARGIN > this.root.scrollLeft + this.root.clientWidth) this.root.scrollLeft = left + SCROLL_MARGIN - this.root.clientWidth;
-    }
-    // What an on-screen keyboard covers of the window is not there to see the caret in.
-    const seen = this.root.clientHeight - keyboardInset(this.root);
-    if (top - SCROLL_MARGIN < this.root.scrollTop) {
-      this.root.scrollTop = top - SCROLL_MARGIN;
-    } else if (bottom + SCROLL_MARGIN > this.root.scrollTop + seen) {
-      this.root.scrollTop = bottom + SCROLL_MARGIN - seen;
-    }
-  }
-
-  /** The keyboard came up or went away: the caret is kept where it can be seen. */
-  private onViewport = (): void => {
-    if (document.activeElement === this.input) this.scrollCaretIntoView();
-  };
-
-  // --- Mouse --------------------------------------------------------------
-
-  /** The page a point of the window is on, or the nearest one. */
-  private pageAt(clientY: number): number {
-    let index = 0;
-    let best = Infinity;
-    this.pageEls.forEach((el, i) => {
-      const r = el.getBoundingClientRect();
-      const distance = clientY < r.top ? r.top - clientY : clientY > r.bottom ? clientY - r.bottom : 0;
-      if (distance < best) {
-        best = distance;
-        index = i;
-      }
-    });
-    return index;
-  }
-
-  private positionFromPoint(clientX: number, clientY: number): Position {
-    // In a header or footer the point is taken on the page being edited, wherever it is.
-    const index = this.area === 'body' ? this.pageAt(clientY) : this.areaPage;
-    const rect = this.pageEls[index].getBoundingClientRect();
-    const scale = this.setupOf(index).width / rect.width;
-    const pos = hitTest(this.flow, this.measurer, this.area === 'body' ? index : 0, (clientX - rect.left) * scale, (clientY - rect.top) * scale);
-    return this.mapOffset(pos, false);
-  }
-
-  private onMouseDown = (e: MouseEvent): void => {
-    this.hideNoteTip();
-    if (e.button !== 0) return;
-    e.preventDefault();
-    this.setByTouch(false);
-    this.press(e);
-  };
-
-  /** A press on the pages, by the mouse or by a finger: what it selects, or takes hold of. */
-  private press(e: Pick<MouseEvent, 'clientX' | 'clientY' | 'detail' | 'shiftKey' | 'target'>): void {
-    // A word half written by an on-screen keyboard is left as it is: blurring ends it.
-    if (this.composing) this.input.blur();
-    this.focus();
-    // A corner of the selected picture: dragging it gives the picture another size.
-    const corner = (e.target as HTMLElement).closest<HTMLElement>('.dx-objh');
-    const picked = corner && this.selectedPicture();
-    if (corner && picked) {
-      const frame = corner.parentElement as HTMLElement;
-      const column = this.textColumn();
-      // A floating picture can be as wide as the page; one in the line, as its column.
-      const max = picked.floating ? this.setupOf(picked.box.page).width : column.right - column.left;
-      this.pictureResize = { pos: picked.pos, corner: corner.dataset.corner ?? 'se', startX: e.clientX, box: picked.box, frame, width: picked.box.width, height: picked.box.height, max, floating: picked.floating };
-      return;
-    }
-    // The corner of a table: dragging it makes the whole table larger or smaller.
-    const grip = e.detail === 1 && this.view !== 'flow' ? this.tableCornerAt(e.clientX, e.clientY) : undefined;
-    if (grip) {
-      const boxes = this.layout.pages[this.pageAt(e.clientY)].cells.filter((c) => c.table === grip.table);
-      const pageEl = this.pageEls[this.pageAt(e.clientY)];
-      const px = 1 / grip.scale;
-      const left = Math.min(...boxes.map((c) => c.x));
-      const top = Math.min(...boxes.map((c) => c.y));
-      const width = (Math.max(...boxes.map((c) => c.x + c.width)) - left) * px;
-      const height = (Math.max(...boxes.map((c) => c.y + c.height)) - top) * px;
-      const guide = document.createElement('div');
-      guide.className = 'dx-guide-box';
-      Object.assign(guide.style, { left: `${pageEl.offsetLeft + left * px}px`, top: `${pageEl.offsetTop + top * px}px`, width: `${width}px`, height: `${height}px` });
-      this.pagesEl.appendChild(guide);
-      this.tableDrag = { table: grip.table, startX: e.clientX, startY: e.clientY, width, height, guide };
-      return;
-    }
-    // The bottom edge of a table row: dragging it makes the row taller or shorter.
-    const rowEdge = e.detail === 1 && this.view !== 'flow' ? this.rowEdgeAt(e.clientX, e.clientY) : undefined;
-    if (rowEdge) {
-      const guide = document.createElement('div');
-      guide.className = 'dx-guide-row';
-      const pageEl = this.pageEls[this.pageAt(e.clientY)];
-      guide.style.left = `${pageEl.offsetLeft}px`;
-      guide.style.width = `${pageEl.offsetWidth}px`;
-      guide.style.top = `${e.clientY - this.pagesEl.getBoundingClientRect().top}px`;
-      this.pagesEl.appendChild(guide);
-      this.rowDrag = { ...rowEdge, startY: e.clientY, guide };
-      return;
-    }
-    // The edge of a table column: dragging it moves the edge.
-    const edge = e.detail === 1 && this.view !== 'flow' ? this.columnEdgeAt(e.clientX, e.clientY) : undefined;
-    if (edge) {
-      const guide = document.createElement('div');
-      guide.className = 'dx-guide';
-      const pageEl = this.pageEls[this.pageAt(e.clientY)];
-      guide.style.top = `${pageEl.offsetTop}px`;
-      guide.style.height = `${pageEl.offsetHeight}px`;
-      guide.style.left = `${e.clientX - this.pagesEl.getBoundingClientRect().left}px`;
-      this.pagesEl.appendChild(guide);
-      this.columnDrag = { ...edge, startX: e.clientX, guide };
-      return;
-    }
-    // A click in a text box goes into it, to write in it; one on its edge takes the box itself, to move it or make it larger.
-    const box = this.view !== 'flow' ? this.textBoxAt(e.clientX, e.clientY) : undefined;
-    if (box && !box.edge) {
-      const same = this.area === 'textbox' && this.areaNote === box.id;
-      if (!same || this.areaPage !== box.page) this.setArea('textbox', box.page, box.id);
-      if (this.area === 'textbox') {
-        const pos = this.positionFromPoint(e.clientX, e.clientY);
-        if (e.detail === 2) {
-          const word = wordRangeAt(this.text, pos);
-          this.setSelection(word.from, word.to);
-        } else if (e.detail >= 3) {
-          this.setSelection({ para: pos.para, offset: 0 }, { para: pos.para, offset: paragraphLength(this.text.paragraphs[pos.para]) });
-        } else {
-          this.setSelection(e.shiftKey && same ? this.selection.anchor : pos, pos);
-          this.dragging = true;
-        }
-        return;
-      }
-    }
-    // Out of the box, back to the text.
-    if (this.area === 'textbox') this.setArea('body');
-    const zone = this.zoneAt(e.clientY);
-    // A click on a note at the foot of the page goes into it, and one on the text from a note comes back out, as in Word.
-    const intoNote = zone.area === 'footnote' && (this.area !== 'footnote' || zone.note !== this.areaNote || zone.page !== this.areaPage);
-    if (intoNote || (this.area === 'footnote' && zone.area === 'body')) {
-      this.setArea(zone.area, zone.page, zone.note);
-      this.setSelection(this.positionFromPoint(e.clientX, e.clientY));
-      return;
-    }
-    if (zone.area !== this.area) {
-      // A double click on the header or the footer goes into it, and one on the text comes back out.
-      if (e.detail === 2) {
-        this.setArea(zone.area, zone.page, zone.note);
-        this.setSelection(this.positionFromPoint(e.clientX, e.clientY));
-        return;
-      }
-      if (this.area !== 'body') return;
-    } else if (this.area !== 'body' && zone.page !== this.areaPage) {
-      this.setArea(this.area, zone.page, zone.note);
-    }
-    // A click on a picture selects it; dragging from there moves it.
-    const picture = e.detail === 1 && !e.shiftKey ? this.pictureAtPoint(e.clientX, e.clientY) : undefined;
-    if (picture) {
-      this.setSelection(picture, { para: picture.para, offset: picture.offset + 1 });
-      if (this.view !== 'flow') this.pictureDrag = { from: picture, x: e.clientX, y: e.clientY, active: false };
-      return;
-    }
-    // A click on a floating picture selects it too; dragging from there moves it about its page.
-    const float = e.detail === 1 && !e.shiftKey ? this.floatAtPoint(e.clientX, e.clientY) : undefined;
-    if (float) {
-      // Its anchor may be lines away from where it is drawn: the view stays on the picture that was clicked.
-      const top = this.root.scrollTop;
-      this.setSelection(float.pos, { para: float.pos.para, offset: float.pos.offset + 1 });
-      this.root.scrollTop = top;
-      this.floatDrag = { pos: float.pos, x: e.clientX, y: e.clientY, active: false, box: float.box };
-      return;
-    }
-    const pos = this.positionFromPoint(e.clientX, e.clientY);
-    if (e.detail === 2) {
-      const word = wordRangeAt(this.text, pos);
-      this.setSelection(word.from, word.to);
-    } else if (e.detail >= 3) {
-      const length = paragraphLength(this.text.paragraphs[pos.para]);
-      this.setSelection({ para: pos.para, offset: 0 }, { para: pos.para, offset: length });
-    } else {
-      this.setSelection(e.shiftKey ? this.selection.anchor : pos, pos);
-      this.dragging = true;
-    }
-  }
-
-  /** The note shown beside the pointer while it is over the text the note is about. */
-  private noteTip: HTMLElement | undefined;
-  private noteTipFor = '';
-
-  private hideNoteTip(): void {
-    this.linkTip?.remove();
-    this.linkTip = undefined;
-    this.noteTip?.remove();
-    this.noteTip = undefined;
-    this.noteTipFor = '';
-  }
-
-  /** The table of contents of the document it was last looked for in. */
-  private tocSeen: { doc: Doc; range: ReturnType<typeof tocRange> } | undefined;
-
-  /** The pointer is a hand over an entry of the table of contents, which a click follows. */
-  private hoverLink(e: MouseEvent): void {
-    let link = false;
-    if (this.area === 'body' && !e.buttons && e.target instanceof Node && this.pagesEl.contains(e.target)) {
-      if (this.tocSeen?.doc !== this.doc) this.tocSeen = { doc: this.doc, range: tocRange(this.doc) };
-      const range = this.tocSeen.range;
-      if (range) {
-        const para = this.positionFromPoint(e.clientX, e.clientY).para;
-        link = para >= range.first && para <= range.last && tocTarget(this.doc, para) !== undefined;
-      }
-    }
-    // A link out of the document says where it goes; it is followed with the command key held, as in Word.
-    const out = e.buttons ? undefined : this.linkUnder(e);
-    this.showLinkTip(out, e);
-    this.pagesEl.classList.toggle('dx-over-link', link || (out !== undefined && (e.metaKey || e.ctrlKey)));
-  }
-
-  /** Where the link under the pointer goes. The text lets the mouse through, so it is found by where it is. */
-  private linkUnder(e: MouseEvent): string | undefined {
-    if (!(e.target instanceof Node) || !this.pagesEl.contains(e.target)) return undefined;
-    for (const part of this.pagesEl.querySelectorAll<HTMLElement>('[data-href]')) {
-      const r = part.getBoundingClientRect();
-      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return part.dataset.href;
-    }
-    return undefined;
-  }
-
-  private linkTip: HTMLElement | undefined;
-
-  private showLinkTip(href: string | undefined, e: MouseEvent): void {
-    if (href === undefined) {
-      this.linkTip?.remove();
-      this.linkTip = undefined;
-      return;
-    }
-    if (this.linkTip?.dataset.href !== href) {
-      this.linkTip?.remove();
-      const tip = document.createElement('div');
-      tip.className = 'dx-note-tip dx-link-tip';
-      tip.setAttribute('role', 'tooltip');
-      tip.dataset.href = href;
-      const address = document.createElement('div');
-      address.textContent = href;
-      const how = document.createElement('div');
-      how.className = 'dx-note-by';
-      how.textContent = t('link.follow', { key: MOD_KEY });
-      speaks(how);
-      tip.append(address, how);
-      applyTheme(tip, this.themeName);
-      document.body.appendChild(tip);
-      this.linkTip = tip;
-    }
-    const tip = this.linkTip!;
-    const { width, height } = tip.getBoundingClientRect();
-    const below = e.clientY + 18;
-    tip.style.left = `${Math.max(8, Math.min(e.clientX + 10, window.innerWidth - width - 8))}px`;
-    tip.style.top = `${below + height > window.innerHeight - 8 ? Math.max(8, e.clientY - height - 10) : below}px`;
-  }
-
-  /** Shows the note whose text is under the pointer, or puts it away when there is none there. */
-  private hoverNote(e: MouseEvent): void {
-    // The marks let the mouse through to the text, so they are found by where they are.
-    let id: string | undefined;
-    let size = Infinity;
-    if (!e.buttons && e.target instanceof Node && this.pagesEl.contains(e.target)) {
-      for (const mark of this.pagesEl.querySelectorAll<HTMLElement>('.dx-note')) {
-        const r = mark.getBoundingClientRect();
-        if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) continue;
-        // Inside another, the smaller one is the one meant.
-        const whole = [...this.pagesEl.querySelectorAll<HTMLElement>(`.dx-note[data-note="${mark.dataset.note}"]`)].reduce((sum, part) => sum + part.offsetWidth, 0);
-        if (whole < size) {
-          size = whole;
-          id = mark.dataset.note;
-        }
-      }
-    }
-    const note = id === undefined ? undefined : this.doc.notes?.find((other) => other.id === id);
-    if (!note) {
-      this.hideNoteTip();
-      return;
-    }
-    if (this.noteTipFor !== note.id) {
-      this.hideNoteTip();
-      const tip = document.createElement('div');
-      tip.className = 'dx-note-tip';
-      tip.setAttribute('role', 'tooltip');
-      tip.style.borderLeftColor = `#${note.color ?? NOTE_COLORS[0]}`;
-      const by = document.createElement('div');
-      by.className = 'dx-note-by';
-      by.textContent = note.author;
-      const text = document.createElement('div');
-      text.textContent = note.text;
-      tip.append(by, text);
-      applyTheme(tip, this.themeName);
-      document.body.appendChild(tip);
-      this.noteTip = tip;
-      this.noteTipFor = note.id;
-    }
-    // Under the pointer, or above it where there is no room below; never off the window.
-    const tip = this.noteTip!;
-    const { width, height } = tip.getBoundingClientRect();
-    const below = e.clientY + 18;
-    tip.style.left = `${Math.max(8, Math.min(e.clientX + 10, window.innerWidth - width - 8))}px`;
-    tip.style.top = `${below + height > window.innerHeight - 8 ? Math.max(8, e.clientY - height - 10) : below}px`;
-  }
-
-  private onMouseMove = (e: MouseEvent): void => {
-    this.hoverNote(e);
-    this.hoverLink(e);
-    if (this.columnDrag) {
-      this.columnDrag.guide.style.left = `${e.clientX - this.pagesEl.getBoundingClientRect().left}px`;
-      return;
-    }
-    if (this.rowDrag) {
-      const drag = this.rowDrag;
-      // Not above the least a row can be.
-      const lowest = drag.startY - (drag.height - MIN_ROW_HEIGHT) / drag.scale;
-      drag.guide.style.top = `${Math.max(lowest, e.clientY) - this.pagesEl.getBoundingClientRect().top}px`;
-      return;
-    }
-    if (this.tableDrag) {
-      const drag = this.tableDrag;
-      drag.guide.style.width = `${Math.max(8, drag.width + e.clientX - drag.startX)}px`;
-      drag.guide.style.height = `${Math.max(8, drag.height + e.clientY - drag.startY)}px`;
-      return;
-    }
-    if (this.pictureResize) {
-      // The corner follows the pointer sideways; the picture keeps its proportions, and the corner across stays put.
-      const drag = this.pictureResize;
-      const { box } = drag;
-      const moved = ((e.clientX - drag.startX) / (PT_TO_PX * this.zoom)) * (drag.corner.includes('e') ? 1 : -1);
-      drag.width = Math.max(MIN_PICTURE, Math.min(box.width + moved, drag.max));
-      drag.height = (drag.width * box.height) / box.width;
-      Object.assign(drag.frame.style, {
-        width: `${drag.width}pt`,
-        height: `${drag.height}pt`,
-        left: `${drag.corner.includes('w') ? box.x + box.width - drag.width : box.x}pt`,
-        top: `${drag.corner.includes('n') ? box.y + box.height - drag.height : box.y}pt`,
-      });
-      return;
-    }
-    if (this.floatDrag) {
-      const drag = this.floatDrag;
-      if (!drag.active && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < DRAG_START) return;
-      drag.active = true;
-      // Its frame follows the pointer; the picture goes there when it is let go.
-      const frame = this.root.querySelector<HTMLElement>('.dx-objsel');
-      const scale = 1 / (PT_TO_PX * this.zoom);
-      if (frame) Object.assign(frame.style, { left: `${drag.box.x + (e.clientX - drag.x) * scale}pt`, top: `${drag.box.y + (e.clientY - drag.y) * scale}pt` });
-      return;
-    }
-    if (this.pictureDrag) {
-      const drag = this.pictureDrag;
-      if (!drag.active && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < DRAG_START) return;
-      drag.active = true;
-      // The caret shows where the picture will go.
-      drag.to = this.positionFromPoint(e.clientX, e.clientY);
-      this.placeCaret(drag.to, true);
-      return;
-    }
-    if (!this.dragging) {
-      // Over the edge of a column the pointer says it can be dragged.
-      const on = this.view !== 'flow' && this.pagesEl.contains(e.target as Node);
-      const corner = on && !!this.tableCornerAt(e.clientX, e.clientY);
-      const row = on && !corner && !!this.rowEdgeAt(e.clientX, e.clientY);
-      this.pagesEl.classList.toggle('dx-table-resize', corner);
-      this.pagesEl.classList.toggle('dx-row-resize', row);
-      this.pagesEl.classList.toggle('dx-col-resize', on && !corner && !row && !!this.columnEdgeAt(e.clientX, e.clientY));
-      return;
-    }
-    const pos = this.positionFromPoint(e.clientX, e.clientY);
-    if (comparePositions(pos, this.selection.focus) !== 0) this.setSelection(this.selection.anchor, pos);
-  };
-
-  private onMouseUp = (e: MouseEvent): void => {
-    // A plain click on an entry of the table of contents, not a drag over it, goes to its heading.
-    const clicked = this.dragging && this.collapsed && this.area === 'body' && !e.shiftKey;
-    this.dragging = false;
-    const heading = clicked ? tocTarget(this.doc, this.selection.focus.para) : undefined;
-    if (heading !== undefined) this.goToHeading(heading);
-    // With the command key held, a click on a link opens what it goes to.
-    const out = this.collapsed && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.button === 0 ? this.linkUnder(e) : undefined;
-    if (out !== undefined) this.openLink(out);
-    if (this.rowDrag) {
-      const { table, row, height, startY, scale, guide } = this.rowDrag;
-      this.rowDrag = undefined;
-      guide.remove();
-      const doc = resizeRow(this.doc, table, row, height + (e.clientY - startY) * scale);
-      if (doc !== this.doc) this.commitDoc(doc, this.selection);
-      return;
-    }
-    if (this.tableDrag) {
-      const { table, startX, startY, width, height, guide } = this.tableDrag;
-      this.tableDrag = undefined;
-      guide.remove();
-      const laidOut = this.doc.tables?.[table];
-      if (!laidOut) return;
-      const { width: pageWidth, marginLeft, marginRight } = this.pageOfTable(table);
-      const columns = tableGeometry(laidOut, pageWidth - marginLeft - marginRight).columns;
-      const scaleX = Math.max(8, width + e.clientX - startX) / width;
-      const scaleY = Math.max(8, height + e.clientY - startY) / height;
-      const doc = resizeTable(this.doc, table, columns, scaleX, this.rowHeights(table), scaleY);
-      if (doc !== this.doc) this.commitDoc(doc, this.selection);
-      return;
-    }
-    if (this.columnDrag) {
-      const { table, boundary, startX, scale, guide } = this.columnDrag;
-      this.columnDrag = undefined;
-      guide.remove();
-      const { width, marginLeft, marginRight } = this.pageOfTable(table);
-      const laidOut = this.doc.tables?.[table];
-      if (!laidOut) return;
-      const columns = tableGeometry(laidOut, width - marginLeft - marginRight).columns;
-      const doc = resizeColumn(this.doc, table, boundary, (e.clientX - startX) * scale, columns);
-      if (doc !== this.doc) this.commitDoc(doc, this.selection);
-      return;
-    }
-    if (this.pictureResize) {
-      const { pos, width, height, box, floating, corner } = this.pictureResize;
-      this.pictureResize = undefined;
-      if (Math.abs(width - box.width) < 0.5) this.renderSelection();
-      else if (!floating) this.commit(resizePicture(this.text, pos, width, height), this.selection);
-      // The corner across from the one dragged stays where it was.
-      else this.commit(moveFloat(resizeFloat(this.text, pos, width, height), pos, corner.includes('w') ? box.width - width : 0, corner.includes('n') ? box.height - height : 0), this.selection);
-      return;
-    }
-    if (this.floatDrag) {
-      const { pos, x, y, active, box } = this.floatDrag;
-      this.floatDrag = undefined;
-      const scale = 1 / (PT_TO_PX * this.zoom);
-      if (!active) {
-        this.renderSelection();
-        return;
-      }
-      const dx = (e.clientX - x) * scale;
-      const dy = (e.clientY - y) * scale;
-      // Let go over another paragraph of the text, it is anchored there from then on, as in Word: it goes
-      // with that paragraph, and to its page. Where it is drawn is where it was let go.
-      const to = this.positionFromPoint(e.clientX, e.clientY);
-      const target = this.text.paragraphs[to.para];
-      if (to.para !== pos.para && target) {
-        const from = this.pageEls[box.page].getBoundingClientRect();
-        // A header or a footer is that of the page it is being edited on.
-        const page = this.area === 'body' ? this.pageAt(e.clientY) : this.areaPage;
-        const onto = this.pageEls[page].getBoundingClientRect();
-        // Where its corner was let go, in the coordinates of the page it is over.
-        const wanted = { x: box.x + dx + (from.left - onto.left) * scale, y: box.y + dy + (from.top - onto.top) * scale };
-        const anchored = reanchorFloat(this.text, pos, outsideField(this.text, { para: to.para, offset: 0 }));
-        // Put where it was let go; the text going round it may move its paragraph, so it is tried again until it stays.
-        let placed = anchored.doc;
-        for (let pass = 0; pass < 4; pass++) {
-          const now = this.floatBoxIn(placed, anchored.pos);
-          if (!now || now.page !== page || (Math.abs(wanted.x - now.x) < 0.5 && Math.abs(wanted.y - now.y) < 0.5)) break;
-          placed = moveFloat(placed, anchored.pos, wanted.x - now.x, wanted.y - now.y);
-        }
-        if (anchored.doc !== this.text) {
-          this.commit(placed, { anchor: anchored.pos, focus: { para: anchored.pos.para, offset: anchored.pos.offset + 1 } });
-          return;
-        }
-      }
-      const moved = moveFloat(this.text, pos, dx, dy);
-      if (moved !== this.text) this.commit(moved, this.selection);
-      else this.renderSelection();
-      return;
-    }
-    if (this.pictureDrag) {
-      const { from, to, active } = this.pictureDrag;
-      this.pictureDrag = undefined;
-      const moved = active && to ? movePicture(this.text, from, outsideField(this.text, to)) : undefined;
-      if (moved && moved.doc !== this.text) this.commit(moved.doc, { anchor: moved.pos, focus: { para: moved.pos.para, offset: moved.pos.offset + 1 } });
-      else this.renderSelection();
-    }
-  };
-
-  // --- Keyboard and clipboard ---------------------------------------------
-
-  private moveTo(pos: Position, extend: boolean): void {
-    this.setSelection(extend ? this.selection.anchor : pos, pos);
-  }
-
-  private moveHorizontal(dir: -1 | 1, byWord: boolean, extend: boolean): void {
-    if (!extend && !this.collapsed) {
-      this.moved = 'char';
-      this.moveTo(dir < 0 ? this.range.from : this.range.to, false);
-      return;
-    }
-    const focus = this.selection.focus;
-    this.moved = byWord ? 'word' : 'char';
-    this.moveTo(byWord ? moveWord(this.text, focus, dir) : moveChar(this.text, focus, dir), extend);
-  }
-
-  private moveVertical(dir: -1 | 1, extend: boolean): void {
-    const focus = this.selection.focus;
-    const shown = this.mapOffset(focus, true);
-    const line = lineForPosition(this.flow, shown);
-    const x = this.goalX ?? xAtOffset(line, shown.offset, this.measurer);
-    const target = adjacentLine(this.flow, line, x, dir);
-    const pos = target
-      ? this.mapOffset({ para: target.para, offset: offsetAtX(target, x, this.measurer) }, false)
-      : dir < 0
-        ? docStart()
-        : docEnd(this.text);
-    this.moved = 'line';
-    this.moveTo(pos, extend);
-    this.goalX = x;
-  }
-
-  /** Selects the contents of the next (1) or previous (-1) table cell, as Tab does in Word. */
-  private moveToCell(dir: -1 | 1): void {
-    let cell = neighbourCell(this.text, this.selection.focus.para, dir);
-    if (!cell && dir > 0) {
-      // Tab in the last cell adds a row and goes on into it.
-      this.insertTableRow(true);
-      cell = neighbourCell(this.text, this.selection.focus.para, dir);
-    }
-    if (!cell) return;
-    this.moved = 'line';
-    const end = { para: cell.to, offset: paragraphLength(this.text.paragraphs[cell.to]) };
-    this.setSelection({ para: cell.from, offset: 0 }, end);
-  }
-
-  private moveToLineEdge(dir: -1 | 1, extend: boolean): void {
-    const line = lineForPosition(this.flow, this.mapOffset(this.selection.focus, true));
-    this.moved = 'line';
-    this.moveTo(this.mapOffset({ para: line.para, offset: dir < 0 ? line.start : lineEndOffset(line) }, false), extend);
-  }
-
-  private onKeyDown = (e: KeyboardEvent): void => {
-    const before = this.selection;
-    this.moved = undefined;
-    this.handleKey(e);
-    if (this.moved) this.announceMove(before);
-    this.moved = undefined;
-  };
-
-  private handleKey(e: KeyboardEvent): void {
-    this.hideNoteTip();
-    if (e.isComposing || this.composing) return;
-    const mod = e.metaKey || e.ctrlKey;
-    const byWord = e.altKey || (e.ctrlKey && !e.metaKey);
-    let handled = true;
-    // Ctrl+Shift+V pastes the text alone, as it pastes in Word and in browsers; the paste itself is the browser's.
-    this.plainPaste = mod && e.shiftKey && e.code === 'KeyV';
-    if (this.plainPaste && IS_MAC && !e.altKey) {
-      // A Mac has no paste for ⌘⇧V: the text is read from the clipboard here.
-      e.preventDefault();
-      this.plainPaste = false;
-      void this.paste({ plain: true });
-      return;
-    }
-
-    if ((IS_MAC ? e.metaKey : e.ctrlKey) && e.altKey && !e.shiftKey && e.code === 'KeyZ') {
-      this.screenReader = !this.screenReader;
-      e.preventDefault();
-      return;
-    }
-    if (mod && e.altKey && e.code === 'KeyF') {
-      // A note at the foot of the page, with the keys Word has for it.
-      this.insertFootnote();
-      e.preventDefault();
-      return;
-    }
-    if (mod && e.shiftKey && !e.altKey && e.code === 'KeyE') {
-      // Tracking changes on and off, with the keys Word has for it.
-      this.setTrackChanges(!this.trackChanges);
-      e.preventDefault();
-      return;
-    }
-    if (mod && !e.altKey) {
-      switch (e.key?.toLowerCase()) {
-        case 'b':
-          this.toggleMark('bold');
-          break;
-        case 'i':
-          this.toggleMark('italic');
-          break;
-        case 'u':
-          this.toggleMark('underline');
-          break;
-        case 'k':
-          if (this.onLinkKey) this.onLinkKey();
-          else handled = false;
-          break;
-        case 'a':
-          this.selectAll();
-          break;
-        case 'z':
-          if (e.shiftKey) this.redo();
-          else this.undo();
-          break;
-        case 'y':
-          this.redo();
-          break;
-        case 'enter':
-          this.insertPageBreak();
-          break;
-        case 'arrowleft':
-          if (e.metaKey) this.moveToLineEdge(-1, e.shiftKey);
-          else this.moveHorizontal(-1, true, e.shiftKey);
-          break;
-        case 'arrowright':
-          if (e.metaKey) this.moveToLineEdge(1, e.shiftKey);
-          else this.moveHorizontal(1, true, e.shiftKey);
-          break;
-        case 'arrowup':
-        case 'home':
-          this.moveTo(docStart(), e.shiftKey);
-          break;
-        case 'arrowdown':
-        case 'end':
-          this.moveTo(docEnd(this.text), e.shiftKey);
-          break;
-        case 'backspace':
-          this.deleteBackward(true);
-          break;
-        case 'delete':
-          this.deleteForward(true);
-          break;
-        default:
-          handled = false;
-      }
-    } else {
-      switch (e.key) {
-        case 'ArrowLeft':
-          this.moveHorizontal(-1, byWord, e.shiftKey);
-          break;
-        case 'ArrowRight':
-          this.moveHorizontal(1, byWord, e.shiftKey);
-          break;
-        case 'ArrowUp':
-          this.moveVertical(-1, e.shiftKey);
-          break;
-        case 'ArrowDown':
-          this.moveVertical(1, e.shiftKey);
-          break;
-        case 'Home':
-          this.moveToLineEdge(-1, e.shiftKey);
-          break;
-        case 'End':
-          this.moveToLineEdge(1, e.shiftKey);
-          break;
-        case 'Backspace':
-          this.deleteBackward(byWord);
-          break;
-        case 'Delete':
-          this.deleteForward(byWord);
-          break;
-        case 'Enter':
-          if (e.shiftKey) this.insertText('\n');
-          else this.insertParagraphBreak();
-          break;
-        case 'Escape':
-          if (this.area === 'body') handled = false;
-          else this.setArea('body');
-          break;
-        case 'Tab':
-          if (this.text.paragraphs[this.selection.focus.para].cell) this.moveToCell(e.shiftKey ? -1 : 1);
-          else if (this.tabChangesLevel()) this.shiftListLevel(e.shiftKey ? -1 : 1);
-          else this.insertText('\t');
-          break;
-        default:
-          handled = false;
-      }
-    }
-    if (handled) e.preventDefault();
-  }
-
-  /**
-   * Says what a key moved the caret over: the character, the word or the line
-   * it is now at, or what it added to the selection or took from it; and,
-   * before that, where it is when that changed: the page, a table cell, a
-   * heading, a list, a link, a tracked change.
-   */
-  private announceMove(before: Selection): void {
-    const { anchor, focus } = this.selection;
-    if (comparePositions(focus, before.focus) === 0 && comparePositions(anchor, before.anchor) === 0) return;
-    const doc = this.text;
-    const parts: Spoken[] = [];
-    /** Text of the document, in its language when it has one of its own. */
-    const lang = this.textLanguage;
-    const own = (text: string): Spoken => (lang ? { text, lang } : text);
-    if (this.area === 'body') {
-      const page = lineForPosition(this.flow, this.mapOffset(focus, true)).page;
-      if (page !== this.spokenPage && this.spokenPage >= 0) parts.push(t('a11y.page', { page: this.pageOf(page) + 1 }));
-      this.spokenPage = page;
-    }
-    // Shift and an arrow that brings the focus back to the anchor takes the last of the selection away: that is said too.
-    const selecting = comparePositions(anchor, focus) !== 0 || (comparePositions(before.anchor, before.focus) !== 0 && comparePositions(anchor, before.anchor) === 0);
-    // While selecting, what is said is what was selected, not where it is.
-    if (focus.para !== before.focus.para && !selecting) parts.push(...this.whereIs(focus.para, before.focus.para));
-    // In the mode for screen readers, the text is the screen reader's to read, from the field: only where it is is said.
-    const reader = !!this.mirror;
-    if (reader && selecting) {
-      // Nothing is said of a selection: the screen reader says what it selected.
-    } else if (selecting) {
-      // By where the focus went: away from the anchor, or past it to the other side, is more selected. Pictures count, which the text leaves out.
-      const side = comparePositions(anchor, focus);
-      const step = comparePositions(focus, before.focus);
-      const crossed = comparePositions(anchor, before.focus) !== 0 && Math.sign(comparePositions(anchor, before.focus)) !== Math.sign(side);
-      const grew = side !== 0 && (comparePositions(anchor, before.anchor) !== 0 || crossed || (side < 0 ? step > 0 : step < 0));
-      const range = orderedRange(before.focus, focus);
-      const moved = range.from.para === range.to.para ? this.spokenSlice(doc.paragraphs[range.from.para], range.from.offset, range.to.offset) : textInRange(doc, range);
-      // A character that is the mark between two paragraphs is the end of the first.
-      const said = range.from.para !== range.to.para && moved === '\n' ? t('a11y.endOfParagraph') : this.moved === 'char' && moved.length <= 1 ? spokenChar(moved) : spokenText(moved);
-      parts.push(t(grew ? 'a11y.selected' : 'a11y.unselected', { text: said }));
-    } else {
-      const text = paragraphText(doc.paragraphs[focus.para]);
-      if (reader) {
-        // What the caret is at is read from the field.
-      } else if (this.moved === 'char') {
-        // The marks the caret stepped over to get here are said too: going left, a note's number is behind it.
-        const p = doc.paragraphs[focus.para];
-        if (before.focus.para === focus.para && before.focus.offset > focus.offset) {
-          const crossed = this.spokenSlice(p, focus.offset + 1, before.focus.offset).trim();
-          if (crossed) parts.push(crossed);
-        }
-        const at = this.spokenAt(p, focus.offset);
-        // A letter is the document's; a space or a picture is said in the words of the interface.
-        parts.push(at === text[focus.offset] ? own(at) : at);
-      }
-      else if (this.moved === 'word') {
-        const word = wordRangeAt(doc, focus);
-        parts.push(word.to.offset > word.from.offset ? own(text.slice(word.from.offset, word.to.offset)) : spokenChar(text[focus.offset]));
-      } else {
-        const line = lineForPosition(this.flow, this.mapOffset(focus, true));
-        const from = this.mapOffset({ para: line.para, offset: line.start }, false).offset;
-        const to = this.mapOffset({ para: line.para, offset: line.end }, false).offset;
-        const said = spokenText(this.spokenSlice(doc.paragraphs[focus.para], from, to));
-        parts.push(said === t('a11y.blank') ? said : own(said));
-      }
-      const link = linkAt(doc, focus);
-      const was = linkAt(doc, before.focus);
-      if (link?.href && link.href !== was?.href) parts.push(t('a11y.link', { href: link.href }));
-      const revision = revisionAt(doc.paragraphs, focus);
-      const left = revisionAt(doc.paragraphs, before.focus);
-      // Each call makes the change anew: it is the same one when it starts at the same place, of the same kind.
-      const same = left && revision && left.type === revision.type && comparePositions(left.range.from, revision.range.from) === 0;
-      if (revision && !same) {
-        parts.push(t(revision.type === 'delete' ? 'a11y.removed' : revision.type === 'format' ? 'a11y.formatted' : 'a11y.inserted', { author: revision.author }));
-      }
-    }
-    // Under what the screen reader reads from the field, not over it. A part that ends a sentence needs no other stop.
-    const said: Spoken[] = [];
-    for (const part of parts) {
-      const last = said[said.length - 1];
-      if (last !== undefined) said.push(/[.!?:…]$/.test(typeof last === 'string' ? last : last.text) ? ' ' : '. ');
-      said.push(part);
-    }
-    this.announcer.say(said, !reader);
-  }
-
-  /**
-   * What an object of the text is called, read out: a picture with its
-   * description, a text box, the number of a note at the foot of the page.
-   * Undefined for the marks that are nothing to hear (where a comment starts
-   * or ends, a bookmark).
-   */
-  private spokenObject(run: Run): string | undefined {
-    const xml = run.props.object;
-    if (!xml) return undefined;
-    const note = footnoteReferenceId(xml);
-    if (note !== undefined) return t('a11y.footnoteRef', { n: footnoteNumbers(this.doc).get(note) ?? '' });
-    if (!/<w:drawing\b|<w:pict\b/.test(xml)) return undefined;
-    if (/<w:txbxContent\b/.test(xml)) return t('a11y.textBox');
-    const alt = altText(xml);
-    return alt ? t('a11y.picture', { alt }) : t('a11y.pictureNoAlt');
-  }
-
-  /** What is at `offset` of a paragraph, read out: a picture by its name; past marks that take no room, what they are and the character after them. */
-  private spokenAt(p: Paragraph, offset: number): string {
-    const said: string[] = [];
-    let at = offset;
-    let start = 0;
-    for (const run of p.runs) {
-      const end = start + run.text.length;
-      if (at >= start && at < end) {
-        if (!run.props.object) break;
-        const name = this.spokenObject(run);
-        // A picture in the line is what the caret is at; a mark the caret steps over is said, and so is what follows it.
-        if (!run.props.anchor) return name ?? spokenChar(run.text[at - start]);
-        if (name) said.push(name);
-        at = end;
-      }
-      start = end;
-    }
-    said.push(spokenChar(paragraphText(p)[at]));
-    return said.join(', ');
-  }
-
-  /** A stretch of a paragraph as it is read: each object by its name. */
-  private spokenSlice(p: Paragraph, from: number, to: number): string {
-    let out = '';
-    let start = 0;
-    for (const run of p.runs) {
-      const end = start + run.text.length;
-      if (end > from && start < to) {
-        const name = run.props.object ? this.spokenObject(run) : undefined;
-        out += run.props.object ? (name ? ` ${name} ` : '') : run.text.slice(Math.max(0, from - start), Math.min(run.text.length, to - start));
-      }
-      start = end;
-    }
-    return out;
-  }
-
-  /** What changed of where the caret is, from paragraph `was` to paragraph `para`: a table cell, a heading, a list. */
-  private whereIs(para: number, was: number): string[] {
-    const doc = this.text;
-    const out: string[] = [];
-    const cell = locateCell(doc, para);
-    const before = locateCell(doc, was);
-    if (cell && (cell.tableIndex !== before?.tableIndex || cell.rowIndex !== before.rowIndex || cell.cellIndex !== before.cellIndex)) {
-      out.push(t('a11y.cell', { row: cell.rowIndex + 1, column: cell.column + 1 }));
-    } else if (!cell && before) out.push(t('a11y.leftTable'));
-    const style = styleIdAt(doc, para);
-    const styles = paragraphStyles(doc);
-    if (style !== styleIdAt(doc, was) && style !== styles[0].id) {
-      const found = styles.find((s) => s.id === style);
-      if (found) out.push(styleName(found));
-    }
-    const list = listKindAt(doc, para);
-    const level = doc.paragraphs[para].props.listLevel ?? 0;
-    if (list && (list !== listKindAt(doc, was) || level !== (doc.paragraphs[was].props.listLevel ?? 0))) {
-      const name = t(list === 'bullet' ? 'a11y.bulletList' : 'a11y.numberList');
-      out.push(level ? `${name}, ${t('a11y.level', { level: level + 1 })}` : name);
-    }
-    return out;
-  }
-
-  private onInput = (): void => {
-    if (this.mirror) return this.readerInput();
-    const raw = this.input.value;
-    const marked = raw.startsWith(INPUT_MARK);
-    // The mark is gone and nothing else is there: it was taken away, which is a Backspace.
-    if (!marked && !raw && !this.typed && !this.composing) {
-      this.resetInput();
-      this.deleteBackward();
-      return;
-    }
-    const text = marked ? raw.slice(INPUT_MARK.length) : raw;
-    // Enter, from a keyboard that writes it in the field and does not say the key: Shift and Enter never gets here.
-    const entered = !this.composing && text.endsWith('\n');
-    this.compose(entered ? text.slice(0, -1) : text);
-    if (!this.composing) this.resetInput();
-    if (entered) this.insertParagraphBreak();
-  };
-
-  private onCompositionEnd = (): void => {
-    this.composing = false;
-    this.onInput();
-    // Some browsers say what was composed once more after it ended, in an input of their own: by the time
-    // this runs they have, and the field was emptied twice over.
-    window.setTimeout(() => {
-      if (!this.composing && !this.mirror && this.input.value !== INPUT_MARK) this.onInput();
-    });
-  };
-
-  /**
-   * Brings the document up to `text`, what the hidden field holds: a word is
-   * shown as it is written, also by a keyboard that composes it, as those of
-   * phones do, and changes with it when the keyboard corrects it.
-   */
-  private compose(text: string): void {
-    let had = this.typed;
-    // The caret went elsewhere meanwhile: what was written there is no longer this word.
-    if (had && (!this.collapsed || !this.typedEnd || comparePositions(this.selection.focus, this.typedEnd) !== 0)) had = text;
-    this.typed = text;
-    if (text === had) return;
-    let same = 0;
-    while (same < had.length && same < text.length && had[same] === text[same]) same++;
-    const gone = Math.min(had.length - same, this.selection.focus.offset);
-    const added = text.slice(same);
-    if (!gone) {
-      this.insertText(added);
-    } else {
-      const to = this.selection.focus;
-      const from = { para: to.para, offset: to.offset - gone };
-      const { field: _, ...props } = this.pendingProps ?? this.activeRunProps();
-      const cut = deleteRange(this.text, { from, to });
-      const result = added ? insertFragment(cut, outsideField(cut, from), added, props) : { doc: cut, pos: from };
-      this.commit(result.doc, { anchor: result.pos, focus: result.pos }, 'type');
-    }
-    this.typedEnd = this.selection.focus;
-  }
-
-  /** Leaves the hidden field with nothing typed in it. */
-  private resetInput(): void {
-    this.typed = '';
-    this.typedEnd = undefined;
-    if (this.mirror) this.syncMirror();
-    else if (this.input.value !== INPUT_MARK) this.input.value = INPUT_MARK;
-  }
-
-  // --- Touch --------------------------------------------------------------
-
-  private setByTouch(on: boolean): void {
-    if (on === this.byTouch) return;
-    this.byTouch = on;
-    this.root.classList.toggle('dx-touch', on);
-    this.renderHandles();
-  }
-
-  private handle(end: 'anchor' | 'focus' | 'caret'): HTMLElement {
-    const el = document.createElement('div');
-    el.className = 'dx-handle';
-    this.handleLayer.appendChild(el);
-    /** How far the finger is from the line of text the handle hangs under. */
-    let lift = 0;
-    let held = false;
-    /** Whether the drag moved what the handle hangs under: one that did not was a tap on it. */
-    let moved = false;
-    el.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      el.setPointerCapture(e.pointerId);
-      held = true;
-      moved = false;
-      const box = el.getBoundingClientRect();
-      lift = e.clientY - box.top + (parseFloat(el.dataset.line ?? '0') || 0) / 2;
-    });
-    el.addEventListener('pointermove', (e) => {
-      if (!held) return;
-      // Near the top or the bottom of the window, the document moves under the finger.
-      const bounds = this.root.getBoundingClientRect();
-      const bottom = bounds.bottom - keyboardInset(this.root);
-      if (e.clientY < bounds.top + HANDLE_SCROLL_EDGE) this.root.scrollTop -= HANDLE_SCROLL_STEP;
-      else if (e.clientY > bottom - HANDLE_SCROLL_EDGE) this.root.scrollTop += HANDLE_SCROLL_STEP;
-      const pos = this.positionFromPoint(e.clientX, e.clientY - lift);
-      const { anchor, focus } = this.selection;
-      const next = end === 'caret' ? { anchor: pos, focus: pos } : end === 'anchor' ? { anchor: pos, focus } : { anchor, focus: pos };
-      // Its two ends never meet: a selection of nothing would lose the handle being dragged.
-      if (end !== 'caret' && comparePositions(next.anchor, next.focus) === 0) return;
-      if (comparePositions(next.anchor, anchor) === 0 && comparePositions(next.focus, focus) === 0) return;
-      moved = true;
-      this.caretHandleUntil = Date.now() + CARET_HANDLE_MS;
-      this.selection = next;
-      this.goalX = null;
-      this.pendingProps = null;
-      this.renderSelection();
-      this.emit();
-    });
-    const done = (e: PointerEvent) => {
-      if (!held) return;
-      held = false;
-      if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
-      if (end !== 'caret') return this.onTouchSelect?.();
-      this.showCaretHandle();
-      // A tap on the handle of the caret: what can be done there, Paste first, as a phone offers it.
-      if (!moved) this.onTouchSelect?.();
-    };
-    el.addEventListener('pointerup', done);
-    el.addEventListener('pointercancel', done);
-    return el;
-  }
-
-  /** Shows the handle under the caret for a while: what a tap does, so the caret can be put exactly. */
-  private showCaretHandle(): void {
-    this.caretHandleUntil = Date.now() + CARET_HANDLE_MS;
-    window.clearTimeout(this.caretHandleTimer);
-    this.caretHandleTimer = window.setTimeout(() => this.renderHandles(), CARET_HANDLE_MS + 20);
-    this.renderHandles();
-  }
-
-  /** Puts the handles where the selection is: under each of its ends, or under the caret after a tap. */
-  private renderHandles(): void {
-    const scale = PT_TO_PX * this.zoom;
-    const put = (el: HTMLElement, pos: Position | undefined) => {
-      el.classList.toggle('dx-on', !!pos);
-      if (!pos) return;
-      const caret = caretRect(this.flow, this.measurer, this.mapOffset(pos, true));
-      const pageEl = this.pageEls[this.pageOf(caret.page)];
-      el.style.left = `${pageEl.offsetLeft + caret.x * scale}px`;
-      el.style.top = `${pageEl.offsetTop + (caret.y + caret.height) * scale}px`;
-      el.dataset.line = String(caret.height * scale);
-    };
-    const ranged = this.byTouch && !this.collapsed && !this.selectedPicture();
-    put(this.handles.anchor, ranged ? this.selection.anchor : undefined);
-    put(this.handles.focus, ranged ? this.selection.focus : undefined);
-    put(this.handles.caret, this.byTouch && this.collapsed && Date.now() < this.caretHandleUntil ? this.selection.focus : undefined);
-  }
-
-  private onTouchStart = (e: TouchEvent): void => {
-    this.setByTouch(true);
-    this.hideNoteTip();
-    window.clearTimeout(this.touch?.timer);
-    this.touch = undefined;
-    // A handle is dragged by itself; a note in the margin and the button of the contents take the tap as a click.
-    if ((e.target as HTMLElement).closest('.dx-handle, .dx-mnote, .dx-toc-chip')) return;
-    if (e.touches.length === 2) {
-      // Two fingers change the size of what is shown, here and not in the browser.
-      e.preventDefault();
-      this.touch = undefined;
-      const [a, b] = [e.touches[0], e.touches[1]];
-      this.pinch = { distance: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1, zoom: this.zoom, frame: 0, next: this.zoom, x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
-      return;
-    }
-    if (e.touches.length !== 1) return;
-    const { clientX: x, clientY: y } = e.touches[0];
-    const target = e.target;
-    const timer = window.setTimeout(() => {
-      const touch = this.touch;
-      if (!touch || touch.moved) return;
-      // Held still: the word under the finger, which is then dragged out from.
-      touch.held = true;
-      this.press({ clientX: x, clientY: y, detail: 2, shiftKey: false, target });
-      this.onMouseUp(new MouseEvent('mouseup'));
-      navigator.vibrate?.(10);
-    }, HOLD_MS);
-    this.touch = { x, y, moved: false, held: false, timer };
-  };
-
-  private onTouchMove = (e: TouchEvent): void => {
-    if (this.pinch && e.touches.length === 2) {
-      e.preventDefault();
-      const pinch = this.pinch;
-      const [a, b] = [e.touches[0], e.touches[1]];
-      pinch.next = (pinch.zoom * Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)) / pinch.distance;
-      // The two fingers also carry the pages with them, as a sheet of paper under them would go.
-      const x = (a.clientX + b.clientX) / 2;
-      const y = (a.clientY + b.clientY) / 2;
-      this.root.scrollLeft -= x - pinch.x;
-      this.root.scrollTop -= y - pinch.y;
-      pinch.x = x;
-      pinch.y = y;
-      // Once a frame: with the text as wide as the window, every size is laid out again.
-      pinch.frame ||= requestAnimationFrame(() => {
-        pinch.frame = 0;
-        this.zoomAt(pinch.next, pinch.x, pinch.y);
-      });
-      return;
-    }
-    const touch = this.touch;
-    if (!touch || e.touches.length !== 1) return;
-    const { clientX, clientY } = e.touches[0];
-    if (touch.held) {
-      // After a hold, the finger draws the selection out; the window does not scroll under it.
-      e.preventDefault();
-      const pos = this.positionFromPoint(clientX, clientY);
-      if (comparePositions(pos, this.selection.focus) !== 0 && comparePositions(pos, this.selection.anchor) !== 0) this.setSelection(this.selection.anchor, pos);
-      return;
-    }
-    if (Math.hypot(clientX - touch.x, clientY - touch.y) > TOUCH_SLOP) {
-      touch.moved = true;
-      window.clearTimeout(touch.timer);
-    }
-  };
-
-  private onTouchEnd = (e: TouchEvent): void => {
-    if (this.pinch && e.touches.length < 2) {
-      cancelAnimationFrame(this.pinch.frame);
-      this.zoomAt(this.pinch.next, this.pinch.x, this.pinch.y);
-      this.pinch = undefined;
-      this.emit();
-      e.preventDefault();
-      return;
-    }
-    const touch = this.touch;
-    this.touch = undefined;
-    if (!touch) return;
-    window.clearTimeout(touch.timer);
-    if (touch.moved && !touch.held) return;
-    // The browser would follow this with the clicks of a mouse it makes up: it is dealt with here.
-    e.preventDefault();
-    if (touch.held) {
-      this.onTouchSelect?.();
-      return;
-    }
-    const now = Date.now();
-    const again = now - this.lastTap.time < TAP_AGAIN_MS && Math.hypot(touch.x - this.lastTap.x, touch.y - this.lastTap.y) < TAP_AGAIN_PX;
-    const count = again ? this.lastTap.count + 1 : 1;
-    this.lastTap = { time: now, x: touch.x, y: touch.y, count };
-    /** Where the caret was, when the document had it: a tap on it again offers what can be done there. */
-    const caret = this.collapsed && document.activeElement === this.input ? this.selection.focus : undefined;
-    this.press({ clientX: touch.x, clientY: touch.y, detail: count, shiftKey: false, target: e.target });
-    this.onMouseUp(new MouseEvent('mouseup'));
-    if (!this.collapsed) this.onTouchSelect?.();
-    else {
-      this.showCaretHandle();
-      // A tap on a word spelled wrong offers what it could be, as a phone does.
-      if (count === 1 && this.misspelling) this.onSpellingMenu?.();
-      else if (count === 1 && caret && comparePositions(caret, this.selection.focus) === 0) this.onTouchSelect?.();
-    }
-  };
-
-  private onTouchCancel = (): void => {
-    window.clearTimeout(this.touch?.timer);
-    this.touch = undefined;
-    if (this.pinch) cancelAnimationFrame(this.pinch.frame);
-    this.pinch = undefined;
-  };
-
   // --- Clipboard without a keyboard ---------------------------------------
 
   /** The selection, with its formatting, apart from the document. */
-  private selectedClip(): Clip | undefined {
+  /** @internal */ selectedClip(): Clip | undefined {
     return this.collapsed ? undefined : clipOf(this.text, this.range);
   }
 
@@ -5102,9 +2957,7 @@ export class Editor {
     try {
       if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
         const html = clipHtml(clip, serializeClip(clip));
-        await navigator.clipboard.write([
-          new ClipboardItem({ 'text/plain': new Blob([text], { type: 'text/plain' }), 'text/html': new Blob([html], { type: 'text/html' }) }),
-        ]);
+        await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([text], { type: 'text/plain' }), 'text/html': new Blob([html], { type: 'text/html' }) })]);
       } else {
         await navigator.clipboard.writeText(text);
       }
@@ -5165,6 +3018,8 @@ export class Editor {
   insertClip(clip: Clip): boolean {
     // A header or footer is one piece: it cannot be broken into pages.
     if (this.area !== 'body') {
+      // Nor does a table go in it: its rows come as lines.
+      clip = clipWithoutTables(clip);
       clip = { paragraphs: clip.paragraphs.map((p) => ({ ...p, runs: p.runs.map((r) => ({ ...r, text: r.text.replace(/\f/g, '') })) })) };
     }
     if (!clipText(clip)) return false;
@@ -5175,38 +3030,4 @@ export class Editor {
     this.announcer.say(t('a11y.pasted'));
     return true;
   }
-
-  private onCopy = (e: ClipboardEvent): void => {
-    e.preventDefault();
-    const clip = this.selectedClip();
-    if (!clip || !e.clipboardData) return;
-    const data = serializeClip(clip);
-    e.clipboardData.setData('text/plain', clipText(clip));
-    e.clipboardData.setData('text/html', clipHtml(clip, data));
-    e.clipboardData.setData(CLIP_TYPE, data);
-  };
-
-  private onCut = (e: ClipboardEvent): void => {
-    this.onCopy(e);
-    if (!this.collapsed) this.deleteBackward();
-  };
-
-  private onPaste = (e: ClipboardEvent): void => {
-    e.preventDefault();
-    const plain = this.plainPaste;
-    this.plainPaste = false;
-    const data = e.clipboardData;
-    const text = data?.getData('text/plain') ?? '';
-    if (!plain && data) {
-      const clip = parseClip(data.getData(CLIP_TYPE)) ?? (data.types.includes('text/html') ? clipFromHtml(data.getData('text/html')) : undefined);
-      if (clip && this.insertClip(clip)) return;
-    }
-    // A copied picture comes as a file; Word sends one of what was copied along with its text, which is what is wanted then.
-    const picture = text ? undefined : [...(data?.files ?? [])].find((file) => imageExtension(file.type));
-    if (picture) {
-      void this.insertImageFile(picture);
-      return;
-    }
-    this.insertText(text);
-  };
 }

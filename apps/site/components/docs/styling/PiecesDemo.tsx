@@ -83,7 +83,8 @@ export default function PiecesDemo({ code }: { code: Record<string, string> }) {
     return () => setLocale(was);
   }, []);
 
-  const pill = (on: boolean) => `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
+  const pill = (on: boolean) =>
+    `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
   const chosen = PIECES.find((one) => one.id === piece)!;
 
   return (

@@ -1,7 +1,8 @@
 // Runs the server people's editors meet at to work on a document together.
 //
-//   vite-node packages/collab/src/main.ts [--port 7420] [--host 0.0.0.0] [--token palabra] [--static carpeta]
-//                                         [--data carpeta | --memory | --backend https://… --backend-key clave]
+//   vite-node packages/collab/src/main.ts [--port 7420] [--host 0.0.0.0] [--token word] [--static folder]
+//                                         [--data folder | --memory | --backend https://… --backend-key key]
+//                                         [--save-after 5] [--save-every 30] [--recheck-every 0]
 //
 // The documents are kept in a folder (--data), nowhere (--memory), or by the
 // system the server works for (--backend), which is then also the one to say
@@ -12,7 +13,7 @@
 
 import { networkInterfaces } from 'node:os';
 import { createCollabServer, storedRooms } from './server';
-import { DEFAULT_COLLAB_PORT } from './session';
+import { DEFAULT_COLLAB_PORT } from './protocol';
 import { backendStorage, folderStorage, memoryStorage } from './storage';
 
 const args = process.argv.slice(2);
@@ -31,32 +32,47 @@ const has = (name: string) => {
 const memory = has('--memory');
 const backend = value('--backend') ?? process.env.REBODOCS_COLLAB_BACKEND;
 const backendKey = value('--backend-key') ?? process.env.REBODOCS_COLLAB_BACKEND_KEY;
+const saveAfter = Number(value('--save-after') ?? 5);
 const saveEvery = Number(value('--save-every') ?? 30);
-const dataDir = value('--data') ?? (memory || backend ? undefined : 'salas');
+const recheckEvery = Number(value('--recheck-every') ?? process.env.REBODOCS_COLLAB_RECHECK_EVERY ?? 0);
+const dataDir = value('--data') ?? (memory || backend ? undefined : 'rooms');
 const token = value('--token') ?? process.env.REBODOCS_COLLAB_TOKEN;
 const staticDir = value('--static');
-if (args.length || !Number.isInteger(port) || port < 0 || port > 65535 || !(saveEvery >= 1) || [memory, !!backend, !!dataDir].filter(Boolean).length !== 1) {
-  console.error('Uso: main.ts [--port 7420] [--host 0.0.0.0] [--token palabra] [--static carpeta] [--data carpeta | --memory | --backend https://… --backend-key clave [--save-every 30]]');
+if (
+  args.length ||
+  !Number.isInteger(port) ||
+  port < 0 ||
+  port > 65535 ||
+  !(saveAfter >= 1) ||
+  !(saveEvery >= 1) ||
+  !(recheckEvery >= 0) ||
+  [memory, !!backend, !!dataDir].filter(Boolean).length !== 1
+) {
+  console.error(
+    'Usage: main.ts [--port 7420] [--host 0.0.0.0] [--token word] [--static folder] [--data folder | --memory | --backend https://… --backend-key key [--save-after 5] [--save-every 30] [--recheck-every 0]]',
+  );
   process.exit(2);
 }
 
 const storage = backend ? backendStorage({ url: backend, key: backendKey }) : dataDir ? folderStorage(dataDir) : memoryStorage();
-const where = backend ? `documentos en ${backend}, nada guardado aquí` : dataDir ? `salas guardadas en ${dataDir}: ${storedRooms(dataDir).length}` : 'salas solo en memoria';
-const server = createCollabServer({ port, host, storage, token, staticDir, saveEvery: saveEvery * 1000 });
+const where = backend ? `documents at ${backend}, nothing kept here` : dataDir ? `rooms kept in ${dataDir}: ${storedRooms(dataDir).length}` : 'rooms in memory only';
+const server = createCollabServer({ port, host, storage, token, staticDir, saveAfter: saveAfter * 1000, saveEvery: saveEvery * 1000, recheckEvery: recheckEvery * 1000 || undefined });
 server.ready.then(
   () => {
     const open = host && !/^(127\.|localhost$|::1$)/.test(host);
-    console.error(`[collab] Escuchando en http://${host ?? '127.0.0.1'}:${server.port} · ${where}`);
+    console.error(`[collab] Listening on http://${host ?? '127.0.0.1'}:${server.port} · ${where}`);
     if (open) {
-      const addresses = Object.values(networkInterfaces()).flatMap((list) => list ?? []).filter((a) => a.family === 'IPv4' && !a.internal);
-      for (const a of addresses) console.error(`[collab] En la red: http://${a.address}:${server.port}`);
-      if (!token && !backend) console.error('[collab] Sin --token, cualquiera que llegue a esta dirección puede empezar a compartir documentos aquí.');
+      const addresses = Object.values(networkInterfaces())
+        .flatMap((list) => list ?? [])
+        .filter((a) => a.family === 'IPv4' && !a.internal);
+      for (const a of addresses) console.error(`[collab] On the network: http://${a.address}:${server.port}`);
+      if (!token && !backend) console.error('[collab] Without --token, anyone who reaches this address can start sharing documents here.');
     } else {
-      console.error('[collab] Solo este equipo puede conectarse. Para que entren otros: --host 0.0.0.0');
+      console.error('[collab] Only this machine can connect. For others to: --host 0.0.0.0');
     }
   },
   (error: Error) => {
-    console.error(`[collab] No se pudo escuchar en el puerto ${port}: ${error.message}`);
+    console.error(`[collab] Could not listen on port ${port}: ${error.message}`);
     process.exit(1);
   },
 );

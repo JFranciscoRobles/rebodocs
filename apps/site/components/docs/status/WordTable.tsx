@@ -10,7 +10,8 @@ import { AGAINST_WORD } from './data';
 export function WordTable() {
   const [only, setOnly] = useState(false);
   const rows = AGAINST_WORD.filter((row) => !only || row.lines[0] < row.lines[1] || row.pages[0] < row.pages[1]);
-  const pill = (active: boolean) => `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${active ? `border-transparent ${PASTEL_CLASS.blue}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
+  const pill = (active: boolean) =>
+    `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${active ? `border-transparent ${PASTEL_CLASS.blue}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
   return (
     <div className="mt-6 max-w-[920px] overflow-hidden rounded-2xl border border-border">
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface px-5 py-3" role="group" aria-label="Which documents">

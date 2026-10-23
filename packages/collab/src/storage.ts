@@ -6,16 +6,13 @@
 // the document is the system's, which is also the one to say who may come in.
 // Node only.
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
+import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { type Op, decode, encode } from './changes';
+import { decode, encode } from './changes';
+import type { Entry } from './protocol';
 
-export interface Entry {
-  /** Who made the changes, and which of their sendings it was. */
-  by: string;
-  seq: number;
-  ops: Op[];
-}
+export type { Entry } from './protocol';
 
 /** A session of work on a document: from when someone came into its room to when the last one left. */
 export interface Session {
@@ -61,33 +58,56 @@ export function memoryStorage(): RoomStorage {
   return { open: true, forgets: false, load: async () => undefined, keep: async () => {}, add: () => {} };
 }
 
+/**
+ * What is being written of each room, by its folder: the next writing waits
+ * for it, so a change is never put before the file it goes after, nor read
+ * back before it is there. Shared by every storage of the process.
+ */
+const writing = new Map<string, Promise<void>>();
+
 /** The rooms in a folder, each in one of its own: its file, its changes, and what it is called. */
 export function folderStorage(dir: string): RoomStorage {
   const root = resolve(dir);
   mkdirSync(root, { recursive: true });
   const at = (id: string, file: string) => join(root, id, file);
+  /** Runs `task` once what was asked before it of the room is written; what fails does not hold up what follows. */
+  const after = <T>(id: string, task: () => Promise<T>): Promise<T> => {
+    const key = join(root, id);
+    const done = (writing.get(key) ?? Promise.resolve()).then(task);
+    const settled = done.then(
+      () => {},
+      () => {},
+    );
+    writing.set(key, settled);
+    void settled.then(() => {
+      if (writing.get(key) === settled) writing.delete(key);
+    });
+    return done;
+  };
   return {
     open: true,
     forgets: false,
-    async load(id) {
-      if (!existsSync(at(id, 'meta.json'))) return undefined;
-      const meta = JSON.parse(readFileSync(at(id, 'meta.json'), 'utf8')) as { name: string; epoch: number };
-      const lines = existsSync(at(id, 'log.jsonl')) ? readFileSync(at(id, 'log.jsonl'), 'utf8').split('\n') : [];
-      return { name: meta.name, epoch: meta.epoch, base: new Uint8Array(readFileSync(at(id, 'base.docx'))), log: lines.filter(Boolean).map((line) => decode<Entry>(line)) };
-    },
-    async keep(id, room, folded) {
-      mkdirSync(join(root, id), { recursive: true });
-      if (folded) {
-        // The file and the changes it was made from stay beside it, once: a way back.
-        renameSync(at(id, 'base.docx'), at(id, 'base.before.docx'));
-        renameSync(at(id, 'log.jsonl'), at(id, 'log.before.jsonl'));
-      }
-      writeFileSync(at(id, 'base.docx'), room.base);
-      writeFileSync(at(id, 'log.jsonl'), room.log.map((entry) => `${encode(entry)}\n`).join(''));
-      writeFileSync(at(id, 'meta.json'), JSON.stringify({ name: room.name, epoch: room.epoch }));
-    },
+    load: (id) =>
+      after(id, async () => {
+        if (!existsSync(at(id, 'meta.json'))) return undefined;
+        const meta = JSON.parse(await readFile(at(id, 'meta.json'), 'utf8')) as { name: string; epoch: number };
+        const lines = existsSync(at(id, 'log.jsonl')) ? (await readFile(at(id, 'log.jsonl'), 'utf8')).split('\n') : [];
+        return { name: meta.name, epoch: meta.epoch, base: new Uint8Array(await readFile(at(id, 'base.docx'))), log: lines.filter(Boolean).map((line) => decode<Entry>(line)) };
+      }),
+    keep: (id, room, folded) =>
+      after(id, async () => {
+        await mkdir(join(root, id), { recursive: true });
+        if (folded) {
+          // The file and the changes it was made from stay beside it, once: a way back.
+          await rename(at(id, 'base.docx'), at(id, 'base.before.docx'));
+          await rename(at(id, 'log.jsonl'), at(id, 'log.before.jsonl'));
+        }
+        await writeFile(at(id, 'base.docx'), room.base);
+        await writeFile(at(id, 'log.jsonl'), room.log.map((entry) => `${encode(entry)}\n`).join(''));
+        await writeFile(at(id, 'meta.json'), JSON.stringify({ name: room.name, epoch: room.epoch }));
+      }),
     add(id, entry) {
-      appendFileSync(at(id, 'log.jsonl'), `${encode(entry)}\n`);
+      after(id, () => appendFile(at(id, 'log.jsonl'), `${encode(entry)}\n`)).catch((error: Error) => console.error(`[collab] ${id}: a change could not be written: ${error.message}`));
     },
   };
 }
@@ -116,8 +136,12 @@ export function backendStorage(options: BackendOptions): RoomStorage {
   const of = (id: string) => `${url}/${encodeURIComponent(id)}`;
   const put = async (id: string, docx: Uint8Array, ended?: Session) => {
     const end: Record<string, string> = ended ? { 'X-Rebodocs-Session-End': '1', 'X-Rebodocs-Authors': ended.authors.map(encodeURIComponent).join(',') } : {};
-    const response = await fetch(of(id), { method: 'PUT', headers: { ...auth, ...end, 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, body: docx as BodyInit });
-    if (!response.ok) throw new Error(`el sistema respondió ${response.status} al guardar`);
+    const response = await fetch(of(id), {
+      method: 'PUT',
+      headers: { ...auth, ...end, 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+      body: docx as BodyInit,
+    });
+    if (!response.ok) throw new Error(`the system answered ${response.status} to the document being kept`);
   };
   return {
     open: false,
@@ -125,14 +149,15 @@ export function backendStorage(options: BackendOptions): RoomStorage {
     async load(id) {
       const response = await fetch(of(id), { headers: auth });
       if (response.status === 404) return undefined;
-      if (!response.ok) throw new Error(`el sistema respondió ${response.status} al pedir el documento`);
+      if (!response.ok) throw new Error(`the system answered ${response.status} when asked for the document`);
       let name = response.headers.get('X-Document-Name') ?? '';
       try {
         name = decodeURIComponent(name);
       } catch {
         // As it came.
       }
-      return { name, epoch: 1, base: new Uint8Array(await response.arrayBuffer()), log: [] };
+      // Read again each time a room opens, the file may not be the one an editor coming back had: the epoch says so.
+      return { name, epoch: Date.now(), base: new Uint8Array(await response.arrayBuffer()), log: [] };
     },
     // A room that starts is the document the system already has; one that was folded is the document to keep.
     keep: (id, room, folded, ended) => (folded ? put(id, room.base, ended) : Promise.resolve()),

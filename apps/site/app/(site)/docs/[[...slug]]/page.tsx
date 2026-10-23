@@ -35,7 +35,32 @@ type Props = { params: Promise<{ slug?: string[] }> };
 const slugOf = (slug?: string[]) => (slug?.length ? slug.join('/') : 'index');
 
 /** The pages written in React, by slug; the rest are Markdown in `content/docs`. */
-const REACT_PAGES: Record<string, typeof ComponentsPage> = { accessibility: AccessibilityPage, architecture: ArchitecturePage, assistants: AssistantsPage, collaboration: CollaborationPage, components: ComponentsPage, demos: DemosPage, 'editor-api': EditorApiPage, example: ExamplePage, fonts: FontsPage, 'getting-started': GettingStartedPage, headless: HeadlessPage, languages: LanguagesPage, letterhead: LetterheadPage, mobile: MobilePage, packages: PackagesPage, react: ReactPage, server: ServerPage, status: StatusPage, storage: StoragePage, styling: StylingPage, templates: TemplatesPage, 'tracked-changes': TrackedChangesPage, vanilla: VanillaPage, versions: VersionsPage };
+const REACT_PAGES: Record<string, typeof ComponentsPage> = {
+  accessibility: AccessibilityPage,
+  architecture: ArchitecturePage,
+  assistants: AssistantsPage,
+  collaboration: CollaborationPage,
+  components: ComponentsPage,
+  demos: DemosPage,
+  'editor-api': EditorApiPage,
+  example: ExamplePage,
+  fonts: FontsPage,
+  'getting-started': GettingStartedPage,
+  headless: HeadlessPage,
+  languages: LanguagesPage,
+  letterhead: LetterheadPage,
+  mobile: MobilePage,
+  packages: PackagesPage,
+  react: ReactPage,
+  server: ServerPage,
+  status: StatusPage,
+  storage: StoragePage,
+  styling: StylingPage,
+  templates: TemplatesPage,
+  'tracked-changes': TrackedChangesPage,
+  vanilla: VanillaPage,
+  versions: VersionsPage,
+};
 
 export const dynamicParams = false;
 export function generateStaticParams() {

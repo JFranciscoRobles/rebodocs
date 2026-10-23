@@ -89,7 +89,12 @@ try {
     const m = JSON.parse(e.data);
     if (m.id && pending.has(m.id)) pending.get(m.id)(m);
   };
-  const send = (method, params = {}) => new Promise((done) => { const n = ++id; pending.set(n, done); ws.send(JSON.stringify({ id: n, method, params })); });
+  const send = (method, params = {}) =>
+    new Promise((done) => {
+      const n = ++id;
+      pending.set(n, done);
+      ws.send(JSON.stringify({ id: n, method, params }));
+    });
   const evaluate = async (expression) => (await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })).result;
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
   for (const url of urls) {

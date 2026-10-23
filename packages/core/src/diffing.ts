@@ -41,4 +41,3 @@ export function commonPairs<T>(a: T[], b: T[], same: (x: T, y: T) => boolean = (
   for (let k = 0; k < a.length - endA; k++) pairs.push([endA + k, endB + k]);
   return pairs;
 }
-

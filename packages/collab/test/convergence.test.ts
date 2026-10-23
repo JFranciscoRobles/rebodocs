@@ -7,7 +7,7 @@
 // again, are what mends those (see session.test.ts).
 
 import { describe, expect, it } from 'vitest';
-import { type Doc, applyRunProps, createDoc, createParagraph, deleteRange, insertText, paragraphText, setParagraphProps, splitParagraph } from '@rebodocs/core';
+import { type Doc, applyRunProps, createDoc, createParagraph, deleteRange, insertText, paragraphText, setParagraphProps, splitParagraph } from '@rebodocs/core/internal';
 import { type Op, apply, diff, ensureIds, stampIds, transform } from '../src/changes';
 
 function random(seed: number): () => number {

@@ -124,7 +124,16 @@ export function createFindBar(editor: Editor): FindBar {
   });
   const expand = button('expand', t('find.replace'), ICONS.replace, () => showReplace(!!replaceRow.hidden));
   const first = row();
-  first.append(query, count, prev, next, caseButton, wordButton, expand, button('close', t('find.close'), ICONS.close, () => close()));
+  first.append(
+    query,
+    count,
+    prev,
+    next,
+    caseButton,
+    wordButton,
+    expand,
+    button('close', t('find.close'), ICONS.close, () => close()),
+  );
 
   const replaceRow = row();
   const one = button('replace-one', t('find.replaceOne'), t('find.replace'), () => editor.replaceFound(replacement.value));

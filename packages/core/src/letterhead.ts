@@ -149,7 +149,9 @@ export function resizeLetterhead(doc: Doc, width: number, height: number, sectio
     if (!mine(place.part)) continue;
     const found = find(out, place);
     if (!found) continue;
-    const xml = found.xml.replace(/<wp:extent cx="\d+" cy="\d+"\/>/, `<wp:extent cx="${cx}" cy="${cy}"/>`).replace(/(<a:xfrm>(?:(?!<\/a:xfrm>)[\s\S])*?<a:ext )cx="\d+" cy="\d+"/, `$1cx="${cx}" cy="${cy}"`);
+    const xml = found.xml
+      .replace(/<wp:extent cx="\d+" cy="\d+"\/>/, `<wp:extent cx="${cx}" cy="${cy}"/>`)
+      .replace(/(<a:xfrm>(?:(?!<\/a:xfrm>)[\s\S])*?<a:ext )cx="\d+" cy="\d+"/, `$1cx="${cx}" cy="${cy}"`);
     if (xml !== found.xml) out = withRun(out, found, (run) => ({ ...run, props: { ...run.props, object: xml } }));
   }
   return out;
@@ -279,4 +281,3 @@ export function withLetterheadMargins(doc: Doc, asked: { top?: number; bottom?: 
   if (marginTop === page.marginTop && marginBottom === page.marginBottom) return doc;
   return { ...doc, page: { ...page, marginTop, marginBottom } };
 }
-

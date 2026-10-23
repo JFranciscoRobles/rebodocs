@@ -215,9 +215,17 @@ const LINKS: [string, string][] = [['Office Open XML', 'https://es.wikipedia.org
 function addLinks(doc: Doc): Doc {
   let next = doc;
   for (const [text, href] of LINKS) {
-    const para = next.paragraphs.findIndex((p) => p.runs.map((r) => r.text).join('').includes(text));
+    const para = next.paragraphs.findIndex((p) =>
+      p.runs
+        .map((r) => r.text)
+        .join('')
+        .includes(text),
+    );
     if (para < 0) continue;
-    const offset = next.paragraphs[para].runs.map((r) => r.text).join('').indexOf(text);
+    const offset = next.paragraphs[para].runs
+      .map((r) => r.text)
+      .join('')
+      .indexOf(text);
     next = setLink(next, { from: { para, offset }, to: { para, offset: offset + text.length } }, href);
   }
   return next;
@@ -227,9 +235,17 @@ function addLinks(doc: Doc): Doc {
 function addNotes(doc: Doc): Doc {
   let next = doc;
   for (const [text, note, color] of NOTES) {
-    const para = next.paragraphs.findIndex((p) => p.runs.map((r) => r.text).join('').includes(text));
+    const para = next.paragraphs.findIndex((p) =>
+      p.runs
+        .map((r) => r.text)
+        .join('')
+        .includes(text),
+    );
     if (para < 0) continue;
-    const offset = next.paragraphs[para].runs.map((r) => r.text).join('').indexOf(text);
+    const offset = next.paragraphs[para].runs
+      .map((r) => r.text)
+      .join('')
+      .indexOf(text);
     next = addNote(next, { from: { para, offset }, to: { para, offset: offset + text.length } }, { text: note, author: 'Docs', date: '2026-10-12T12:00:00Z', color }).doc;
   }
   return next;
@@ -294,7 +310,14 @@ const CLAUSES = 202;
 function withLongContract(doc: Doc): Doc {
   const paragraphs: Paragraph[] = [
     { props: { pageBreakBefore: true }, runs: [run('Anexo: un contrato largo')] },
-    { props: {}, runs: [run('Un contrato de arrendamiento de cien páginas, para ver que un documento largo se abre, se recorre y se escribe tan rápido como uno corto: solo las páginas que están a la vista tienen su texto.')] },
+    {
+      props: {},
+      runs: [
+        run(
+          'Un contrato de arrendamiento de cien páginas, para ver que un documento largo se abre, se recorre y se escribe tan rápido como uno corto: solo las páginas que están a la vista tienen su texto.',
+        ),
+      ],
+    },
   ];
   const tables: number[] = [];
   for (let i = 0; i < CLAUSES; i++) {

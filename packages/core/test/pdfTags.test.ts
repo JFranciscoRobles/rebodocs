@@ -21,7 +21,7 @@ import {
   setParagraphStyle,
   toggleList,
   withStory,
-} from '../src';
+} from '../src/internal';
 
 const measurer: TextMeasurer = {
   width: (text, font) => text.length * font.size * 0.5,
@@ -208,7 +208,11 @@ describe('a tagged PDF', () => {
       ...doc,
       paragraphs: doc.paragraphs.map((p) => ({
         ...p,
-        runs: p.runs.map((run) => (run.props.object?.includes('<wp:docPr') ? { ...run, props: { ...run.props, object: run.props.object.replace(/<wp:docPr\b([^>]*?)\/>/, '<wp:docPr$1><a:extLst><a:ext><adec:decorative val="1"/></a:ext></a:extLst></wp:docPr>') } } : run)),
+        runs: p.runs.map((run) =>
+          run.props.object?.includes('<wp:docPr')
+            ? { ...run, props: { ...run.props, object: run.props.object.replace(/<wp:docPr\b([^>]*?)\/>/, '<wp:docPr$1><a:extLst><a:ext><adec:decorative val="1"/></a:ext></a:extLst></wp:docPr>') } }
+            : run,
+        ),
       })),
     };
     const out = exportPdf(layoutDocument(decorative, measurer), { measurer, doc: decorative, image });

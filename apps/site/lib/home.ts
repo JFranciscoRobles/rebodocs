@@ -26,7 +26,8 @@ export const TAGS = [
   'Versions',
   'Live cursors',
   'Templates',
-  'Footnotes',
+  'Footnotes & endnotes',
+  'Paste from Word',
   'PDF in Node',
   'Embedded fonts',
   'Keyboard & screen reader',
@@ -60,7 +61,11 @@ export const npmOf = (name: string) => `https://www.npmjs.com/package/${name}`;
 
 /** Title, description and the path of a 24 × 24 icon, drawn with a stroke. */
 export const FEATURES: [string, string, string][] = [
-  ['Works with .docx files', 'Reads and writes DOCX, with its layout measured line by line against Word. What it does not understand, it keeps.', 'M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h4'],
+  [
+    'Works with .docx files',
+    'Reads and writes DOCX, its layout measured line by line against Word. What it does not understand, it keeps; a table copied in Word pastes whole.',
+    'M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h4',
+  ],
   [
     'Templates',
     'Text in double braces is a variable — fill it from the editor, from code or from the command line.',
@@ -68,12 +73,12 @@ export const FEATURES: [string, string, string][] = [
   ],
   [
     'Real-time collaboration',
-    'Several people at once, visible cursors, and undo that is yours alone.',
+    'Several people at once, visible cursors, undo that is yours alone; your backend says who edits and who only watches.',
     'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20c0-3 3-5 6-5s6 2 6 5M17 11a2.5 2.5 0 1 0 0-5M21 19c0-2-1.5-3.6-4-4',
   ],
   ['Tracked changes', 'Insertions and deletions marked and signed by author until someone accepts or rejects them.', 'M4 20h4L19 9l-4-4L4 16zM13 7l4 4'],
   ['Versions', 'Your app stores the versions; the editor shows the differences word by word.', 'M12 7v5l3 2M3 12a9 9 0 1 0 3-6.7M3 4v4h4'],
-  ['Whole documents', 'Sections, footnotes, text boxes, tab stops, tables and vertical text.', 'M4 5h16M4 10h16M4 15h10M4 20h7M17 15v6M14 18h6'],
+  ['Whole documents', 'Sections, footnotes and endnotes, text boxes, tab stops, tables and vertical text.', 'M4 5h16M4 10h16M4 15h10M4 20h7M17 15v6M14 18h6'],
   ['Fonts that travel', 'TrueType or OpenType embedded in the PDF and, when they are TrueType and the license allows, in the DOCX.', 'M6 18l5-13 5 13M8 13h6M18 9v10'],
   ['PDF without a browser', 'The same engine runs in Node and produces PDFs with selectable text, tagged for screen readers.', 'M6 3h9l3 3v15H6zM9 13l3 3 3-3M12 9v7'],
   ['Phone and desktop', 'Pinch to zoom, plus a Tauri app that opens and saves .docx on disk.', 'M7 3h10a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 18h2'],
@@ -83,9 +88,5 @@ export const FEATURES: [string, string, string][] = [
     'Use the built-in UI, or your own with unstyled hooks and Tailwind.',
     'M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2s-1-1.5-1-2.5 1-1.5 2-1.5h2a4 4 0 0 0 4-4c0-4-4-8-9-8zM7.5 11.5h.01M10 7.5h.01M15 7.5h.01',
   ],
-  [
-    'AI assistants',
-    'Claude works on the real document through an MCP server, or a chat beside the editor.',
-    'M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2zM19 15l1 2.5 2.5 1-2.5 1L19 22l-1-2.5-2.5-1 2.5-1z',
-  ],
+  ['AI assistants', 'Claude works on the real document through an MCP server, or a chat beside the editor.', 'M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2zM19 15l1 2.5 2.5 1-2.5 1L19 22l-1-2.5-2.5-1 2.5-1z'],
 ];

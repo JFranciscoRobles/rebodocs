@@ -39,7 +39,15 @@ export const CALLS: Record<string, Call> = {
   next: { label: 'Next', code: () => 'editor.findStep(1)', run: (e) => e.findStep(1) },
   replace: { label: 'Replace all', code: () => "editor.replaceAllFound('down payment')", run: (e) => e.replaceAllFound('down payment') },
   variables: { label: 'Variables', code: () => 'editor.variables', run: (e) => e.variables },
-  fill: { label: 'Fill', code: () => `editor.fillVariables(${JSON.stringify(VALUES).replace(/"(\w+)":/g, '$1: ').replace(/,/g, ', ').replace(/"/g, "'")})`, run: (e) => e.fillVariables(VALUES) },
+  fill: {
+    label: 'Fill',
+    code: () =>
+      `editor.fillVariables(${JSON.stringify(VALUES)
+        .replace(/"(\w+)":/g, '$1: ')
+        .replace(/,/g, ', ')
+        .replace(/"/g, "'")})`,
+    run: (e) => e.fillVariables(VALUES),
+  },
   markdown: { label: 'Markdown', code: () => 'editor.exportMarkdown()', run: (e) => e.exportMarkdown() },
   docx: { label: 'DOCX', code: () => 'editor.exportDocx()', run: (e) => e.exportDocx() },
   zoom: { label: 'Zoom', code: (e) => (e.fit ? 'editor.setZoom(1.25)' : "editor.setFit('width')"), run: (e) => (e.fit ? e.setZoom(1.25) : e.setFit('width')) },
@@ -117,7 +125,10 @@ function Panel() {
   };
   // What was typed after "editor.", run as it is written: in this browser, on the sample document.
   const runTyped = () => {
-    const text = typed.trim().replace(/^editor\./, '').replace(/;$/, '');
+    const text = typed
+      .trim()
+      .replace(/^editor\./, '')
+      .replace(/;$/, '');
     if (!text) return;
     let run: (e: Editor) => unknown;
     try {
@@ -194,7 +205,11 @@ function Panel() {
           placeholder="setZoom(1.5)  ·  find('rent', { matchCase: true })"
           className="min-w-0 flex-1 border-0 bg-transparent py-2 pr-2 font-code text-[13px] text-ink outline-0"
         />
-        <button type="submit" disabled={!e || !typed.trim()} className="h-9 flex-none cursor-pointer border-0 bg-brand px-3 text-[13px] font-semibold text-white hover:bg-brand-hover disabled:cursor-default disabled:opacity-40">
+        <button
+          type="submit"
+          disabled={!e || !typed.trim()}
+          className="h-9 flex-none cursor-pointer border-0 bg-brand px-3 text-[13px] font-semibold text-white hover:bg-brand-hover disabled:cursor-default disabled:opacity-40"
+        >
           Run
         </button>
       </form>

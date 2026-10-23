@@ -39,7 +39,12 @@ export function Texts({ rows }: { rows: TextRow[] }) {
           aria-label="Find a text"
           className="min-w-0 flex-[1_1_260px] rounded-lg border border-border bg-white px-3 py-1.5 text-sm text-ink"
         />
-        <select value={group} onChange={(e) => setGroup(e.target.value)} aria-label="Part of the interface" className="rounded-lg border border-border bg-white px-2.5 py-1.5 font-code text-[13px] text-ink">
+        <select
+          value={group}
+          onChange={(e) => setGroup(e.target.value)}
+          aria-label="Part of the interface"
+          className="rounded-lg border border-border bg-white px-2.5 py-1.5 font-code text-[13px] text-ink"
+        >
           <option value="">every part</option>
           {groups.map((name) => (
             <option key={name} value={name}>

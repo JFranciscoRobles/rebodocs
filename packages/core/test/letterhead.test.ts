@@ -1,6 +1,27 @@
 import { strFromU8, unzipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { type Doc, imageTypeOf, insertSectionBreak, setOwnStories, setPageNumbering, setSectionPage, createDoc, createParagraph, exportDocx, importDocx, insertImage, layoutDocument, letterheadImage, letterheadMargins, letterheadOf, paragraphText, removeLetterhead, setLetterhead, setPictureWrap, withStory } from '../src';
+import {
+  type Doc,
+  imageTypeOf,
+  insertSectionBreak,
+  setOwnStories,
+  setPageNumbering,
+  setSectionPage,
+  createDoc,
+  createParagraph,
+  exportDocx,
+  importDocx,
+  insertImage,
+  layoutDocument,
+  letterheadImage,
+  letterheadMargins,
+  letterheadOf,
+  paragraphText,
+  removeLetterhead,
+  setLetterhead,
+  setPictureWrap,
+  withStory,
+} from '../src/internal';
 
 const PNG = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);
 const OTHER = new Uint8Array([137, 80, 78, 71, 9, 9]);
@@ -66,9 +87,18 @@ describe('letterhead', () => {
     expect([...changed[0][1]]).toEqual([...OTHER]);
     const none = unzipSync(exportDocx(removeLetterhead(first)));
     expect(Object.keys(none).filter((name) => name.includes('/media/'))).toEqual([]);
-    expect(Object.keys(none).filter((name) => /header\d*\.xml\.rels$/.test(name)).map((name) => strFromU8(none[name])).join('')).not.toContain('/image"');
+    expect(
+      Object.keys(none)
+        .filter((name) => /header\d*\.xml\.rels$/.test(name))
+        .map((name) => strFromU8(none[name]))
+        .join(''),
+    ).not.toContain('/image"');
     // And a picture of the text that was deleted goes the same way; the one that stays, stays.
-    const two = insertImage(insertImage(base(), { para: 0, offset: 0 }, { bytes: PNG, type: 'image/png', width: 10, height: 10 }).doc, { para: 1, offset: 0 }, { bytes: OTHER, type: 'image/png', width: 10, height: 10 }).doc;
+    const two = insertImage(
+      insertImage(base(), { para: 0, offset: 0 }, { bytes: PNG, type: 'image/png', width: 10, height: 10 }).doc,
+      { para: 1, offset: 0 },
+      { bytes: OTHER, type: 'image/png', width: 10, height: 10 },
+    ).doc;
     const reread = importDocx(exportDocx(two));
     expect(pictures(reread)).toHaveLength(2);
     const left = pictures({ ...reread, paragraphs: [reread.paragraphs[1]] });
@@ -95,7 +125,11 @@ describe('letterhead', () => {
     // Giving it a letterhead leaves the logo where it was.
     const both = setLetterhead(withLogo, { bytes: OTHER, type: 'image/png' });
     expect(both.header!.paragraphs.flatMap((p) => p.runs).filter((run) => run.props.anchor)).toHaveLength(2);
-    expect(removeLetterhead(both).header!.paragraphs.flatMap((p) => p.runs).filter((run) => run.props.anchor)).toHaveLength(1);
+    expect(
+      removeLetterhead(both)
+        .header!.paragraphs.flatMap((p) => p.runs)
+        .filter((run) => run.props.anchor),
+    ).toHaveLength(1);
   });
 
   it('reads from its pixels the margins it asks for', () => {
@@ -155,7 +189,9 @@ describe('letterhead', () => {
     expect(pages.map((page) => page.header?.floats.map((f) => [f.width, f.height]))).toEqual([[[792, 612]], [[612, 792]]]);
     // Each drawing with an id of its own, as Word wants them.
     const files = unzipSync(exportDocx(given));
-    const ids = Object.keys(files).filter((name) => /word\/header\d*\.xml$/.test(name)).flatMap((name) => [...strFromU8(files[name]).matchAll(/<wp:docPr id="(\d+)"/g)].map((m) => m[1]));
+    const ids = Object.keys(files)
+      .filter((name) => /word\/header\d*\.xml$/.test(name))
+      .flatMap((name) => [...strFromU8(files[name]).matchAll(/<wp:docPr id="(\d+)"/g)].map((m) => m[1]));
     expect(ids).toHaveLength(2);
     expect(new Set(ids).size).toBe(2);
     expect(letterheadOf(removeLetterhead(given))).toBeUndefined();

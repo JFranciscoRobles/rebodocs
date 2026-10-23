@@ -12,7 +12,13 @@ const at = (doc: Doc, text: string) => doc.paragraphs.findIndex((p) => paragraph
 /** The receipt before Luis: two lines of terms and a table of what is charged. */
 function receipt(): Doc {
   let doc = setParagraphStyle(
-    createDoc([para('Reservation receipt'), para('Payment is due within 15 days of this receipt.'), para('Late payments add a fee.'), para('Either party may cancel by phone or in writing.'), para('')]),
+    createDoc([
+      para('Reservation receipt'),
+      para('Payment is due within 15 days of this receipt.'),
+      para('Late payments add a fee.'),
+      para('Either party may cancel by phone or in writing.'),
+      para(''),
+    ]),
     0,
     0,
     'Title',
@@ -58,7 +64,10 @@ export const KEYS: { key: string; text: string }[] = [
   { key: 'Delete', text: 'The same forward: the caret goes after what it took out.' },
   { key: 'Over your own change', text: 'Text you put in and take out again goes for good: it never was in the document.' },
   { key: 'Over someone else’s', text: 'Text another person put in stays, theirs and taken out by you: two changes, each decided on its own, as in Word.' },
-  { key: 'Formatting', text: 'Bold, a font, an alignment: a change of its own, which keeps the formatting the text had, to go back to. Text you just put in too, as in Word: its putting in and its formatting are decided apart.' },
+  {
+    key: 'Formatting',
+    text: 'Bold, a font, an alignment: a change of its own, which keeps the formatting the text had, to go back to. Text you just put in too, as in Word: its putting in and its formatting are decided apart.',
+  },
   { key: 'Enter', text: 'The paragraph break is a change of its own, shown as a ¶ in your colour.' },
   { key: 'Backspace at the start', text: 'Joining two paragraphs is a change too: they stay apart, the mark struck through, until it is accepted.' },
 ];
@@ -70,11 +79,17 @@ export const MEMBERS: { sig: string; text: string }[] = [
   { sig: 'revisions: RevisionView[]', text: 'Every change: of the text first, then of the headers, footers, notes and text boxes.' },
   { sig: 'hasRevisions: boolean', text: 'Whether there is any change to accept or reject.' },
   { sig: 'activeRevision: RevisionView | undefined', text: 'The change the caret is in, or the first the selection takes in.' },
-  { sig: 'acceptRevision(revision?) → boolean', text: 'The change given, alone; without one, the changes the selection takes in, or the one at the caret. A move, both halves. False when there is none.' },
+  {
+    sig: 'acceptRevision(revision?) → boolean',
+    text: 'The change given, alone; without one, the changes the selection takes in, or the one at the caret. A move, both halves. False when there is none.',
+  },
   { sig: 'rejectRevision(revision?) → boolean', text: 'Rejects them the same way.' },
   { sig: 'acceptAllRevisions(author?)', text: 'Every change of the document, headers, notes and text boxes too, or every one of a person’s, as one step to undo.' },
   { sig: 'rejectAllRevisions(author?)', text: 'The same, rejected.' },
-  { sig: "changesView: 'all' | 'accepted' | 'original'", text: 'How the changes are shown: marked, or the document as it would be with all of them accepted, or with none. Shown without them, it is only to be looked at.' },
+  {
+    sig: "changesView: 'all' | 'accepted' | 'original'",
+    text: 'How the changes are shown: marked, or the document as it would be with all of them accepted, or with none. Shown without them, it is only to be looked at.',
+  },
   { sig: 'setChangesView(view)', text: 'Shows them so. The changes are still in the document, and in what it saves.' },
   { sig: 'goToRevision(dir: 1 | -1) → boolean', text: 'Selects the next change of the text being edited, or the one before. False when there is none.' },
   { sig: 'selectRevision(revision: RevisionView)', text: 'Selects a change, going into its header, footer or note first.' },
@@ -96,7 +111,10 @@ export const VIEW: { name: string; type: string; text: string }[] = [
 
 /** The functions of @rebodocs/core. */
 export const CORE: { sig: string; text: string }[] = [
-  { sig: 'trackEdit(before, after, by, { words? })', text: 'Any edit to a text, tracked: what it took out comes back struck, what it put in is marked. Returns { doc, map } — map moves a position of after into the tracked doc.' },
+  {
+    sig: 'trackEdit(before, after, by, { words? })',
+    text: 'Any edit to a text, tracked: what it took out comes back struck, what it put in is marked. Returns { doc, map } — map moves a position of after into the tracked doc.',
+  },
   { sig: 'trackDocEdit(before, after, by, words = true)', text: 'The same for the whole document, with its headers, footers and notes, word by word.' },
   { sig: 'acceptRevisions(doc, range?, pick?)', text: 'Accepts the changes in range, or all of the text; with pick, only those it takes, as one person’s or one kind.' },
   { sig: 'rejectRevisions(doc, range?, pick?)', text: 'Rejects them.' },

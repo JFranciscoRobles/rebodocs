@@ -26,7 +26,9 @@ export function receipt(): Doc {
   // What it pays for: the middle row is written once for each item of "lines".
   doc = insertTable(doc, { para: 3, offset: 0 }, 3, 2).doc;
   const cells = doc.paragraphs.flatMap((p, i) => (p.cell ? [i] : []));
-  ['Item', 'Amount', '{{#lines}}{{lines.item}}', '{{lines.amount | currency}}{{/lines}}', 'Total', '{{amount | currency}}'].forEach((text, k) => (doc = insertText(doc, { para: cells[k], offset: 0 }, text).doc));
+  ['Item', 'Amount', '{{#lines}}{{lines.item}}', '{{lines.amount | currency}}{{/lines}}', 'Total', '{{amount | currency}}'].forEach(
+    (text, k) => (doc = insertText(doc, { para: cells[k], offset: 0 }, text).doc),
+  );
   const last = doc.paragraphs.length - 1;
   const signed = insertSignatures(doc, { para: last, offset: 0 }, ['ADVISER', 'CLIENT'], '{{adviserName | upper}}');
   doc = signed.doc;

@@ -3,7 +3,7 @@
 // A tap on ⌘ (Ctrl elsewhere) on its own shows it and hides it. It only uses
 // the public methods of the editor.
 
-import { type FormatId, NOTE_COLORS, cleanHref, isVariableName } from '@rebodocs/core';
+import { type FormatId, NOTE_COLORS, cleanHref, isVariableName } from '@rebodocs/core/internal';
 import { recallAuthor, setAuthor } from './author';
 import type { Editor, MarkKey } from './editor';
 import { arrowsThrough, colorName } from './a11y';
@@ -125,7 +125,11 @@ export function createBubble(editor: Editor): Bubble {
   const shaping = (): Item[] =>
     editor.view === 'flow'
       ? []
-      : [...[0.25, 0.5, 1].map((fraction): Action => ({ label: `${fraction * 100} %`, title: t('bubble.fit', { n: fraction * 100 }), run: () => editor.fitSelectedPicture(fraction) })), 'sep', ...wraps()];
+      : [
+          ...[0.25, 0.5, 1].map((fraction): Action => ({ label: `${fraction * 100} %`, title: t('bubble.fit', { n: fraction * 100 }), run: () => editor.fitSelectedPicture(fraction) })),
+          'sep',
+          ...wraps(),
+        ];
   const picture = (): Item[] => [
     ...shaping(),
     // What a screen reader says of it: Word's "Alt Text".
@@ -136,7 +140,13 @@ export function createBubble(editor: Editor): Bubble {
   const variable = (name: string): Item[] => {
     const active = editor.variableFormats(name);
     const has = (id: FormatId) => active.some((format) => format.id === id);
-    const format = (id: FormatId, label: string, title: string, rest: Partial<Action> = {}): Action => ({ label, title, on: has(id), run: () => editor.setVariableFormat(name, id, !has(id)), ...rest });
+    const format = (id: FormatId, label: string, title: string, rest: Partial<Action> = {}): Action => ({
+      label,
+      title,
+      on: has(id),
+      run: () => editor.setVariableFormat(name, id, !has(id)),
+      ...rest,
+    });
     return [
       format('bold', t('mark.bold.letter'), t('mark.bold'), { className: 'dx-bb-mark', css: 'font-weight:700' }),
       format('italic', t('mark.italic.letter'), t('mark.italic'), { className: 'dx-bb-mark', css: 'font-style:italic' }),
@@ -215,7 +225,13 @@ export function createBubble(editor: Editor): Bubble {
 
   const paragraph = (): Item[] => {
     const current = editor.activeStyleId();
-    const style = (label: string, id: string | undefined): Action => ({ label, title: t('bubble.style', { name: label }), on: !!id && current === id, disabled: !id, run: () => id && editor.setParagraphStyle(id) });
+    const style = (label: string, id: string | undefined): Action => ({
+      label,
+      title: t('bubble.style', { name: label }),
+      on: !!id && current === id,
+      disabled: !id,
+      run: () => id && editor.setParagraphStyle(id),
+    });
     const list = editor.activeListKind();
     return [
       style(t('style.normal'), editor.styles[0]?.id),
@@ -250,7 +266,11 @@ export function createBubble(editor: Editor): Bubble {
     editor.canSplitCell
       ? { label: t('bubble.split'), title: t('bubble.splitTitle'), run: () => editor.splitTableCell() }
       : { label: t('bubble.merge'), title: t('bubble.mergeTitle'), disabled: !editor.canMergeCells, run: () => editor.mergeTableCells() },
-    { label: editor.tableBorders() ? t('bubble.noBorders') : t('bubble.borders'), title: editor.tableBorders() ? t('bubble.noBordersTitle') : t('bubble.bordersTitle'), run: () => editor.setTableBorders(!editor.tableBorders()) },
+    {
+      label: editor.tableBorders() ? t('bubble.noBorders') : t('bubble.borders'),
+      title: editor.tableBorders() ? t('bubble.noBordersTitle') : t('bubble.bordersTitle'),
+      run: () => editor.setTableBorders(!editor.tableBorders()),
+    },
     { label: t('bubble.shade'), title: t('bubble.shadeTitle'), on: !!editor.activeCellProps()?.shade, run: () => editor.setTableCellProps({ shade: editor.activeCellProps()?.shade ? '' : SHADE }) },
     'sep',
     { label: t('bubble.delTable'), title: t('bubble.delTableTitle'), className: 'dx-bb-danger', closes: true, run: () => editor.deleteTable() },
@@ -292,7 +312,8 @@ export function createBubble(editor: Editor): Bubble {
     const noted = editor.collapsed ? editor.activeNote : undefined;
     if (noted !== undefined) return { what: t('note.word'), items: note(noted) };
     const cells = editor.inTable && editor.canEditTables;
-    if (!editor.collapsed) return { what: cells ? t('bubble.cells') : t('type.text'), items: [...marks(), 'sep', ...toVariable(), ...toNote(), ...toLink(), ...(cells ? (['sep', ...table()] as Item[]) : [])] };
+    if (!editor.collapsed)
+      return { what: cells ? t('bubble.cells') : t('type.text'), items: [...marks(), 'sep', ...toVariable(), ...toNote(), ...toLink(), ...(cells ? (['sep', ...table()] as Item[]) : [])] };
     if (cells) return { what: t('table.word'), items: table() };
     // On an empty line what is wanted is to put something there; in a written one, to change it.
     if (editor.paragraphEmpty) return { what: t('insert'), items: [...insert(), 'sep', ...paragraph()] };
@@ -368,11 +389,12 @@ export function createBubble(editor: Editor): Bubble {
       colors.className = 'dx-bb-dots';
       colors.setAttribute('role', 'radiogroup');
       colors.setAttribute('aria-label', t('note.color'));
-      const mark = () => colors.querySelectorAll<HTMLElement>('button').forEach((dot) => {
-        const on = dot.dataset.color === editor.noteColor;
-        dot.classList.toggle('dx-on', on);
-        dot.setAttribute('aria-checked', String(on));
-      });
+      const mark = () =>
+        colors.querySelectorAll<HTMLElement>('button').forEach((dot) => {
+          const on = dot.dataset.color === editor.noteColor;
+          dot.classList.toggle('dx-on', on);
+          dot.setAttribute('aria-checked', String(on));
+        });
       for (const color of NOTE_COLORS) {
         const dot = document.createElement('button');
         dot.type = 'button';

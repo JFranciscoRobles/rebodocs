@@ -5,7 +5,20 @@
 // them their own way. All of them go inside a `DocsProvider`.
 
 import { type CSSProperties, type ReactNode, createElement, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { type ActiveFormat, type Block, type FindOptions, type FormatId, type OutlineItem, type PageNumbering, type PageSetup, type TemplateData, docText, formatText, formatValue } from '@rebodocs/core';
+import {
+  type ActiveFormat,
+  type Block,
+  type FindOptions,
+  type FormatId,
+  type OutlineItem,
+  type NoteNumbering,
+  type PageNumbering,
+  type PageSetup,
+  type TemplateData,
+  docText,
+  formatText,
+  formatValue,
+} from '@rebodocs/core/internal';
 import { type Bubble, type NoteView, type ZoomFit, createRuler, getLocale, keyboardInset, onKeyboard, onLocaleChange, styleName } from '@rebodocs/editor';
 import { useDocs, useDocsValue } from './headless';
 
@@ -194,7 +207,11 @@ export function useDocsVariables(): DocsVariables {
       uses,
       setFormat: (name, id, on, arg) => editor?.setVariableFormat(name, id, on, arg),
       preview: (name, value) => {
-        const { text, problems } = formatValue(value, (formats[name] ?? []).map((format) => formatText(format.id, format.arg)), { locale: editor?.formatLocale });
+        const { text, problems } = formatValue(
+          value,
+          (formats[name] ?? []).map((format) => formatText(format.id, format.arg)),
+          { locale: editor?.formatLocale },
+        );
         return { text, bad: value !== '' && problems.length > 0 };
       },
     }),
@@ -232,6 +249,12 @@ export interface DocsPage {
   /** Where the page number is and how it is written; undefined for none. */
   numbering: PageNumbering | undefined;
   setNumbering(numbering: PageNumbering | undefined): void;
+  /** Where the notes at the end go: after the last line of the document, or after that of each section. */
+  endnotesAt: 'document' | 'sections';
+  setEndnotesAt(at: 'document' | 'sections'): void;
+  /** How the section numbers the notes of each kind its text refers to: undefined for 1, 2, 3 and i, ii, iii, the count going on. */
+  noteNumbering: { footnote: NoteNumbering | undefined; endnote: NoteNumbering | undefined };
+  setNoteNumbering(kind: 'footnote' | 'endnote', numbering: NoteNumbering | undefined): void;
   /** Whether the first page of the section has a header and a footer of its own. */
   firstPageDifferent: boolean;
   setFirstPageDifferent(on: boolean): void;
@@ -257,6 +280,9 @@ export function useDocsPage(): DocsPage {
   const sections = useDocsValue((e) => e.sectionCount, 1);
   const section = useDocsValue((e) => e.sectionIndex, 0);
   const own = useDocsValue((e) => e.ownHeaders, true);
+  const endnotesAt = useDocsValue((e) => e.endnotesAt, 'document');
+  const footnoteNumbering = useDocsValue((e) => e.noteNumbering('footnote') ?? null, null);
+  const endnoteNumbering = useDocsValue((e) => e.noteNumbering('endnote') ?? null, null);
   return useMemo(
     () => ({
       page: page ?? undefined,
@@ -267,6 +293,10 @@ export function useDocsPage(): DocsPage {
       setOwnHeaders: (on) => commands.setOwnHeaders(on),
       numbering: numbering ?? undefined,
       setNumbering: (next) => commands.setPageNumbering(next),
+      endnotesAt,
+      setEndnotesAt: (at) => commands.setEndnotesAt(at),
+      noteNumbering: { footnote: footnoteNumbering ?? undefined, endnote: endnoteNumbering ?? undefined },
+      setNoteNumbering: (kind, next) => commands.setNoteNumbering(kind, next),
       firstPageDifferent: first,
       setFirstPageDifferent: (on) => commands.setFirstPageDifferent(on),
       letterhead: state.letterhead,
@@ -278,7 +308,7 @@ export function useDocsPage(): DocsPage {
         return image && new Blob([image.bytes as BlobPart], { type: image.type });
       },
     }),
-    [commands, editor, page, numbering, first, sections, section, own, state.letterhead],
+    [commands, editor, page, numbering, first, sections, section, own, endnotesAt, footnoteNumbering, endnoteNumbering, state.letterhead],
   );
 }
 

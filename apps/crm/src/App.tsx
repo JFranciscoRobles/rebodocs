@@ -1,25 +1,25 @@
-import { useState } from 'react'
-import { type Property, FIELDS, TEAM, loadProperties, money, saveProperties } from './data'
-import { DocumentView } from './DocumentView'
-import { Documents } from './Documents'
+import { useState } from 'react';
+import { type Property, FIELDS, TEAM, loadProperties, money, saveProperties } from './data';
+import { DocumentView } from './DocumentView';
+import { Documents } from './Documents';
 
-type Route = { page: 'list' } | { page: 'property'; id: string; tab: 'record' | 'documents'; doc?: string }
+type Route = { page: 'list' } | { page: 'property'; id: string; tab: 'record' | 'documents'; doc?: string };
 
-const NAV = ['Inicio', 'Agenda', 'Contactos', 'Oportunidades', 'Propiedades', 'Operaciones', 'Reportes']
+const NAV = ['Inicio', 'Agenda', 'Contactos', 'Oportunidades', 'Propiedades', 'Operaciones', 'Reportes'];
 
 /** The CRM: its menu, the properties, and the page of each, whose Documents tab is where the editor is. */
 export function App() {
-  const [properties, setProperties] = useState(loadProperties)
-  const [route, setRoute] = useState<Route>({ page: 'list' })
-  const [who, setWho] = useState(0)
-  const person = TEAM[who]
-  const property = route.page === 'property' ? properties.find((p) => p.id === route.id) : undefined
+  const [properties, setProperties] = useState(loadProperties);
+  const [route, setRoute] = useState<Route>({ page: 'list' });
+  const [who, setWho] = useState(0);
+  const person = TEAM[who];
+  const property = route.page === 'property' ? properties.find((p) => p.id === route.id) : undefined;
 
   const change = (next: Property) => {
-    const all = properties.map((p) => (p.id === next.id ? next : p))
-    setProperties(all)
-    saveProperties(all)
-  }
+    const all = properties.map((p) => (p.id === next.id ? next : p));
+    setProperties(all);
+    saveProperties(all);
+  };
 
   return (
     <div className="crm">
@@ -93,22 +93,14 @@ export function App() {
             {!route.doc && (
               <div className="crm-tabs" role="tablist" aria-label="Secciones de la propiedad">
                 {(['record', 'documents'] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    role="tab"
-                    aria-selected={route.tab === tab}
-                    className={route.tab === tab ? 'on' : ''}
-                    onClick={() => setRoute({ page: 'property', id: property.id, tab })}
-                  >
+                  <button key={tab} role="tab" aria-selected={route.tab === tab} className={route.tab === tab ? 'on' : ''} onClick={() => setRoute({ page: 'property', id: property.id, tab })}>
                     {tab === 'record' ? 'Ficha' : 'Documentos'}
                   </button>
                 ))}
               </div>
             )}
             {route.tab === 'record' && <Record property={property} onChange={change} />}
-            {route.tab === 'documents' && !route.doc && (
-              <Documents property={property} person={person} open={(doc) => setRoute({ page: 'property', id: property.id, tab: 'documents', doc })} />
-            )}
+            {route.tab === 'documents' && !route.doc && <Documents property={property} person={person} open={(doc) => setRoute({ page: 'property', id: property.id, tab: 'documents', doc })} />}
             {route.tab === 'documents' && route.doc && (
               <DocumentView key={route.doc} doc={route.doc} property={property} person={person} back={() => setRoute({ page: 'property', id: property.id, tab: 'documents' })} />
             )}
@@ -116,7 +108,7 @@ export function App() {
         )}
       </div>
     </div>
-  )
+  );
 }
 
 function PropertyList({ properties, open }: { properties: Property[]; open: (id: string) => void }) {
@@ -137,7 +129,7 @@ function PropertyList({ properties, open }: { properties: Property[]; open: (id:
         ))}
       </div>
     </section>
-  )
+  );
 }
 
 /** The record of the property: what the contract is filled with. Changed here, the next contract made has it. */
@@ -148,15 +140,11 @@ function Record({ property, onChange }: { property: Property; onChange: (next: P
         {FIELDS.map(([key, label]) => (
           <label key={key} className="crm-field">
             <span>{label}</span>
-            <input
-              value={property[key]}
-              inputMode={key === 'price' ? 'numeric' : undefined}
-              onChange={(e) => onChange({ ...property, [key]: e.target.value })}
-            />
+            <input value={property[key]} inputMode={key === 'price' ? 'numeric' : undefined} onChange={(e) => onChange({ ...property, [key]: e.target.value })} />
           </label>
         ))}
       </div>
       <p className="crm-hint">Estos datos llenan las variables del contrato al generarlo en la pestaña Documentos.</p>
     </div>
-  )
+  );
 }

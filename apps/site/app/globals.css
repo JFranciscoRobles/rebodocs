@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 @theme {
   --color-brand: #0b57d0;
@@ -8,7 +8,7 @@
   --color-muted: #5b6272;
   --color-line: #e3e6ec;
   --color-soft: #f5f7fb;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* --- The landing page: warm neutrals and six pastel pairs ---------------- */
@@ -261,7 +261,7 @@ body {
   padding: 18px 20px;
   overflow-x: auto;
   border-radius: 12px;
-  font: 13px/1.65 var(--font-code);
+  font: 13px / 1.65 var(--font-code);
 }
 
 /* --- A page of the documentation, as Markdown makes it ----------------------- */
