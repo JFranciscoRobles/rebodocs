@@ -99,7 +99,7 @@ class Writer {
     return this.add(dict.replace(/>>$/, ' /Filter /FlateDecode >>'), zlibSync(data));
   }
 
-  finish(root: number, info: number): Uint8Array {
+  finish(root: number, info: number): Uint8Array<ArrayBuffer> {
     const start = this.length;
     const count = this.offsets.length + 1;
     let xref = `xref\n0 ${count}\n0000000000 65535 f \n`;
@@ -729,7 +729,7 @@ function writeOutlines(out: Writer, doc: Doc, layout: Layout, pageIds: number[])
   return rootId;
 }
 
-export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array {
+export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array<ArrayBuffer> {
   const out = new Writer();
   /** The size of a page: its section's. The page being drawn is `height` tall, which PDF counts up from its bottom. */
   const sizeOf = (index: number) => layout.pages[index]?.setup ?? layout.page;

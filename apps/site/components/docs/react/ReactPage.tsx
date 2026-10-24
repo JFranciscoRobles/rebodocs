@@ -126,6 +126,11 @@ const FEATURES: { name: string; on: boolean; text: string }[] = [
     on: true,
     text: "The side panel: outline, variables, notes, tracked changes, and versions when given. On the right of the pages; 'left', or 'rail' for a rail of icons always there, with counts.",
   },
+  {
+    name: 'panelOpen',
+    on: false,
+    text: "The side panel open from the start, on a window wide enough for it to go beside the pages: true, or the tab to open it on ('variables', 'history'…). On a phone it starts closed, as it would cover the pages.",
+  },
   { name: 'ruler', on: true, text: 'The ruler, with margins, indents and tab stops.' },
   {
     name: 'statusBar',
@@ -134,6 +139,21 @@ const FEATURES: { name: string; on: boolean; text: string }[] = [
   },
   { name: 'toolbar', on: true, text: "The document above and the formatting under it; 'tabs' for tabs of tools (Format, Insert, Page), or 'row' for one row." },
   { name: 'find', on: true, text: 'Find and replace, from the toolbar or ⌘F (Ctrl+F).' },
+  {
+    name: 'slash',
+    on: true,
+    text: 'The menu a "/" brings up, typed at the start of a paragraph or after a space: headings, lists, a table, a picture, a page break, a variable, the signatures. Or { builtIns, commands }: which of those it keeps (false for none), and your own. See Headless, The “/” menu.',
+  },
+  {
+    name: 'variableSuggestions',
+    on: true,
+    text: 'The list "{{" brings up: the variables you fill, then those of the document. Or { variables, fromDocument, allowNew }. See Templates, In the editor.',
+  },
+  {
+    name: 'forms',
+    on: false,
+    text: 'Marking areas that can be changed and restricting editing to them, from the Review menu, the bar and the “/” menu. A restricted document is restricted without it. See Templates, Areas to fill in.',
+  },
   { name: 'focus', on: true, text: 'The pages alone, full screen, from the status bar or ⌘⇧. (Ctrl+Shift+.). Escape leaves.' },
   { name: 'title', on: true, text: 'The name of the document in the toolbar; with onSave or files, a dot beside it while there are changes not saved.' },
   { name: 'responsive', on: true, text: 'Making do with a narrow window and the keyboard of a phone. See Phones and touch.' },

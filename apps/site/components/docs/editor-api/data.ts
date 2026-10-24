@@ -173,6 +173,19 @@ export const GROUPS: Group[] = [
         run: 'track',
       },
       {
+        sigs: ['restricted: boolean', 'setRestricted(on: boolean)', 'editableRanges: EditableRange[]', 'activeEditable: string | undefined'],
+        text: "A document restricted to its areas to fill in, as Word's Restrict editing: only they can be changed, the rest is read, copied and noted on. Said in the file; not a step to undo.",
+      },
+      {
+        sigs: ['makeEditable() → string | undefined', 'removeEditable(id?)', 'nextEditable(dir?: 1 | -1) → boolean'],
+        text: 'Makes the selection an area to fill in, or the caret an empty one, and returns its id; takes one away, its text staying; selects what the next area holds, going round, as Tab does while restricted.',
+        nothing: 'makeEditable and removeEditable do nothing while the document is restricted; nextEditable returns false with no areas.',
+      },
+      {
+        sigs: ['onRefused: (() => void) | undefined'],
+        text: 'Called when a change is not made, the document being restricted and the change outside its areas: for an interface to say so. Changes asked from code are refused the same.',
+      },
+      {
         sigs: [
           'acceptRevision(revision?) → boolean',
           'rejectRevision(revision?) → boolean',
@@ -239,6 +252,10 @@ export const GROUPS: Group[] = [
         nothing: 'selectVariable returns false for a variable the document does not use.',
       },
       { sigs: ['fillVariables(values: Record<string, string>)'], text: 'Replaces them everywhere, as one step to undo; while changes are tracked, as changes.', run: 'fill' },
+      {
+        sigs: ['formatLocale: string'],
+        text: 'The language variables are written in — dates, amounts, capitals: the language of the text, with the browser’s region (en-US, es-MX). fillVariables writes in it.',
+      },
       { sigs: ['variableUses(name: string) → number'], text: 'How many times one is used, headers, footers, notes and text boxes included.' },
       {
         sigs: ['variableNotes(name: string) → string[]'],
@@ -371,6 +388,27 @@ export const GROUPS: Group[] = [
     ],
   },
   {
+    id: 'collaboration',
+    title: 'For a collaboration of your own',
+    color: 'green',
+    intro: 'What @rebodocs/collab asks of an editor (CollabHost), which the Editor is: for wiring it to a server of your own, as the room on the Real-time collaboration page does.',
+    members: [
+      {
+        sigs: ['replace(doc: Doc, selection: Selection, reveal?: boolean)'],
+        text: 'Shows the document as someone else left it: not a step to undo, and what is on the screen stays where it is unless reveal.',
+      },
+      {
+        sigs: ['commits: number', 'steps: number'],
+        text: 'How many changes the person made here, and how many of them were steps of their own to undo: a change is theirs when commits moved after it, and a new step when steps did too.',
+      },
+      {
+        sigs: ['history: { undo(), redo(), canUndo, canRedo } | undefined'],
+        text: 'Who undoes in place of the editor: with several people, ⌘Z must take back only what this person did. While it is set, undo, redo, canUndo and canRedo are its.',
+      },
+      { sigs: ['setPeers(peers: PeerCaret[])'], text: 'Draws where the others are: the caret and selection of each, with its name and colour, in the text or in the header or footer they are in.' },
+    ],
+  },
+  {
     id: 'interface',
     title: 'For your own interface',
     color: 'pink',
@@ -404,8 +442,21 @@ export interface TypeDoc {
   fields: [name: string, type: string, text?: string][];
 }
 
-/** The types the methods take, as packages/core/src defines them. A field is optional where its name ends in `?`. */
+/** The types the methods take, as packages/core/src defines them, or another package when `from` names it. A field is optional where its name ends in `?`. */
 export const TYPES: TypeDoc[] = [
+  {
+    name: 'PeerCaret',
+    from: 'editor/src/editor.ts',
+    text: 'Someone else on the document, as setPeers draws them.',
+    fields: [
+      ['name', 'string', 'Shown beside their caret.'],
+      ['color', 'string', 'Hex RGB without #.'],
+      ['part?', 'StoryPart', 'The header or footer they are in; the text when there is none.'],
+      ['page', 'number', 'The page they are editing it on.'],
+      ['anchor', 'Position'],
+      ['focus', 'Position', 'Their selection: where it started and where it ends.'],
+    ],
+  },
   {
     name: 'Position',
     from: 'model.ts',

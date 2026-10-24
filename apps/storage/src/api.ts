@@ -51,10 +51,10 @@ export async function readFile(key: string): Promise<Uint8Array> {
   return new Uint8Array(await (await bucket(await readUrl(key))).arrayBuffer());
 }
 
-export async function writeFile(key: string, docx: Uint8Array): Promise<void> {
+export async function writeFile(key: string, docx: Uint8Array<ArrayBuffer>): Promise<void> {
   const { url, type } = await ask<{ url: string; type: string }>(at('/api/url', key), { method: 'POST' });
   // The type is part of what was signed: the bucket takes the file only with the same one.
-  await bucket(url, { method: 'PUT', headers: { 'content-type': type }, body: docx as BodyInit });
+  await bucket(url, { method: 'PUT', headers: { 'content-type': type }, body: docx });
 }
 
 export const variablesOf = async (key: string) => (await ask<{ names: string[] }>(at('/api/variables', key))).names;
@@ -65,12 +65,12 @@ export const makePdf = (key: string, values: Record<string, string>) =>
 export const listVersions = (key: string) => ask<Version[]>(at('/api/versions', key));
 
 /** Keeps `docx` as a version of the document at `key`, as the bucket's: the browser writes it there itself. */
-export async function saveVersion(key: string, docx: Uint8Array, meta: { label?: string; author?: string } = {}): Promise<Version> {
+export async function saveVersion(key: string, docx: Uint8Array<ArrayBuffer>, meta: { label?: string; author?: string } = {}): Promise<Version> {
   const { url, type, version } = await ask<{ url: string; type: string; version: Version }>(at('/api/versions', key), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(meta),
   });
-  await bucket(url, { method: 'PUT', headers: { 'content-type': type }, body: docx as BodyInit });
+  await bucket(url, { method: 'PUT', headers: { 'content-type': type }, body: docx });
   return version;
 }

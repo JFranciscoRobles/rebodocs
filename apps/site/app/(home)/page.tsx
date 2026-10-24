@@ -171,7 +171,8 @@ export default async function Home() {
             <Pill color="blue">Live demo</Pill>
             <Title>This is the editor. Type in it.</Title>
             <p className="mt-4.5 text-lg leading-[1.6] text-muted">
-              Open your own .docx from the menu, fill the template from the side panel, track changes from Review, save a version and compare it, export to PDF. Nothing leaves the browser.
+              Open your own .docx from the menu, type “/” for commands and {'“{{”'} for variables, fill the template from the side panel, track changes or restrict editing from Review, save a version
+              and compare it, export to PDF. Nothing leaves the browser.
             </p>
           </div>
           <div className="reveal mt-11 rounded-3xl border border-border bg-surface p-3.5">

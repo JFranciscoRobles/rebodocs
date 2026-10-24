@@ -47,7 +47,10 @@ export function startCollab(backendUrl: string): CollabServer {
   return (rooms = createCollabServer({
     port: collabPort,
     host: process.env.COLLAB_HOST,
-    storage: backendStorage({ url: backendUrl, key: process.env.COLLAB_BACKEND_KEY }),
+    // Every change logged as it comes, so that the server can stop at any moment and lose none; COLLAB_LOG=0 to see it without.
+    storage: backendStorage({ url: backendUrl, key: process.env.COLLAB_BACKEND_KEY, log: process.env.COLLAB_LOG !== '0' }),
+    // What the backend shows to have someone's access asked about again at once.
+    recheckKey: process.env.COLLAB_BACKEND_KEY,
     // Soon after typing stops, so that it is soon seen where the documents are kept; 5 seconds is the usual.
     saveAfter: 2000,
     // A room lasts as long as someone is in it: a moment after the last one leaves, the document is

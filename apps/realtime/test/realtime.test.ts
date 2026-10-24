@@ -311,3 +311,58 @@ describe('two people on one document', () => {
     await until(() => rooms.rooms().length === 0);
   });
 });
+
+describe('the collaboration server stopping all at once', () => {
+  const start = async (port = 0) => {
+    rooms = createCollabServer({ port, storage: backendStorage({ url: `${api}/backend/docs`, key: 'the key', log: true }), idle: 30, saveEvery: 60_000, recheckKey: 'the key' });
+    await rooms.ready;
+  };
+  const enter = async (key: string, name: string) => {
+    const { body } = await ask(`/api/room?key=${encodeURIComponent(key)}`, { method: 'POST', body: JSON.stringify({ name }) });
+    const host = new Host();
+    const session = joinRoom(host, body.room, { url: body.url, ticket: body.ticket });
+    sessions.push(session);
+    await until(() => session.state === 'on' || session.state === 'closed');
+    return { host, session };
+  };
+  const logLines = async (key: string) =>
+    Buffer.from((await store.get(`logs/${roomOf(key)}.jsonl`)) ?? new Uint8Array())
+      .toString('utf8')
+      .split('\n')
+      .filter(Boolean).length;
+
+  it('loses no change, as the backend keeps each as it comes, and lets the log go when the session ends', async () => {
+    rooms.close();
+    await start();
+    await store.put('logged.docx', docxOf('Logged'), DOCX);
+    const ana = await enter('logged.docx', 'Ana');
+    const luis = await enter('logged.docx', 'Luis');
+    ana.host.edit((doc) => insertText(doc, { para: 0, offset: 6 }, ' by Ana').doc);
+    await until(() => luis.host.texts[0] === 'Logged by Ana');
+    luis.host.edit((doc) => insertText(doc, { para: 0, offset: 13 }, ' and Luis').doc);
+    await until(() => ana.session.pending === 0 && luis.session.pending === 0);
+    const end = Date.now() + 4000;
+    while ((await logLines('logged.docx')) < 3 && Date.now() < end) await new Promise((done) => setTimeout(done, 20));
+    // The document is not given back yet: only the log has the changes, beside the documents and not among them.
+    expect(await textsOf('logged.docx')).toEqual(['Logged']);
+    expect((await ask('/api/docs')).body.map((doc: { key: string }) => doc.key).some((key: string) => key.startsWith('logs/'))).toBe(false);
+
+    // Stopped at once, and started again where it was.
+    const port = rooms.port;
+    rooms.close();
+    await start(port);
+    await until(() => ana.session.state === 'on' && luis.session.state === 'on', 10_000);
+    expect(ana.host.texts).toEqual(['Logged by Ana and Luis']);
+    expect((await enter('logged.docx', 'Eva')).host.texts).toEqual(['Logged by Ana and Luis']);
+
+    // The backend asks for everybody's access again at once.
+    expect((await fetch(`http://127.0.0.1:${rooms.port}/collab/rooms/${roomOf('logged.docx')}/recheck`, { method: 'POST', headers: { Authorization: 'Bearer the key' } })).status).toBe(200);
+
+    for (const session of sessions) session.leave();
+    await until(() => rooms.rooms().length === 0);
+    const kept = Date.now() + 4000;
+    while ((await logLines('logged.docx')) > 0 && Date.now() < kept) await new Promise((done) => setTimeout(done, 20));
+    expect(await logLines('logged.docx')).toBe(0);
+    expect(await textsOf('logged.docx')).toEqual(['Logged by Ana and Luis']);
+  }, 30_000);
+});

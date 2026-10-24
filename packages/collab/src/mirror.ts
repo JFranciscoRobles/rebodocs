@@ -50,7 +50,7 @@ export interface CollabHost {
   /** Shows another document in place of the one it has, which someone else changed: not a step to undo, and the view stays where it is unless `reveal`. */
   replace(doc: Doc, selection: HostSelection, reveal?: boolean): void;
   setPeers(peers: PeerCaret[]): void;
-  exportDocx(): Uint8Array;
+  exportDocx(): Uint8Array<ArrayBuffer>;
 }
 
 const paragraphsOf = (doc: Doc, part: StoryPart | undefined): Paragraph[] => (part ? (storyOf(doc, part)?.paragraphs ?? []) : doc.paragraphs);

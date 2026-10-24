@@ -39,8 +39,8 @@ export const versionsOf = (key: string) => ({
     if (!answer.ok) throw new Error(`The server answered ${answer.status}.`);
     return new Uint8Array(await answer.arrayBuffer());
   },
-  save: (docx: Uint8Array, info: { label?: string; author?: string }) =>
-    ask<{ id: string }>(`${at('/api/versions', key)}&author=${encodeURIComponent(info.author ?? '')}&label=${encodeURIComponent(info.label ?? '')}`, { method: 'POST', body: docx as BodyInit }),
+  save: (docx: Uint8Array<ArrayBuffer>, info: { label?: string; author?: string }) =>
+    ask<{ id: string }>(`${at('/api/versions', key)}&author=${encodeURIComponent(info.author ?? '')}&label=${encodeURIComponent(info.label ?? '')}`, { method: 'POST', body: docx }),
 });
 
 export const enterRoom = (key: string, name: string) => ask<Room>(at('/api/room', key), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });

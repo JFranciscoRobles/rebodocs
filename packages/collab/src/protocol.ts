@@ -7,6 +7,12 @@ import type { StoryPart } from '@rebodocs/core/internal';
 import { type Op, decode, encode } from './changes';
 
 export const DEFAULT_COLLAB_PORT = 7420;
+/**
+ * The version of what is said here. An editor says the one it speaks when it
+ * comes in, and a server that speaks another sends it away saying so, rather
+ * than refusing its changes one by one. One that says none speaks the first.
+ */
+export const PROTOCOL = 1;
 /** Where everything of the server is, under its address. */
 export const PREFIX = '/collab';
 
@@ -43,6 +49,8 @@ export interface PeerInfo {
 
 /** What an editor is told first, once it is in. */
 export interface Hello {
+  /** The version the server speaks; a server of before says none, and speaks the first. */
+  protocol?: number;
   client: string;
   /** What only this editor is given: everything it sends carries it. */
   key: string;

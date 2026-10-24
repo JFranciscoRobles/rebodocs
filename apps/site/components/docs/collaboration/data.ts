@@ -97,12 +97,22 @@ export const CONFLICTS: [what: string, result: string, scenario?: string][] = [
 /** The options of the command, from packages/collab/src/main.ts. */
 export const OPTIONS: [option: string, env: string, text: string][] = [
   ['--backend URL', 'REBODOCS_COLLAB_BACKEND', 'Where documents are read from and saved to.'],
-  ['--backend-key KEY', 'REBODOCS_COLLAB_BACKEND_KEY', 'Sent to your backend as Authorization: Bearer …. Put it in the environment, not on the command line.'],
+  [
+    '--backend-key KEY',
+    'REBODOCS_COLLAB_BACKEND_KEY',
+    'Sent to your backend as Authorization: Bearer …, and what your backend shows to have someone’s access asked about at once. Put it in the environment, not on the command line.',
+  ],
+  ['--backend-log', 'REBODOCS_COLLAB_BACKEND_LOG=1', 'Give your backend every change as it comes, on three more routes, so a server that stops all at once loses none.'],
   ['--port N', 'REBODOCS_COLLAB_PORT', '7420 by default.'],
   ['--host ADDR', '', 'The address to listen on: this machine alone when left out; 0.0.0.0 lets others in.'],
   ['--save-after N', '', 'Seconds after the last change that the document is saved. 5 by default.'],
   ['--save-every N', '', 'The most seconds a room with changes goes without being saved while people keep typing. 30 by default.'],
-  ['--recheck-every N', 'REBODOCS_COLLAB_RECHECK_EVERY', 'Seconds between asking /access again whether each person may still be in; whoever it turns away is sent out. Never by default.'],
+  [
+    '--recheck-every N',
+    'REBODOCS_COLLAB_RECHECK_EVERY',
+    'Seconds between asking /access again whether each person may still be in; whoever it turns away is sent out. Never by default: your backend can ask for it when it changes someone’s access.',
+  ],
+  ['--instance NAME', 'REBODOCS_COLLAB_INSTANCE', 'What this process is called among several behind one address: said in X-Rebodocs-Instance on everything it answers, and by /collab/ping.'],
   ['--data DIR', '', 'Without a backend: the folder rooms are kept in, ./rooms when left out.'],
   ['--memory', '', 'Without a backend: keep nothing, rooms last as long as the process.'],
   ['--token WORD', 'REBODOCS_COLLAB_TOKEN', 'Without a backend: the word a page must give to start a room.'],
@@ -122,4 +132,19 @@ export const ROUTES: [route: string, when: string, what: string][] = [
     'Someone joins, with { "ticket": "…" }; and every --recheck-every seconds while they stay.',
     'Answer { "name": "Ana" } to let them in under that name, with "readOnly": true to let them only watch, or 403.',
   ],
+];
+
+/** The routes of your backend for the log, with --backend-log, and when the server calls each. */
+export const LOG_ROUTES: [route: string, when: string, what: string][] = [
+  [
+    'PUT /docs/<id>/changes',
+    'A room has its first change, or its changes were folded into a new file while people stay.',
+    'Store the body in place of any log there was: its first line, the file the changes are made to.',
+  ],
+  [
+    'POST /docs/<id>/changes',
+    'Each change, as it comes; what comes while one is on its way goes with the next.',
+    'Add the lines of the body after those there are. X-Rebodocs-From says how many came before them: answer 409 when that is not how many you have.',
+  ],
+  ['GET /docs/<id>/changes', 'Someone opens a room nobody is in, before GET /docs/<id>.', 'Return every line as it came, or 404 when there is no log.'],
 ];

@@ -117,6 +117,20 @@ export interface BackendOptions {
   url: string;
   /** What the server shows the system to be let in, as `Authorization: Bearer …`. */
   key?: string;
+  /**
+   * Gives the system every change as it comes, besides the document now and
+   * then, so that a server that stops all at once loses none: the room
+   * starts again from them. Off unless true; the system answers three more
+   * requests then (see `backendStorage`).
+   */
+  log?: boolean;
+}
+
+/** What the log of a room starts with: the file its changes are made to, and which one it is. */
+interface LogStart {
+  epoch: number;
+  name: string;
+  base: Uint8Array;
 }
 
 /**
@@ -129,11 +143,71 @@ export interface BackendOptions {
  *                          `X-Rebodocs-Authors` (each name URL-encoded, separated by commas): when to keep a version.
  *   POST url/<id>/access   `{ "ticket": "…" }`: 200 with `{ "name": "…" }` when whoever has that ticket may edit it,
  *                          and `"readOnly": true` besides when they may only look at it.
+ *
+ * With `log`, the changes too, as lines of text the system keeps as they come and gives back as they were:
+ *
+ *   PUT    url/<id>/changes   a log starts: its first line, which takes the place of any log there was.
+ *   POST   url/<id>/changes   more lines, to go after those there are. `X-Rebodocs-From` says how many changes
+ *                             came before them, for a system that wants to check that none went missing (409 if so).
+ *   GET    url/<id>/changes   every line, as they came; 404 when there is no log.
+ *
+ * A `PUT url/<id>` that ends a session (`X-Rebodocs-Session-End: 1`) ends the log too: the system lets it go
+ * then, as the document it has is the whole of it. A room that opens with a log starts again from it.
  */
 export function backendStorage(options: BackendOptions): RoomStorage {
   const url = options.url.replace(/\/+$/, '');
   const auth: Record<string, string> = options.key ? { Authorization: `Bearer ${options.key}` } : {};
   const of = (id: string) => `${url}/${encodeURIComponent(id)}`;
+  const changes = (id: string) => `${of(id)}/changes`;
+  /** What is on its way to the log of each room, and whether its log was started. */
+  const logs = new Map<string, { start?: LogStart; started: boolean; next: number; queued: Entry[]; sending?: Promise<void> }>();
+  const logOf = (id: string) => {
+    let log = logs.get(id);
+    if (!log) logs.set(id, (log = { started: false, next: 0, queued: [] }));
+    return log;
+  };
+  /** Sends what is queued for a room's log, at once and one request at a time: what comes meanwhile goes in the next. */
+  const sendLog = (id: string): Promise<void> => {
+    const log = logOf(id);
+    if (log.sending) return log.sending;
+    let sending: Promise<void> | undefined;
+    sending = (async () => {
+      // Begun after it is set: with nothing to send, it would end before, and be held as being sent for good.
+      await Promise.resolve();
+      try {
+        while (log.queued.length || (!log.started && log.start)) {
+          if (!log.started && log.start) {
+            const response = await fetch(changes(id), { method: 'PUT', headers: { ...auth, 'Content-Type': 'text/plain' }, body: `${encode(log.start)}\n` });
+            if (!response.ok) throw new Error(`the system answered ${response.status} to a log being started`);
+            log.started = true;
+            continue;
+          }
+          const batch = log.queued.slice();
+          const response = await fetch(changes(id), {
+            method: 'POST',
+            headers: { ...auth, 'Content-Type': 'text/plain', 'X-Rebodocs-From': String(log.next) },
+            body: batch.map((entry) => `${encode(entry)}\n`).join(''),
+          });
+          if (response.status === 409) throw new Error('the system has other changes of this room than this server: is the room open in two processes at once?');
+          if (!response.ok) throw new Error(`the system answered ${response.status} to changes being logged`);
+          log.queued.splice(0, batch.length);
+          log.next += batch.length;
+        }
+      } finally {
+        if (log.sending === sending) log.sending = undefined;
+      }
+    })();
+    log.sending = sending;
+    return sending;
+  };
+  /** A new log, from the file the changes are made to from now on. */
+  const restart = (id: string, start: LogStart) => {
+    const log = logOf(id);
+    log.start = start;
+    log.started = false;
+    log.next = 0;
+    log.queued = [];
+  };
   const put = async (id: string, docx: Uint8Array, ended?: Session) => {
     const end: Record<string, string> = ended ? { 'X-Rebodocs-Session-End': '1', 'X-Rebodocs-Authors': ended.authors.map(encodeURIComponent).join(',') } : {};
     const response = await fetch(of(id), {
@@ -147,6 +221,20 @@ export function backendStorage(options: BackendOptions): RoomStorage {
     open: false,
     forgets: true,
     async load(id) {
+      // A log means the server stopped while people were in the room: it starts again from where they were.
+      if (options.log) {
+        const logged = await fetch(changes(id), { headers: auth });
+        if (logged.ok) {
+          const lines = (await logged.text()).split('\n').filter(Boolean);
+          const start = lines.length ? decode<LogStart>(lines[0]) : undefined;
+          if (start?.base) {
+            const log = lines.slice(1).map((line) => decode<Entry>(line));
+            restart(id, start);
+            Object.assign(logOf(id), { started: true, next: log.length });
+            return { name: start.name, epoch: start.epoch, base: start.base, log };
+          }
+        } else if (logged.status !== 404) throw new Error(`the system answered ${logged.status} when asked for the changes of the document`);
+      }
       const response = await fetch(of(id), { headers: auth });
       if (response.status === 404) return undefined;
       if (!response.ok) throw new Error(`the system answered ${response.status} when asked for the document`);
@@ -157,11 +245,33 @@ export function backendStorage(options: BackendOptions): RoomStorage {
         // As it came.
       }
       // Read again each time a room opens, the file may not be the one an editor coming back had: the epoch says so.
-      return { name, epoch: Date.now(), base: new Uint8Array(await response.arrayBuffer()), log: [] };
+      const kept = { name, epoch: Date.now(), base: new Uint8Array(await response.arrayBuffer()), log: [] };
+      // The log starts with the first change, from the file the room opened with.
+      if (options.log) restart(id, kept);
+      return kept;
     },
     // A room that starts is the document the system already has; one that was folded is the document to keep.
-    keep: (id, room, folded, ended) => (folded ? put(id, room.base, ended) : Promise.resolve()),
-    add: () => {},
+    async keep(id, room, folded, ended) {
+      if (!folded) return;
+      // What was on its way goes first: the log is of the file being replaced.
+      if (options.log) await sendLog(id).catch(() => {});
+      await put(id, room.base, ended);
+      if (!options.log) return;
+      // The session ended, and the system let go of its log with it; or the changes became the file, and a new log starts from it.
+      if (ended) logs.delete(id);
+      else {
+        restart(id, { name: room.name, epoch: room.epoch, base: room.base });
+        // The changes made to the new file while it was being kept: those added meanwhile went to the old log.
+        logOf(id).queued = room.log.slice();
+        await sendLog(id);
+      }
+    },
+    add(id, entry) {
+      if (!options.log) return;
+      logOf(id).queued.push(entry);
+      // Not lost when it fails: it goes with the next change, or with the next file.
+      sendLog(id).catch((error: Error) => console.error(`[collab] ${id}: ${error.message}`));
+    },
     save: (id, docx) => put(id, docx),
     async admit(id, ticket) {
       const response = await fetch(`${of(id)}/access`, { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket }) });

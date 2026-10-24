@@ -17,6 +17,13 @@ Open a document, press **Copy link**, and open the link in another window or
 another browser. It saves itself two seconds after typing stops, and every
 30 seconds while it goes on. The terminal says who comes and goes.
 
+Every change also goes to the backend as it comes, into a log beside the
+documents (`logs/`), so the collaboration server can stop at any moment and
+lose none: started again, the rooms pick up where they were, and the people
+in them go on as after a dropped connection. The log is emptied once the
+last person leaves and the document is kept whole. `COLLAB_LOG=0` runs it
+without, as the server is by default.
+
 When everybody has left a document they changed, the backend keeps a version
 of it, signed by who changed it. The **Versions** tab of the side panel lists
 them, compares the document with one and goes back to one, and keeps one by
@@ -40,17 +47,18 @@ takes its backend from `server/` here.
  browsers ──► collaboration server :7421 ──► GET  /backend/docs/<room>          ──► documents/
    :5177      (rooms in memory)              PUT  /backend/docs/<room>              (or a bucket)
                                              POST /backend/docs/<room>/access
+                                             PUT, POST, GET /backend/docs/<room>/changes ──► logs/
 ```
 
 All of it in one process, to have one thing to start. Apart they would be
 three: the pages, your backend, and
-`npm run collab -- --backend http://localhost:5177/backend/docs`.
+`npm run collab -- --backend http://localhost:5177/backend/docs --backend-log`.
 
 ## What is where
 
 | File | What it is |
 | --- | --- |
-| `server/collab.ts` | The three routes the collaboration server asks, the signed tickets, and the name of a room. |
+| `server/collab.ts` | The three routes the collaboration server asks, the log of each room's changes, the signed tickets, and the name of a room. |
 | `server/api.ts` | What the page asks: the documents and who is in the room of each, a new one, a ticket into a room, the versions. |
 | `server/store.ts` | Where the documents are kept: a folder, or anything with `list`, `get` and `put`. |
 | `server/versions.ts` | The versions, under `versions/` in the same store and named as `apps/storage` names them: one for each session of work, and those kept by hand. |

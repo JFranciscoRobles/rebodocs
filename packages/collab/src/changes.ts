@@ -122,7 +122,20 @@ export interface SetStory {
 
 export interface SetField {
   t: 'set';
-  key: 'page' | 'compatMode' | 'styles' | 'titlePage' | 'columns' | 'sectionStart' | 'noHeader' | 'noFooter' | 'trackRevisions' | 'endnotesAt' | 'endnoteNumbering' | 'footnoteNumbering';
+  key:
+    | 'page'
+    | 'compatMode'
+    | 'styles'
+    | 'titlePage'
+    | 'columns'
+    | 'sectionStart'
+    | 'noHeader'
+    | 'noFooter'
+    | 'trackRevisions'
+    | 'restricted'
+    | 'endnotesAt'
+    | 'endnoteNumbering'
+    | 'footnoteNumbering';
   value: unknown;
 }
 
@@ -539,7 +552,7 @@ export function diff(before: Doc, after: Doc): Op[] {
   if (before === after) return out;
   if (before.page !== after.page && !sameProps(before.page, after.page)) out.push({ t: 'set', key: 'page', value: after.page });
   if (before.compatMode !== after.compatMode) out.push({ t: 'set', key: 'compatMode', value: after.compatMode ?? null });
-  for (const key of ['columns', 'sectionStart', 'noHeader', 'noFooter', 'trackRevisions', 'endnotesAt', 'endnoteNumbering', 'footnoteNumbering'] as const) {
+  for (const key of ['columns', 'sectionStart', 'noHeader', 'noFooter', 'trackRevisions', 'restricted', 'endnotesAt', 'endnoteNumbering', 'footnoteNumbering'] as const) {
     if (before[key] !== after[key] && JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null)) out.push({ t: 'set', key, value: after[key] ?? null });
   }
   if (before.styles !== after.styles) out.push({ t: 'set', key: 'styles', value: after.styles ?? null });

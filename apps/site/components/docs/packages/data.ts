@@ -81,7 +81,10 @@ export function Contract({ file }: { file: Uint8Array }) {
     install: [['npm install @rebodocs/editor', 'It brings @rebodocs/core with it.']],
     inside: [
       ['Editor', 'Pages, caret, selection, history, keyboard, mouse and touch.'],
-      ['Interface pieces', 'createToolbar, createStatusBar, createRuler, createPanel, createFindBar, createBubble: each in an element of yours.'],
+      [
+        'Interface pieces',
+        'createToolbar, createStatusBar, createRuler, createPanel, createFindBar, createBubble, createSlashMenu, createVariableSuggest: each in an element of yours, or over the page.',
+      ],
       ['Languages and fonts', 'setLocale, addLocale, addFonts.'],
     ],
     takeIt: 'For a page without React, or to build on its pieces.',

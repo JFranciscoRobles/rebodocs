@@ -1,12 +1,14 @@
 // Runs the server people's editors meet at to work on a document together.
 //
 //   vite-node packages/collab/src/main.ts [--port 7420] [--host 0.0.0.0] [--token word] [--static folder]
-//                                         [--data folder | --memory | --backend https://… --backend-key key]
-//                                         [--save-after 5] [--save-every 30] [--recheck-every 0]
+//                                         [--data folder | --memory | --backend https://… --backend-key key [--backend-log]]
+//                                         [--save-after 5] [--save-every 30] [--recheck-every 0] [--instance name]
 //
 // The documents are kept in a folder (--data), nowhere (--memory), or by the
 // system the server works for (--backend), which is then also the one to say
-// who may edit each of them.
+// who may edit each of them. With --backend-key, the system shows the same
+// key to have the server ask again at once who may be in a room
+// (POST /collab/rooms/<id>/recheck), when it takes someone's access away.
 //
 // With --static it also serves the editor, built (apps/playground/dist): one
 // address is then all there is to give to the others.
@@ -32,6 +34,8 @@ const has = (name: string) => {
 const memory = has('--memory');
 const backend = value('--backend') ?? process.env.REBODOCS_COLLAB_BACKEND;
 const backendKey = value('--backend-key') ?? process.env.REBODOCS_COLLAB_BACKEND_KEY;
+const backendLog = has('--backend-log') || process.env.REBODOCS_COLLAB_BACKEND_LOG === '1';
+const instance = value('--instance') ?? process.env.REBODOCS_COLLAB_INSTANCE;
 const saveAfter = Number(value('--save-after') ?? 5);
 const saveEvery = Number(value('--save-every') ?? 30);
 const recheckEvery = Number(value('--recheck-every') ?? process.env.REBODOCS_COLLAB_RECHECK_EVERY ?? 0);
@@ -49,14 +53,25 @@ if (
   [memory, !!backend, !!dataDir].filter(Boolean).length !== 1
 ) {
   console.error(
-    'Usage: main.ts [--port 7420] [--host 0.0.0.0] [--token word] [--static folder] [--data folder | --memory | --backend https://… --backend-key key [--save-after 5] [--save-every 30] [--recheck-every 0]]',
+    'Usage: main.ts [--port 7420] [--host 0.0.0.0] [--token word] [--static folder] [--data folder | --memory | --backend https://… --backend-key key [--backend-log] [--save-after 5] [--save-every 30] [--recheck-every 0]] [--instance name]',
   );
   process.exit(2);
 }
 
-const storage = backend ? backendStorage({ url: backend, key: backendKey }) : dataDir ? folderStorage(dataDir) : memoryStorage();
+const storage = backend ? backendStorage({ url: backend, key: backendKey, log: backendLog }) : dataDir ? folderStorage(dataDir) : memoryStorage();
 const where = backend ? `documents at ${backend}, nothing kept here` : dataDir ? `rooms kept in ${dataDir}: ${storedRooms(dataDir).length}` : 'rooms in memory only';
-const server = createCollabServer({ port, host, storage, token, staticDir, saveAfter: saveAfter * 1000, saveEvery: saveEvery * 1000, recheckEvery: recheckEvery * 1000 || undefined });
+const server = createCollabServer({
+  port,
+  host,
+  storage,
+  token,
+  staticDir,
+  saveAfter: saveAfter * 1000,
+  saveEvery: saveEvery * 1000,
+  recheckEvery: recheckEvery * 1000 || undefined,
+  recheckKey: backend ? backendKey : undefined,
+  instance,
+});
 server.ready.then(
   () => {
     const open = host && !/^(127\.|localhost$|::1$)/.test(host);

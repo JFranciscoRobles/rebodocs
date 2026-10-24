@@ -127,7 +127,7 @@ export default function PdfDemo() {
   const [url, setUrl] = useState<string>();
   useEffect(() => {
     if (!made) return;
-    const link = URL.createObjectURL(new Blob([made.pdf as BlobPart], { type: 'application/pdf' }));
+    const link = URL.createObjectURL(new Blob([made.pdf], { type: 'application/pdf' }));
     setUrl(link);
     return () => URL.revokeObjectURL(link);
   }, [made]);

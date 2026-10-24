@@ -32,7 +32,7 @@ export const HEARD: { title: string; text: string; example: string }[] = [
   },
 ];
 
-/** The keys of the parts around the document, from a11y.ts, toolbar.ts, bubble.ts and panel.ts. */
+/** The keys of the parts around the document, from a11y.ts, toolbar.ts, bubble.ts, typeahead.ts, keys.ts and panel.ts. */
 export const KEYS: { keys: string; text: string }[] = [
   { keys: 'Alt+F10', text: 'To the toolbar.' },
   { keys: 'F6 · Shift+F6', text: 'From one part to the next, as they are on the page: the toolbar, the ruler, the side panel, the document, the status bar, and the find bar while it is open.' },
@@ -40,6 +40,12 @@ export const KEYS: { keys: string; text: string }[] = [
   { keys: 'Tab', text: 'In the toolbar, one stop; the arrows, Home and End go along it.' },
   { keys: 'Enter · ↓', text: 'On a button with a menu, opens it with the keyboard inside; the arrows go through it, and through grids (the size of a table, colours) in both directions.' },
   { keys: 'A tap of ⌘ (Ctrl)', text: 'Shows the bar beside the selection. Tab goes into it, the arrows along it, Tab or Escape back to the text.' },
+  {
+    keys: '/',
+    text: 'At the start of a paragraph or after a space, the “/” menu: it is said, with how to use it; the keyboard stays in the text, ↑ and ↓ go through it and say each one, Enter or Tab does it, Escape leaves the “/” as text.',
+  },
+  { keys: '{{', text: 'The list of the variables, used as the “/” menu is; the one chosen is written whole.' },
+  { keys: 'Tab · Shift+Tab', text: 'In a document restricted to areas to fill in, from one area to the next, selecting what it holds; a change outside them is refused and said to be.' },
   { keys: '⌘⌥Z (Ctrl+Alt+Z)', text: 'Screen reader mode, on and off.' },
 ];
 

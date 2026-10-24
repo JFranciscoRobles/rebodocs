@@ -6,7 +6,9 @@
 
 import { type Doc, type Range, type RunProps, comparePositions, defined } from './model';
 import { replaceRange } from './find';
-import { applyRunProps } from './ops';
+import { applyRunProps, propsAt } from './ops';
+import { type Pictures, pictureOf, picturesFor } from './fillimages';
+import { putRun } from './images';
 import { type StoryPart, storyOf, textParts, withStory } from './stories';
 import { type Block, type TemplateData, expandBlocks, findBlocks, flattenValues } from './blocks';
 import { documentLanguage } from './docx/source';
@@ -49,7 +51,7 @@ interface FormatKind {
   alias?: string[];
 }
 
-export type FormatId = 'upper' | 'lower' | 'capital' | 'bold' | 'italic' | 'underline' | 'date' | 'dateLong' | 'dateFull' | 'number' | 'currency';
+export type FormatId = 'upper' | 'lower' | 'capital' | 'bold' | 'italic' | 'underline' | 'date' | 'dateLong' | 'dateFull' | 'number' | 'currency' | 'image';
 
 const FORMATS: Record<FormatId, FormatKind> = {
   upper: { write: 'mayúsculas', group: 'case', alias: ['mayusculas', 'mayuscula', 'uppercase'] },
@@ -63,6 +65,7 @@ const FORMATS: Record<FormatId, FormatKind> = {
   dateFull: { write: 'fecha completa', group: 'type', alias: ['full date'] },
   number: { write: 'número', group: 'type', alias: ['numero'] },
   currency: { write: 'moneda', group: 'type', alias: ['importe'] },
+  image: { write: 'imagen', group: 'type', alias: ['picture', 'foto'] },
 };
 
 const plain = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -90,6 +93,7 @@ const ENGLISH: Record<FormatId, string> = {
   dateFull: 'full date',
   number: 'number',
   currency: 'currency',
+  image: 'image',
 };
 
 /**
@@ -242,6 +246,9 @@ export function formatValue(value: string, formats: string[], options: FormatOpt
       const day = parseDay(text, options.today ?? new Date(), locale);
       const pattern = id === 'date' && arg;
       next = day && (pattern ? writeDay(day, pattern, locale) : writeDayIn(day, id, locale));
+    } else if (id === 'image') {
+      // The text stays as it is: filling puts the picture in its place (see fillimages.ts).
+      next = pictureOf(text) ? text : undefined;
     } else if (id === 'number' || id === 'currency') {
       const decimals = /^\d$/.test(arg) ? +arg : id === 'currency' ? 2 : undefined;
       // A currency by its code: the one of the format, or the one given.
@@ -328,12 +335,20 @@ function mapParts(doc: Doc, change: (part: Doc) => Doc | undefined): Doc {
 }
 
 /** The variables of one part filled with the values given, as they are named; the same part when none has a value. */
-function fillPart(part: Doc, values: Record<string, string>, options: FormatOptions): Doc {
+function fillPart(part: Doc, values: Record<string, string>, options: FormatOptions, pictures: Pictures): Doc {
   const found = findVariables(part).filter((variable) => values[variable.name] !== undefined);
   let next = part;
   // From the last one back, so the ones still to do keep their place.
   for (let i = found.length - 1; i >= 0; i--) {
     const { name, formats, range } = found[i];
+    const image = formats.map(parseFormat).find((format) => format.id === 'image');
+    if (image) {
+      // A picture in the place of the variable, in its font; nothing when the value is not one (variableProblems says so).
+      const run = pictures.run(values[name], image.arg, propsAt(next, range.from));
+      const emptied = replaceRange(next, range, '').doc;
+      next = run ? putRun(emptied, range.from, run) : emptied;
+      continue;
+    }
     const { text, props } = formatValue(values[name], formats, options);
     const change = insertedAt(next, range);
     const replaced = replaceRange(next, range, text);
@@ -356,11 +371,14 @@ function fillPart(part: Doc, values: Record<string, string>, options: FormatOpti
 export function fillVariables(doc: Doc, values: TemplateData, given: FormatOptions = {}): Doc {
   const options = inLanguageOf(doc, given);
   const flat = flattenValues(values);
-  return mapParts(doc, (part) => {
-    const expanded = expandBlocks(part, values, (inside, data) => fillPart(inside, flattenValues(data), options));
-    const next = fillPart(expanded, flat, options);
+  // The pictures of every part and every item, put in the document's media once all are filled.
+  const pictures = picturesFor(doc);
+  const filled = mapParts(doc, (part) => {
+    const expanded = expandBlocks(part, values, (inside, data) => fillPart(inside, flattenValues(data), options, pictures));
+    const next = fillPart(expanded, flat, options, pictures);
     return next === part ? undefined : next;
   });
+  return pictures.into(filled);
 }
 
 /** Values are written in the language given, or else in the document's, or else in English. */

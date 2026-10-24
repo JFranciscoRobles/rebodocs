@@ -45,12 +45,12 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   'getting-started': {
     title: 'Getting started',
-    description: 'The first DocsEditor, running as written; installing it; the repository; the engine in Node, run on the page; where to go next; and every command of the repository.',
+    description: 'The first DocsEditor, running as written; opening a file and saving it back; the engine in Node, run on the page; where to go next; the repository; and every command of it.',
     headings: [
       { id: 'put-it-in-a-react-application', text: 'Put it in a React application' },
-      { id: 'run-the-repository', text: 'Run the repository' },
       { id: 'use-the-engine-in-node', text: 'Use the engine in Node' },
       { id: 'where-to-go-next', text: 'Where to go next' },
+      { id: 'run-the-repository', text: 'Run the repository' },
       { id: 'commands', text: 'Commands' },
     ],
     source: 'apps/site/components/docs/getting-started/GettingStartedPage.tsx',
@@ -75,13 +75,14 @@ export const CUSTOM: Record<string, CustomPage> = {
   headless: {
     title: 'Headless: your own UI',
     description:
-      'The smallest headless editor, running, with its state beside it; useDocs, its state and its commands; the hooks for panels; the keys; the bar beside the selection; variables; the ruler; and what was learned building a whole editor screen.',
+      'The smallest headless editor, running, with its state beside it; useDocs, its state and its commands; the hooks for panels; the keys; the bar beside the selection; the “/” menu; variables; the ruler; and what was learned building a whole editor screen.',
     headings: [
       { id: 'try', text: 'The smallest one' },
       { id: 'usedocs', text: 'useDocs' },
       { id: 'hooks-for-panels-and-dialogs', text: 'Hooks for panels and dialogs' },
       { id: 'keys', text: 'Keys' },
       { id: 'the-bar-beside-the-selection', text: 'The bar beside the selection' },
+      { id: 'the-slash-menu', text: 'The “/” menu' },
       { id: 'variables-that-are-dates-and-amounts', text: 'Variables that are dates and amounts' },
       { id: 'the-ruler', text: 'The ruler' },
       { id: 'a-whole-editor-screen', text: 'A whole editor screen' },
@@ -205,13 +206,17 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   collaboration: {
     title: 'Real-time collaboration',
-    description: 'Several people on one document at once: two editors in one room on the page, what happens when two people change the same thing, and the three steps to set it up.',
+    description:
+      'Several people on one document at once: two editors in one room on the page, what happens when two people change the same thing, the three steps to set it up, losing no work when the server stops, taking access away, and several processes.',
     headings: [
       { id: 'try', text: 'Two people, one room' },
       { id: 'when-two-people-change-the-same-thing', text: 'When two people change the same thing' },
       { id: 'a-demo-to-run', text: 'A demo to run' },
       { id: 'setup', text: 'Set it up in three steps' },
       { id: 'a-version-for-each-session', text: 'A version for each session' },
+      { id: 'when-the-server-stops', text: 'When the server stops all at once' },
+      { id: 'taking-access-away', text: 'Taking access away' },
+      { id: 'several-processes', text: 'Several processes' },
       { id: 'what-people-see', text: 'What people see' },
       { id: 'inside', text: 'How it works inside' },
       { id: 'server', text: 'The server in your own program' },
@@ -222,7 +227,8 @@ export const CUSTOM: Record<string, CustomPage> = {
   },
   'editor-api': {
     title: 'Editor API',
-    description: 'The methods of the Editor, run on a real one, and every member by what it is for: the selection, editing, tables, notes, templates, the page, finding, spelling and the view.',
+    description:
+      'The methods of the Editor, run on a real one, and every member by what it is for: the selection, editing, tables, notes, templates, the page, finding, spelling, the view and a collaboration of your own.',
     headings: [
       { id: 'get', text: 'Getting the editor' },
       { id: 'try', text: 'Try it on a real editor' },
@@ -253,7 +259,7 @@ export const CUSTOM: Record<string, CustomPage> = {
   templates: {
     title: 'Templates and variables',
     description:
-      'Any DOCX with {{variables}} is a template: one filled in a real editor, how a variable is read, every format as the code writes it, in a language, the panel, the calls and the tools of an assistant.',
+      'Any DOCX with {{variables}} is a template: one filled in a real editor, how a variable is read, every format as the code writes it, in a language, the panel and the list of “{{”, the calls, the tools of an assistant, and areas to fill in.',
     headings: [
       { id: 'try', text: 'Fill a template' },
       { id: 'writing', text: 'Writing a template' },
@@ -264,6 +270,7 @@ export const CUSTOM: Record<string, CustomPage> = {
       { id: 'in-code', text: 'In code' },
       { id: 'command-line', text: 'From the command line' },
       { id: 'assistants', text: 'For an assistant' },
+      { id: 'areas-to-fill-in', text: 'Areas to fill in' },
       { id: 'signatures', text: 'Signatures' },
       { id: 'know', text: 'What to know' },
     ],

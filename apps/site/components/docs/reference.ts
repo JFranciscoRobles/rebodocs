@@ -262,6 +262,23 @@ export const PROPS: PropDoc[] = [
   { name: 'onFindKey', type: '(replace) => void', kind: 'fn', group: 'Keys', does: 'Answers ⌘F and ⌘H; replace is true for ⌘H.' },
   { name: 'bubble', type: 'boolean', kind: 'bool', group: 'Keys', does: 'true for the bar beside the selection. See useDocsBubble.', warn: 'Read only at creation' },
   {
+    name: 'slash',
+    type: 'boolean | { builtIns?, commands? }',
+    kind: 'obj',
+    group: 'Keys',
+    does: 'The menu a “/” brings up; with settings, which of its commands it keeps and your own. Its variable and note need bubble too.',
+    warn: 'Read only at creation',
+  },
+  {
+    name: 'variableSuggestions',
+    type: 'boolean | { variables?, fromDocument?, allowNew? }',
+    kind: 'obj',
+    group: 'Keys',
+    does: 'The list “{{” brings up, of the variables.',
+    warn: 'Read only at creation',
+  },
+  { name: 'forms', type: 'boolean', kind: 'bool', group: 'Keys', does: 'Marking areas that can be changed from the bubble and the “/” menu.', warn: 'Read only at creation' },
+  {
     name: 'collab',
     type: '{ url, room, ticket? }',
     kind: 'obj',

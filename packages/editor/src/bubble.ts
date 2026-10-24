@@ -87,7 +87,12 @@ const MARKS: [MarkKey, MessageKey, MessageKey, string][] = [
   ['strike', 'mark.strike.letter', 'mark.strike', 'text-decoration:line-through'],
 ];
 
-export function createBubble(editor: Editor): Bubble {
+export interface BubbleOptions {
+  /** Making the selection a stretch that may be changed while editing is restricted, and taking one away. */
+  forms?: boolean;
+}
+
+export function createBubble(editor: Editor, options: BubbleOptions = {}): Bubble {
   injectStyle();
   const bar = document.createElement('div');
   bar.className = 'dx-bb';
@@ -169,6 +174,10 @@ export function createBubble(editor: Editor): Bubble {
   };
 
   const toNote = (): Item[] => [{ label: t('note.word'), title: t('bubble.noteTitle'), disabled: editor.area !== 'body', run: () => (naming = 'note') }];
+
+  /** The selection as a stretch that may be changed, while the document is open to decide it. */
+  const toEditable = (): Item[] =>
+    options.forms && !editor.restricted && editor.area === 'body' ? [{ label: t('form.make'), title: t('form.makeTitle'), closes: true, run: () => editor.makeEditable() }] : [];
 
   const toLink = (): Item[] => [{ label: t('link.word'), title: t('link.title', { key: MOD }), run: () => (naming = 'link') }];
 
@@ -311,9 +320,18 @@ export function createBubble(editor: Editor): Bubble {
     if (linked) return { what: t('link.word'), items: link(linked.href) };
     const noted = editor.collapsed ? editor.activeNote : undefined;
     if (noted !== undefined) return { what: t('note.word'), items: note(noted) };
+    const field = options.forms && editor.collapsed && !editor.restricted ? editor.activeEditable : undefined;
+    if (field !== undefined)
+      return {
+        what: t('form.zone'),
+        items: [{ label: t('form.removeShort'), title: t('form.remove'), className: 'dx-bb-danger', closes: true, run: () => editor.removeEditable(field) }],
+      };
     const cells = editor.inTable && editor.canEditTables;
     if (!editor.collapsed)
-      return { what: cells ? t('bubble.cells') : t('type.text'), items: [...marks(), 'sep', ...toVariable(), ...toNote(), ...toLink(), ...(cells ? (['sep', ...table()] as Item[]) : [])] };
+      return {
+        what: cells ? t('bubble.cells') : t('type.text'),
+        items: [...marks(), 'sep', ...toVariable(), ...toNote(), ...toLink(), ...toEditable(), ...(cells ? (['sep', ...table()] as Item[]) : [])],
+      };
     if (cells) return { what: t('table.word'), items: table() };
     // On an empty line what is wanted is to put something there; in a written one, to change it.
     if (editor.paragraphEmpty) return { what: t('insert'), items: [...insert(), 'sep', ...paragraph()] };

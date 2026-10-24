@@ -11,6 +11,6 @@ export function saveFile(data: BlobPart, name: string, type: string) {
 }
 
 // There is no backend here: saving hands the DOCX back as a download.
-export function download(docx: Uint8Array, name: string) {
-  saveFile(docx as BlobPart, name.endsWith('.docx') ? name : `${name}.docx`, DOCX);
+export function download(docx: Uint8Array<ArrayBuffer>, name: string) {
+  saveFile(docx, name.endsWith('.docx') ? name : `${name}.docx`, DOCX);
 }

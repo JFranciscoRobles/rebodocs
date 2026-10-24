@@ -174,6 +174,7 @@ export function App() {
               // Kept by the backend: one when everybody leaves, and one whenever someone keeps it from the side panel.
               versions={versions}
               locale="en"
+              features={{ panelOpen: true }}
               onCollab={(state, peers) => {
                 setLive({ state, people: peers.map((peer) => ({ name: peer.name || 'Someone', color: peer.color })) });
               }}

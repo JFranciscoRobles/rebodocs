@@ -13,7 +13,7 @@ const MAX_PDF_PIXELS = 2400;
  * any other is named by the nearest of the three every PDF reader has, with
  * each word where it is on the page.
  */
-export async function documentPdf(layout: Layout, doc: Doc, options: { measurer: TextMeasurer; title?: string; language: string }): Promise<Uint8Array> {
+export async function documentPdf(layout: Layout, doc: Doc, options: { measurer: TextMeasurer; title?: string; language: string }): Promise<Uint8Array<ArrayBuffer>> {
   // The pictures are read first: decoding one takes the browser a moment.
   const pictures = new Map<string, PdfImage>();
   const wanted = new Map<string, { xml: string; part?: FloatBox['part'] }>();

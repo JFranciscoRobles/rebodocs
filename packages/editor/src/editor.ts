@@ -104,6 +104,13 @@ import {
   notesAt,
   removeNote,
   setNoteText,
+  type EditableRange,
+  addEditableRange,
+  editableAt,
+  editableRanges,
+  keepsOutside,
+  removeEditableRange,
+  setRestricted,
   type FormatId,
   type Variable,
   fillVariables,
@@ -335,6 +342,13 @@ const CSS = `
 /* A word spelled wrong: a red wave under it, as every word processor draws it. */
 .dx-spell{position:absolute;height:3pt;pointer-events:none;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='3'%3E%3Cpath d='M0 2.5Q1 .5 2 1.5T4 1.5' fill='none' stroke='%23d93025' stroke-width='.8'/%3E%3C/svg%3E") repeat-x left bottom/4pt 3pt}
 .dx-note{position:absolute;border-bottom:1.2pt solid;box-sizing:border-box;pointer-events:none}
+/* A stretch that may be changed: Word's shading of the exceptions of a restricted document, and stronger for a moment when a change outside them was refused. */
+.dx-field{position:absolute;background:rgba(255,213,79,.18);border-bottom:1pt dotted rgba(176,132,0,.7);box-sizing:border-box;pointer-events:none}
+.dx-restricted .dx-field{background:rgba(255,213,79,.32)}
+.dx-field.dx-field-empty{border:1pt dotted rgba(176,132,0,.8);border-radius:2pt}
+.dx-form-nudge .dx-field{animation:dx-nudge .7s}
+@keyframes dx-nudge{30%{background:rgba(255,193,7,.75);box-shadow:0 0 0 2pt rgba(255,193,7,.5)}}
+@media (prefers-reduced-motion:reduce){.dx-form-nudge .dx-field{animation:none}}
 .dx-over-link .dx-page{cursor:pointer}
 .dx-toc-chip{position:absolute;display:inline-flex;align-items:center;gap:3pt;height:15pt;padding:0 6pt;border:1px solid var(--dx-ui-active-line,#a8c7fa);border-radius:8pt;background:var(--dx-ui-bg,#fff);color:var(--dx-ui-accent,#0b57d0);font:8pt/1 system-ui,-apple-system,"Segoe UI",sans-serif;white-space:nowrap;cursor:pointer;user-select:none}
 .dx-toc-chip:hover{background:var(--dx-ui-hover,#f3f1ec)}
@@ -369,7 +383,7 @@ body>:not(.dx-print){display:none!important}
 }
 .dx-sel{position:absolute;background:var(--dx-selection,rgba(11,87,208,.2));pointer-events:none}
 .dx-peer-sel{position:absolute;opacity:.25;pointer-events:none}
-.dx-sel,.dx-var,.dx-find,.dx-note,.dx-peer-sel{mix-blend-mode:multiply}
+.dx-sel,.dx-var,.dx-find,.dx-note,.dx-field,.dx-peer-sel{mix-blend-mode:multiply}
 .dx-peer{position:absolute;width:2px;margin-left:-1px;pointer-events:none;z-index:2}
 .dx-peer span{position:absolute;left:0;bottom:100%;padding:1pt 4pt;border-radius:3pt 3pt 3pt 0;font:600 7.5pt/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;white-space:nowrap}
 .dx-caret{position:absolute;width:1.5px;background:var(--dx-caret,#000);pointer-events:none;display:none}
@@ -405,7 +419,8 @@ function injectStyle(): void {
 export class Editor {
   doc: Doc;
   selection: Selection = { anchor: docStart(), focus: docStart() };
-  layout!: Layout;
+  /** The pages of what is shown, laid out; `layoutOf(doc)` lays out any document. */
+  /** @internal */ layout!: Layout;
   /** How large the pages are shown: 1 is their real size. */
   zoom = 1;
   view: ViewMode = 'column';
@@ -848,6 +863,7 @@ export class Editor {
     this.redoStack = [];
     this.pendingProps = null;
     this.goalX = null;
+    this.root.classList.toggle('dx-restricted', this.restricted);
     this.painter.render();
     this.painter.renderSelection();
     this.root.scrollTop = 0;
@@ -928,6 +944,100 @@ export class Editor {
   restoreVersion(version: Doc): void {
     this.edit((doc) => versionOver(doc, version));
   }
+
+  // --- Restricted editing ------------------------------------------------
+
+  /**
+   * Whether only the stretches marked for it may be changed (`editableRanges`),
+   * and the rest only read, copied and noted on, as Word's "Restrict editing".
+   * It is said in the file, so Word restricts it too. A change outside them is
+   * not made, and said not to be: what an application asks of the document as
+   * well, until it opens it again.
+   */
+  get restricted(): boolean {
+    return !!this.doc.restricted;
+  }
+
+  /** Restricts the document to its stretches that may be changed, or opens it all again. Not a step to undo. */
+  setRestricted(on: boolean): void {
+    if (on === this.restricted || this.locked) return;
+    this.doc = setRestricted(this.doc, on);
+    this.afterDocChange(false);
+  }
+
+  /** The stretches of the text that may be changed while the document is restricted, in their order. */
+  get editableRanges(): EditableRange[] {
+    return editableRanges(this.doc);
+  }
+
+  /** The stretch the caret is in, its ends included. */
+  get activeEditable(): string | undefined {
+    return this.area === 'body' ? editableAt(this.doc, this.selection.focus)?.id : undefined;
+  }
+
+  /**
+   * Makes the selection a stretch that may be changed, or the caret an empty
+   * one to write in, and leaves the caret at its end; returns its id. Not while
+   * the document is restricted: what may be changed is decided with it open.
+   */
+  makeEditable(): string | undefined {
+    if (this.area !== 'body' || this.restricted || this.locked) return undefined;
+    const { doc, id } = addEditableRange(this.doc, this.range);
+    const end = editableRanges(doc).find((one) => one.id === id)?.range.to;
+    if (!end) return undefined;
+    this.commitDoc(doc, { anchor: end, focus: end });
+    return id;
+  }
+
+  /** Takes away the stretch `id`, or the one the caret is in: its text stays, and is like the rest again. Not while restricted. */
+  removeEditable(id = this.activeEditable): void {
+    if (id === undefined || this.restricted) return;
+    const doc = removeEditableRange(this.doc, id);
+    if (doc !== this.doc) this.commitDoc(doc, this.selection);
+  }
+
+  /**
+   * Selects what the next stretch that may be changed holds, or the one
+   * before with -1, from the caret and going round: Tab and Shift+Tab while
+   * the document is restricted. False when there is none.
+   */
+  nextEditable(dir: 1 | -1 = 1): boolean {
+    const ranges = this.editableRanges;
+    if (!ranges.length || this.area !== 'body') return false;
+    const at = this.selection.focus;
+    const current = ranges.findIndex(({ id }) => id === this.activeEditable);
+    let index: number;
+    if (current >= 0) index = (current + dir + ranges.length) % ranges.length;
+    else if (dir > 0)
+      index = Math.max(
+        0,
+        ranges.findIndex(({ range }) => comparePositions(range.from, at) > 0),
+      );
+    else index = ranges.reduce((last, { range }, i) => (comparePositions(range.to, at) < 0 ? i : last), -1);
+    // None before the caret: round to the last.
+    if (index < 0) index = ranges.length - 1;
+    const { from, to } = ranges[index].range;
+    this.setSelection(from, to);
+    return true;
+  }
+
+  /** A change was not made, being outside what may be changed: said, and the stretches that may be are shown. */
+  private refuse(): void {
+    this.announcer.say(t('form.outside'), true);
+    this.root.classList.remove('dx-form-nudge');
+    // Again from its start, for a second key that is refused too.
+    void this.root.offsetWidth;
+    this.root.classList.add('dx-form-nudge');
+    // Taken off once it has been shown: the stretches drawn again would show it again.
+    clearTimeout(this.nudged);
+    this.nudged = setTimeout(() => this.root.classList.remove('dx-form-nudge'), 700);
+    this.onRefused?.();
+  }
+
+  private nudged: ReturnType<typeof setTimeout> | undefined;
+
+  /** Called when a change is not made, the document being restricted and the change outside what may be changed: for an interface to say so. */
+  onRefused: (() => void) | undefined;
 
   // --- Tracked changes ----------------------------------------------------
 
@@ -1053,7 +1163,7 @@ export class Editor {
     this.load(importDocx(data instanceof Uint8Array ? data : new Uint8Array(data)));
   }
 
-  exportDocx(): Uint8Array {
+  exportDocx(): Uint8Array<ArrayBuffer> {
     this.updateToc();
     const said = { language: withRegion(this.textLanguage), replaceLanguage: !!this.chosenLanguage };
     return exportDocx(this.doc, this.embedFonts ? { ...said, fonts: this.givenFontsInUse(), subsetFonts: this.embedFonts === 'subset' } : said);
@@ -2322,7 +2432,7 @@ export class Editor {
    * carries go into it; any other is named by the nearest of the three every
    * PDF reader has, with each word where it is here.
    */
-  async exportPdf(title?: string): Promise<Uint8Array> {
+  async exportPdf(title?: string): Promise<Uint8Array<ArrayBuffer>> {
     this.updateToc();
     return documentPdf(this.paged, this.doc, { measurer: this.measurer, title, language: this.textLanguage });
   }
@@ -2830,6 +2940,10 @@ export class Editor {
   /** Commits a change to the document as a whole. */
   /** @internal */ commitDoc(doc: Doc, selection: Selection, kind = ''): void {
     if (this.locked) return;
+    if (this.doc.restricted && !keepsOutside(this.doc, doc)) {
+      this.refuse();
+      return;
+    }
     const now = Date.now();
     const merge = kind !== '' && kind === this.lastEdit.kind && now - this.lastEdit.time < TYPING_MERGE_MS;
     this.commits++;
@@ -2846,6 +2960,7 @@ export class Editor {
 
   private afterDocChange(reveal = true): void {
     this.ensureStory();
+    this.root.classList.toggle('dx-restricted', this.restricted);
     // What was changed may not be what the selection is in: the page number, from inside the footer.
     this.selection = { anchor: clampPosition(this.text, this.selection.anchor), focus: clampPosition(this.text, this.selection.focus) };
     this.pendingProps = null;

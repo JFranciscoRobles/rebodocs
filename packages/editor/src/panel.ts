@@ -32,6 +32,8 @@ export interface Panel {
   show(tab?: PanelTab): void;
   hide(): void;
   toggle(): void;
+  /** Whether it is shown. */
+  readonly isOpen: boolean;
   /** Asks the application for its versions again, as when it kept another one. */
   refreshVersions(): void;
   destroy(): void;
@@ -47,6 +49,8 @@ export interface PanelOptions {
    * and changes there are: one opens the panel on itself, and again closes it.
    */
   rail?: boolean;
+  /** Called when it is shown or hidden, by its own buttons too: for a button elsewhere that says whether it is. */
+  onToggle?: () => void;
 }
 
 const STYLE_ID = 'dx-panel-style';
@@ -1265,17 +1269,21 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
     }
     const entering = next === 'history' && (tab !== 'history' || !isOpen);
     tab = next;
+    const was = isOpen;
     isOpen = true;
     root.classList.add('dx-pn-open');
     refresh();
+    if (!was) options.onToggle?.();
     // The versions are asked for each time their tab is opened: the application may have kept more.
     if (entering) refreshVersions();
   }
   const hide = () => {
+    const was = isOpen;
     isOpen = false;
     root.classList.remove('dx-pn-open');
     refreshRail();
     editor.focus();
+    if (was) options.onToggle?.();
   };
 
   const unsubscribe = editor.onChange(refresh);
@@ -1287,6 +1295,9 @@ export function createPanel(container: HTMLElement, editor: Editor, options: Pan
     show,
     hide,
     toggle: () => (isOpen ? hide() : show()),
+    get isOpen() {
+      return isOpen;
+    },
     refreshVersions,
     destroy() {
       unsubscribe();

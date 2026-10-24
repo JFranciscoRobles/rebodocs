@@ -7,13 +7,15 @@ import { backendStorage } from '@rebodocs/collab/storage';
 const server = createCollabServer({
   port: 7420,
   host: '0.0.0.0',
-  storage: backendStorage({ url: 'https://api.example.com/docs', key: process.env.KEY }),
+  storage: backendStorage({ url: 'https://api.example.com/docs', key: process.env.KEY, log: true }), // log: every change as it comes
   saveAfter: 5_000,    // ms after the last change the document is given to the backend
   saveEvery: 30_000,   // and at least this often while people type
   idle: 5_000,         // ms a room nobody is in waits before it is saved and let go of
   checkAfter: 1_500,   // ms after the last change the room is told what its document is like
   foldAfter: 1_000,    // changes a room gathers before they are folded into its file, with people in it
   recheckEvery: 300_000, // ms between asking the backend again who may be in; never when left out
+  recheckKey: process.env.KEY, // what the backend shows to POST /collab/rooms/<id>/recheck
+  instance: 'collab-1', // this process, among several: in X-Rebodocs-Instance
   onEvent: (event) => log(event), // join, leave, fold, save, removed, error
 });
 await server.ready;
@@ -65,9 +67,10 @@ Everything is under `/collab`, as plain HTTP: one stream of [server-sent events]
 
 | Route | What it is |
 | --- | --- |
-| `GET  /collab/ping` | Whether a collaboration server answers, and whether starting a room needs a token. |
+| `GET  /collab/ping` | Whether a collaboration server answers, the version of the protocol it speaks (`collab`), whether starting a room needs a token, and its `instance` when it has one. |
 | `POST /collab/rooms` | Starts a room with a document (without a backend only). |
-| `GET  /collab/rooms/<id>/events` | The stream: `hello` (the room, the changes the client lacks, who is in, and the client's `key`), then `op`, `presence`, `leave`, `check` (the digest of the document at a revision), `fold` (the changes folded into the file, and the paragraphs' new ids) and `removed`. A comment every 20 s keeps it open. |
+| `POST /collab/rooms/<id>/recheck`, `/collab/recheck` | Ask the backend again who may be in that room, or in every room; with `recheckKey`, as `Authorization: Bearer …`. |
+| `GET  /collab/rooms/<id>/events` | With `v`, the version of the protocol the editor speaks: one this server does not is answered 426, with the one it does. The stream: `hello` (the room, the changes the client lacks, who is in, and the client's `key`), then `op`, `presence`, `leave`, `check` (the digest of the document at a revision), `fold` (the changes folded into the file, and the paragraphs' new ids) and `removed`. A comment every 20 s keeps it open. |
 | `POST /collab/rooms/<id>/ops` | A batch of changes, with `client`, `key`, `rev`, `epoch` and `seq`. |
 | `POST /collab/rooms/<id>/presence` | Where this person's caret is, with `client` and `key`; 64 KB at most. |
 | `GET  /collab/rooms/<id>/base`, `/docx` | The file the room started from; the document as it is now. Only for someone in the room (`client` and `key`), when there is a backend. |
@@ -76,7 +79,7 @@ Each person may send 200 at once and 50 more a second, far more than an editor d
 
 ### Without React
 
-`DocsEditor` with `collab` does all of this. With the editor alone, `joinRoom` takes any `Editor`:
+`DocsEditor` with `collab` does all of this. With the editor alone, `joinRoom` takes any `Editor`; once its `state` is `'closed'`, its `reason` says why: `'left'`, `'not-found'`, `'denied'`, `'removed'` (sent away) or `'outdated'` (the editor and the server speak different versions, `PROTOCOL`):
 
 ```ts
 import { Editor } from '@rebodocs/editor';

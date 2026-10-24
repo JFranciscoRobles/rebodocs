@@ -10,7 +10,7 @@ import { pdfImage } from './png';
 import { embeddedFonts } from './docx/source';
 
 export interface Rendered {
-  pdf: Uint8Array;
+  pdf: Uint8Array<ArrayBuffer>;
   layout: Layout;
   /** Families the document asks for that no font was given for, and the one each was set in. */
   missingFonts: Map<string, string>;

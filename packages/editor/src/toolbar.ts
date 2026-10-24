@@ -33,6 +33,10 @@ export interface ToolbarOptions {
   onMenu?: () => void;
   /** Shown after the menu, as a "panel" button, when given: what shows and hides a side panel. */
   onPanel?: () => void;
+  /** Whether the panel is shown, for its button to say so. */
+  panelOpen?: () => boolean;
+  /** The side the panel opens on, and so the end of the bar its button is at: the right, as it comes. */
+  panelSide?: 'left' | 'right';
   /** Shown as a "find" button when given: what opens the search, such as a find bar. */
   onFind?: () => void;
   /** Shown as an "open" button when given; opening a file is the application's business. */
@@ -50,6 +54,8 @@ export interface ToolbarOptions {
   onInsertVariable?: () => void;
   onInsertNote?: () => void;
   onInsertLink?: () => void;
+  /** Marking stretches that may be changed and restricting editing to them, in the Review menu. */
+  forms?: boolean;
   /**
    * How the controls are set out. 'row', as it comes: one row, with what does
    * not fit under a button at its end. 'two-rows': the document above (the
@@ -134,6 +140,7 @@ const CSS = `
 .dx-tb-tray>.dx-tb-sep:first-child{display:none}
 .dx-tb-sep{flex:none;width:1px;height:20px;margin:0 6px;background:var(--dx-ui-line,#e6e3dc)}
 .dx-tb-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:2px;height:32px;min-width:32px;padding:0 6px;border:0;border-radius:9px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.dx-tb-badge{position:absolute;top:1px;right:0;min-width:15px;height:15px;padding:0 4px;box-sizing:border-box;border-radius:8px;background:var(--dx-ui-accent,#0b57d0);color:#fff;font:600 10px/15px system-ui,-apple-system,"Segoe UI",sans-serif;text-align:center;pointer-events:none}
 .dx-tb-btn:hover:not(:disabled){background:var(--dx-ui-hover,#f3f1ec)}
 .dx-tb-btn.dx-on{background:var(--dx-ui-active,#e8f0fd);color:var(--dx-ui-accent,#0b57d0)}
 .dx-tb-btn:disabled{opacity:.35;cursor:default}
@@ -204,6 +211,7 @@ const ICONS = {
   ),
   image: svg('<rect x="2.5" y="3.5" width="13" height="11" rx="1"/><circle cx="6.5" cy="7.5" r="1.2"/><path d="m2.5 12.5 3.5-3 3 2.5 2.5-2 4 3.5"/>'),
   panel: svg('<rect x="2.5" y="3.5" width="13" height="11" rx="1"/><path d="M7 3.5v11M4.3 6.5h1M4.3 9h1"/>'),
+  panelRight: svg('<rect x="2.5" y="3.5" width="13" height="11" rx="1"/><path d="M11 3.5v11M12.7 6.5h1M12.7 9h1"/>'),
   menu: svg('<path d="M3 5h12M3 9h12M3 13h12"/>'),
   open: svg('<path d="M2.5 5.5a1 1 0 0 1 1-1h3l1.5 1.5h6.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"/>'),
   download: svg('<path d="M9 3v8M5.5 8 9 11.5 12.5 8M3.5 14.5h11"/>'),
@@ -508,7 +516,28 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
 
   const lead: HTMLElement[] = [];
   if (options.onMenu) lead.push(button('menu', t('menu.title'), ICONS.menu, run(options.onMenu)));
-  if (options.onPanel) lead.push(button('panel', t('toolbar.panel'), ICONS.panel, run(options.onPanel)));
+  /**
+   * The side panel, at the end of the bar it opens on: pressed while it is
+   * shown, and with how many notes and changes there are to see in it.
+   */
+  const panelButton = () => {
+    if (!options.onPanel) return undefined;
+    const right = options.panelSide !== 'left';
+    const node = button('panel', t('toolbar.panel'), right ? ICONS.panelRight : ICONS.panel, run(options.onPanel), () => ({ on: !!options.panelOpen?.() }));
+    const badge = node.appendChild(el('span', 'dx-tb-badge'));
+    updates.push(() => {
+      const count = editor.notes.length + (editor.hasRevisions ? editor.revisions.length : 0);
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.hidden = !count;
+      node.setAttribute('aria-label', count ? `${t('toolbar.panel')} (${count})` : t('toolbar.panel'));
+    });
+    return node;
+  };
+  const panelAtEnd = options.panelSide !== 'left';
+  if (!panelAtEnd) {
+    const node = panelButton();
+    if (node) lead.push(node);
+  }
   if (lead.length) group(...lead).keep = true;
 
   // The document: its name, and a mark while it has changes that are not saved.
@@ -934,6 +963,15 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
         entry('show-accepted', t('review.showAccepted'), () => editor.setChangesView('accepted'), false, view === 'accepted'),
         entry('show-original', t('review.showOriginal'), () => editor.setChangesView('original'), false, view === 'original'),
       );
+      if (options.forms) {
+        const restricted = editor.restricted;
+        panel.append(
+          el('div', 'dx-tb-rule'),
+          entry('editable', t('form.makeMenu'), () => editor.makeEditable(), restricted || editor.area !== 'body'),
+          entry('not-editable', t('form.remove'), () => editor.removeEditable(), restricted || editor.activeEditable === undefined),
+          entry('restrict', t('form.restrict'), () => editor.setRestricted(!restricted), false, restricted),
+        );
+      }
       openPopover(review, panel);
     },
     () => ({ on: editor.trackChanges }),
@@ -1316,6 +1354,10 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   // Searching is not editing: it goes at the far end of the bar.
   const end = el('div', 'dx-tb-group dx-tb-end');
   if (options.onFind) end.appendChild(button('find', `${t('toolbar.find')} (${MOD}F)`, ICONS.find, options.onFind));
+  if (panelAtEnd) {
+    const node = panelButton();
+    if (node) end.appendChild(node);
+  }
   if (layout === 'row') bar.append(more, end, tray);
   else {
     row.append(more, tray);

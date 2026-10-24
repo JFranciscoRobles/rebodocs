@@ -11,6 +11,8 @@ import type { Session } from '@rebodocs/collab/browser';
 import {
   type Editor,
   type PanelTab,
+  type SlashMenuSettings,
+  type VariableSuggestSettings,
   type Texts,
   type Theme,
   type Versions,
@@ -22,6 +24,8 @@ import {
   createPanel,
   createResponsive,
   createRuler,
+  createSlashMenu,
+  createVariableSuggest,
   createSidebar,
   createStatusBar,
   createToolbar,
@@ -44,6 +48,12 @@ export interface DocsFeatures {
    * on their left ('left'), or with its tabs as a rail of icons always there ('rail').
    */
   panel?: boolean | 'right' | 'left' | 'rail';
+  /**
+   * The side panel open from the start, when the window is wide enough for
+   * it to be beside the pages and not over them: on the tab given, or on the
+   * outline with true. Off unless given.
+   */
+  panelOpen?: boolean | PanelTab;
   ruler?: boolean;
   /**
    * Pages, words, the view and the zoom. On unless false: as pills that float
@@ -59,6 +69,26 @@ export interface DocsFeatures {
   toolbar?: 'two-rows' | 'tabs' | 'row';
   /** Find and replace. On unless false. */
   find?: boolean;
+  /**
+   * Marking stretches of the text that may be changed, and restricting
+   * editing to them, from the Review menu, the bar beside the selection and
+   * the "/" menu. Off unless true: a document restricted is restricted all
+   * the same, and without this, whoever has it cannot open it again.
+   */
+  forms?: boolean;
+  /**
+   * The menu a "/" brings up, typed at the start of a paragraph or after a
+   * space: headings, lists, a table, a picture, a variable, the signatures.
+   * On unless false; with settings, the commands it comes with that it
+   * keeps (`builtIns`) and the application's own (`commands`).
+   */
+  slash?: boolean | SlashMenuSettings;
+  /**
+   * The list "{{" brings up, of the variables a template may have: those
+   * the application fills (`variables`), those the document already uses,
+   * and a new one by the name typed. On unless false.
+   */
+  variableSuggestions?: boolean | VariableSuggestSettings;
   /** Focus mode: the pages alone, full screen, from the status bar or ⌘⇧. (Ctrl+Shift+.). On unless false. */
   focus?: boolean;
   /** The name of the document in the toolbar. On unless false. */
@@ -107,7 +137,7 @@ export interface DocsHandle {
   /** The session with the others, while there is one. */
   readonly collab: Session | undefined;
   /** The document as a DOCX, as it is now. */
-  exportDocx(): Uint8Array;
+  exportDocx(): Uint8Array<ArrayBuffer>;
   /** Whether it changed since it was opened or last saved. */
   readonly dirty: boolean;
   /** What the document is called now: the name given, or the one of a file the person opened. */
@@ -181,7 +211,9 @@ export function mountDocs(container: HTMLElement, options: DocsOptions = {}): Do
     document.head.appendChild(style);
   }
   const features = options.features ?? {};
-  const on = (feature: boolean | string | undefined) => feature !== false;
+  const on = (feature: boolean | string | object | undefined) => feature !== false;
+  /** What a feature given as settings says; given as true or not at all, nothing past being on. */
+  const settings = <T extends object>(feature: boolean | T | undefined): T | undefined => (typeof feature === 'object' ? feature : undefined);
   for (const [code, texts] of Object.entries(options.locales ?? {})) addLocale(code, texts);
   if (options.locale) setLocale(options.locale);
 
@@ -264,13 +296,20 @@ export function mountDocs(container: HTMLElement, options: DocsOptions = {}): Do
         })
       : undefined;
     const findBar = on(features.find) ? createFindBar(editor) : undefined;
-    const panel = on(features.panel) ? createPanel(panelEl, editor, { versions: options.versions, onError: options.onError, rail: panelKind === 'rail' }) : undefined;
-    const bubble = createBubble(editor);
+    const panel = on(features.panel)
+      ? createPanel(panelEl, editor, { versions: options.versions, onError: options.onError, rail: panelKind === 'rail', onToggle: () => mounted?.toolbar.refresh() })
+      : undefined;
+    const forms = features.forms === true;
+    const bubble = createBubble(editor, { forms });
     editor.onLinkKey = () => bubble.ask('link');
+    const slash = on(features.slash) ? createSlashMenu(editor, { ...settings(features.slash), ask: bubble.ask, forms }) : undefined;
+    const suggest = on(features.variableSuggestions) ? createVariableSuggest(editor, settings(features.variableSuggestions)) : undefined;
     const toolbar = createToolbar(toolbarEl, editor, {
       onMenu: sidebar?.toggle,
       // With a rail, the rail opens the panel: the toolbar needs no button for it.
       onPanel: panelKind === 'rail' ? undefined : panel?.toggle,
+      panelOpen: () => !!panel?.isOpen,
+      panelSide: panelKind === 'left' ? 'left' : 'right',
       layout: features.toolbar ?? 'two-rows',
       onFind: findBar ? () => findBar.open() : undefined,
       title: on(features.title) ? name : undefined,
@@ -278,6 +317,7 @@ export function mountDocs(container: HTMLElement, options: DocsOptions = {}): Do
       onInsertVariable: () => bubble.ask('variable'),
       onInsertNote: () => bubble.ask('note'),
       onInsertLink: () => bubble.ask('link'),
+      forms,
     });
     const ruler = on(features.ruler) ? createRuler(rulerEl, editor) : undefined;
     const status = on(features.statusBar)
@@ -306,19 +346,26 @@ export function mountDocs(container: HTMLElement, options: DocsOptions = {}): Do
               : undefined,
         })
       : undefined;
-    const parts = [sidebar, findBar, panel, toolbar, ruler, status, bubble];
+    const parts = [sidebar, findBar, panel, toolbar, ruler, status, bubble, slash, suggest];
     return { toolbar, status, panel, destroy: () => parts.forEach((one) => one?.destroy()) };
   };
   let mounted: Mounted | undefined = mount();
   // The language is the whole page's: chosen in this menu, in another editor's or from code, or a
   // text of it changed with addLocale, the interface is built again in it.
   const stopLocale = onLocaleChange(() => {
+    // The panel stays as it was, open or not.
+    const open = mounted?.panel?.isOpen;
     mounted?.destroy();
     mounted = mount();
+    if (open) mounted.panel?.show();
   });
 
   // A narrow window, as a phone's: the text set to its width, and the panel over the document.
   const responsive = on(features.responsive) ? createResponsive(root, editor) : undefined;
+  // Open from the start, where it goes beside the pages: over them, on a phone, it would hide what was opened.
+  if (features.panelOpen && !root.classList.contains('dx-narrow') && root.clientWidth >= 600) {
+    mounted?.panel?.show(typeof features.panelOpen === 'string' ? features.panelOpen : undefined);
+  }
 
   // What is not the editor's to tell changes too: the name, and the people on the document.
   let saves = docs.state().saves;

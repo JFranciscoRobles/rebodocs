@@ -95,7 +95,7 @@ export default function RenderDemo() {
   const [url, setUrl] = useState('');
   useEffect(() => {
     if (!made || 'error' in made) return;
-    const next = URL.createObjectURL(new Blob([made.pdf as BlobPart], { type: 'application/pdf' }));
+    const next = URL.createObjectURL(new Blob([made.pdf], { type: 'application/pdf' }));
     setUrl(next);
     return () => URL.revokeObjectURL(next);
   }, [made]);
@@ -105,9 +105,9 @@ export default function RenderDemo() {
     setOwn((was) => [...was, ...read.filter((font): font is FontFile => !!font)]);
   };
 
-  const download = (bytes: Uint8Array | string, name: string, type: string) => {
+  const download = (bytes: Uint8Array<ArrayBuffer> | string, name: string, type: string) => {
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
+    link.href = URL.createObjectURL(new Blob([bytes], { type }));
     link.download = name;
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);

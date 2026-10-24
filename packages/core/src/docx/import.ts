@@ -1369,6 +1369,10 @@ export function importDocx(data: Uint8Array, options: ImportOptions = {}): Doc {
   // Whether the document keeps the changes made to it, as Word's "Track changes" says.
   const tracking = settings ? /<w:trackRevisions\b(?![^>]*w:val="(?:0|false|off)")[^>]*\/?>/.test(strFromU8(settings)) : false;
   source.trackRevisions = tracking;
+  // Whether only the stretches marked for it may be changed, as Word's "Restrict editing" set to no changes says.
+  const protection = settings ? /<w:documentProtection\b[^>]*>/.exec(strFromU8(settings))?.[0] : undefined;
+  const restricted = !!protection && /\bw:edit="readOnly"/.test(protection) && /\bw:enforcement="(?:1|true|on)"/.test(protection);
+  source.restricted = restricted;
 
   const page = parsePage(sect);
   source.page = page;
@@ -1475,6 +1479,7 @@ export function importDocx(data: Uint8Array, options: ImportOptions = {}): Doc {
     compatMode,
     ...(defaultTabStop ? { defaultTabStop } : {}),
     trackRevisions: tracking || undefined,
+    restricted: restricted || undefined,
     paragraphs,
     tables: tables.length ? tables : undefined,
     header: header?.story,

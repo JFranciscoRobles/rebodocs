@@ -86,7 +86,7 @@ export default function FontsDemo() {
       const bytes = await editor.exportPdf('Fonts');
       const { embedded, standard } = pdfFonts(bytes);
       const says = [embedded && `${embedded} embedded, cut down`, standard.length && `standard: ${standard.join(', ')}`].filter(Boolean).join('; ');
-      setMade({ kind, size: bytes.length, says, good: embedded > 0, url: URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' })) });
+      setMade({ kind, size: bytes.length, says, good: embedded > 0, url: URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })) });
     } else {
       const bytes = editor.exportDocx();
       const faces = docxFonts(bytes);
@@ -95,7 +95,7 @@ export default function FontsDemo() {
         size: bytes.length,
         says: faces ? `${faces} face${faces === 1 ? '' : 's'} of ${FAMILY} inside${embed === 'subset' ? ', cut down' : ', whole'}` : 'no font inside',
         good: faces > 0,
-        url: URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })),
+        url: URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })),
       });
     }
     setBusy(false);

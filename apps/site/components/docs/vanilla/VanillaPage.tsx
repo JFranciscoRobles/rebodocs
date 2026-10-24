@@ -12,9 +12,20 @@ const PIECES: { call: string; text: string }[] = [
   { call: 'new Editor(element)', text: 'The pages. Holds the document, the selection and the history; the element needs a height.' },
   { call: 'createToolbar(el, editor, options)', text: 'One row of formatting; what does not fit folds into a tray. Its options give it the buttons that open the other pieces.' },
   { call: 'createRuler(el, editor)', text: 'Margins, indents and tab stops, to drag or to move with the keys.' },
-  { call: 'createPanel(el, editor, { versions? })', text: 'The side panel: outline, template variables, notes, tracked changes, and versions when the application keeps them.' },
+  {
+    call: 'createPanel(el, editor, { versions?, rail?, onError?, onToggle? })',
+    text: 'The side panel: outline, template variables, notes, tracked changes, and versions when the application keeps them. show(tab?), hide(), toggle() and isOpen; onToggle is called when it opens or closes, by its own buttons too, and rail sets its tabs as icons always there.',
+  },
   { call: 'createStatusBar(el, editor, options)', text: 'Pages, words, the language of the text, the view, the zoom; who is on the document and the assistant, when given.' },
-  { call: 'createBubble(editor)', text: 'The bar beside the selection, with what can be done to it; on a phone, copy and paste too.' },
+  { call: 'createBubble(editor, { forms? })', text: 'The bar beside the selection, with what can be done to it; on a phone, copy and paste too. With forms, making the selection an area to fill in.' },
+  {
+    call: 'createSlashMenu(editor, { ask?, forms?, builtIns?, commands? })',
+    text: 'The menu a “/” brings up at the start of a paragraph or after a space: headings, lists, a table, a picture, the signatures, and your own commands. See Headless, The “/” menu.',
+  },
+  {
+    call: 'createVariableSuggest(editor, { variables? })',
+    text: 'The list “{{” brings up: the variables you fill, then those of the document, written whole. See Templates, In the editor.',
+  },
   { call: 'createFindBar(editor)', text: 'Find and replace, opened with open() or ⌘F (Ctrl+F).' },
   {
     call: 'createSidebar(editor, options)',
@@ -37,12 +48,17 @@ const MORE: { call: string; text: string }[] = [
 /** The options that wire one piece to another. */
 const WIRES: { option: string; text: string }[] = [
   { option: 'toolbar onMenu: menu.toggle', text: 'The button at its start opens the document menu.' },
-  { option: 'toolbar onPanel: panel.toggle', text: 'The button that shows and hides the side panel.' },
+  {
+    option: 'toolbar onPanel: panel.toggle · panelOpen: () => panel.isOpen',
+    text: "The button that shows and hides the side panel, at the end of the bar, pressed while it is open; panelSide: 'left' puts it at the start, for a panel on the left.",
+  },
+  { option: 'panel onToggle: () => toolbar.refresh()', text: 'The button is pressed again when the panel is closed with its own button.' },
   { option: 'toolbar onFind: () => find.open()', text: 'The search button at its end.' },
   {
     option: 'toolbar onInsertLink · onInsertNote · onInsertVariable',
     text: "Insert → Link, Note and Variable ask in the selection bar: () => bubble.ask('link'). Without them they ask in a prompt of the browser.",
   },
+  { option: 'createSlashMenu(editor, { ask: bubble.ask })', text: 'The “/” menu offers a variable and a note, asked for in the selection bar; without ask, it leaves them out.' },
   { option: "editor.onLinkKey = () => bubble.ask('link')", text: '⌘K (Ctrl+K) asks for the address there too; without it, the key is left to the browser.' },
   { option: 'status focus: { on: () => focus.on, toggle: focus.toggle }', text: 'The full-screen button at the end of the status bar.' },
 ];

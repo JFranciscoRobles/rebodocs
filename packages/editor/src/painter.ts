@@ -38,6 +38,7 @@ import {
   linkHref,
   NOTE_COLORS,
   noteRanges,
+  editableRanges,
   findBlockMarks,
   findVariables,
   layoutDocument,
@@ -655,6 +656,27 @@ export class Painter {
           div.style.width = `${rect.width}pt`;
           div.style.height = `${rect.height}pt`;
           this.selLayers[this.editor.pageOf(rect.page)].prepend(div);
+        }
+      }
+    }
+    // The stretches that may be changed while the document is restricted; an empty one, a box as wide as a few letters, to be seen and pressed.
+    if (this.editor.area === 'body') {
+      for (const field of editableRanges(this.editor.doc)) {
+        if (away(field.range)) continue;
+        const from = this.editor.mapOffset(field.range.from, true);
+        const to = this.editor.mapOffset(field.range.to, true);
+        const empty = comparePositions(from, to) === 0;
+        const rects = empty ? [{ ...caretRect(flow, this.editor.measurer, from), width: 18 }] : selectionRects(flow, this.editor.measurer, { from, to });
+        for (const rect of rects) {
+          const page = this.editor.pageOf(rect.page);
+          if (!this.isDrawn(page)) continue;
+          const div = document.createElement('div');
+          div.className = empty ? 'dx-field dx-field-empty' : 'dx-field';
+          div.style.left = `${rect.x}pt`;
+          div.style.top = `${rect.y}pt`;
+          div.style.width = `${rect.width}pt`;
+          div.style.height = `${rect.height}pt`;
+          this.selLayers[page].prepend(div);
         }
       }
     }

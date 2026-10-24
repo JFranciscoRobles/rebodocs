@@ -40,6 +40,7 @@ import type { ListLevel, Numbering } from '../numbering';
 import { paragraphStyles } from '../styles';
 import { imageExtension, mediaKey } from '../images';
 import { noteKey, noteMark, pruneNotes } from '../notes';
+import { editableMark } from '../editable';
 import { isFieldMark } from '../toc';
 import { isColumnBreak } from '../layout';
 import { type NoteKind, endnoteReferenceId, footnoteReferenceId, isEndnoteMark, isFootnoteMark, noteReferences } from '../footnotes';
@@ -389,6 +390,37 @@ function writeTracking(doc: Doc, files: Record<string, Uint8Array>, mainPath: st
   if (!settings) return;
   settings.children = settings.children.filter((c) => c.name !== 'w:trackRevisions');
   if (on) insertOrdered(settings, SETTINGS_ORDER, createNode('w:trackRevisions'));
+  files[settingsPath] = strToU8(XML_HEADER + serializeXml(settings));
+}
+
+/**
+ * Says in the settings whether only the stretches marked for it may be
+ * changed, when that is not what the file said: no changes with exceptions
+ * for everyone, without a password, which is how Word restricts it and lets
+ * whoever opens it stop restricting it.
+ */
+function writeRestriction(doc: Doc, files: Record<string, Uint8Array>, mainPath: string, source: DocxSource | undefined): void {
+  const on = !!doc.restricted;
+  if (on === !!source?.restricted) return;
+  const dir = mainPath.slice(0, mainPath.lastIndexOf('/') + 1);
+  const settingsPath = `${dir}settings.xml`;
+  const protection = () => createNode('w:documentProtection', { 'w:edit': 'readOnly', 'w:enforcement': '1' });
+  if (!files[settingsPath]) {
+    if (!on) return;
+    addPart(
+      files,
+      mainPath,
+      'settings.xml',
+      `${R_NS}/settings`,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml',
+      `${XML_HEADER}<w:settings xmlns:w="${W_NS}"><w:documentProtection w:edit="readOnly" w:enforcement="1"/></w:settings>`,
+    );
+    return;
+  }
+  const settings = parseElement(strFromU8(files[settingsPath]));
+  if (!settings) return;
+  settings.children = settings.children.filter((c) => c.name !== 'w:documentProtection');
+  if (on) insertOrdered(settings, SETTINGS_ORDER, protection());
   files[settingsPath] = strToU8(XML_HEADER + serializeXml(settings));
 }
 
@@ -1076,11 +1108,12 @@ function pPrChangeXml(props: ParagraphProps): string {
 }
 
 function runXml(run: Run): string {
-  // Objects only make sense inside the package they came from, but for what was put in here: pictures, notes and the marks of a table of contents.
+  // Objects only make sense inside the package they came from, but for what was put in here: pictures, notes, stretches that may be changed and the marks of a table of contents.
   if (run.props.object) {
     const ours =
       mediaKey(run.props.object) !== undefined ||
       !!noteMark(run.props.object) ||
+      !!editableMark(run.props.object) ||
       isFieldMark(run.props.object) ||
       isColumnBreak(run.props.object) ||
       footnoteReferenceId(run.props.object) !== undefined ||
@@ -2236,7 +2269,7 @@ export interface DocxOptions {
   subsetFonts?: boolean;
 }
 
-export function exportDocx(whole: Doc, options: DocxOptions = {}): Uint8Array {
+export function exportDocx(whole: Doc, options: DocxOptions = {}): Uint8Array<ArrayBuffer> {
   revisionIds = 0;
   // What editing left of notes that are no longer whole does not go into the file.
   const doc = pruneNotes(whole);
@@ -2267,7 +2300,9 @@ export function exportDocx(whole: Doc, options: DocxOptions = {}): Uint8Array {
   files[mainPath] = strToU8(writeLinks(files, mainPath, writeMedia(doc, files, mainPath, xml)));
   if (options.fonts?.length) writeFonts(files, mainPath, options.fonts, options.subsetFonts ? textByFamily(doc) : undefined);
   writeTracking(doc, files, mainPath, source);
+  writeRestriction(doc, files, mainPath, source);
   writeEndnotePlacement(doc, files, mainPath);
   dropUnusedPictures(files);
-  return zipSync(files);
+  // fflate makes it on an ArrayBuffer of its own; its types only say Uint8Array.
+  return zipSync(files) as Uint8Array<ArrayBuffer>;
 }

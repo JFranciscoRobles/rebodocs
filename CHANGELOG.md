@@ -4,6 +4,113 @@ Every package of Rebodocs is released at the same version. Before 1.0, a
 minor version (0.x.0) may change the API; such changes are listed under
 **Changed** with what to do about them.
 
+## Unreleased
+
+### Added
+
+- **A menu of commands with "/".** Typed at the start of a paragraph or
+  after a space (not in 12/05, y/o or an address), a "/" brings up a menu of
+  what can be put there or made of the paragraph: Normal, headings 1 to 3,
+  bulleted and numbered lists, a table, a picture, a page break, a table of
+  contents, a text box, a footnote, a variable, the signatures and a note on
+  the word before. What is typed after it narrows the list, without minding
+  accents ("titulo" finds "Título"); the arrows choose, Enter or a click does
+  it in place of the "/" and what followed it, and Escape leaves them as
+  text. Only what can be done where the caret is is offered. On a phone it
+  sits over the caret when there is no room under it, above the keyboard. In
+  the whole editor it is on unless `features.slash` is false; headless, with
+  `slash: true` (the variable and the note need `bubble: true` too). On its
+  own: `createSlashMenu(editor, { ask })`.
+- **Commands of your own in the "/" menu.** `features.slash` (and the
+  headless `slash`) take settings in place of `true`: `builtIns`, which of
+  the menu's commands to keep (`false` for none, or their ids: `heading1`,
+  `table`, `signatures`…), and `commands`, the application's own, each with
+  a `label`, a `group` to go under, `keywords`, and what it does: `text` (a
+  paragraph per line), `html` (with its formatting, as pasting it would) or
+  `run(editor)`; `when(editor)` says where it is offered, and `commands` may
+  be a function asked each time the menu opens.
+- **A list of the variables at "{{".** Two braces bring up the variables the
+  application fills (`variables`, with a `title` or an `example` each), then
+  those the document already uses, narrowed by what is typed after them;
+  the one chosen is written whole. A name that is in neither is offered as a
+  new one. A `}`, `#` or `|` leaves the list, for blocks and formats written
+  by hand. On in the whole editor unless `features.variableSuggestions` is
+  false; headless, `variableSuggestions`; on its own,
+  `createVariableSuggest(editor, settings)`. The list of the "/" menu and
+  this one are the same piece, `createTypeahead`, for lists of your own.
+- **Areas to fill in.** A document can be restricted to some areas of its
+  text: only they can be changed, and the rest read, copied and noted on, as
+  Word's Restrict editing with exceptions for everyone. A change outside them
+  is not made (`editor.onRefused`), the areas flash and a screen reader is
+  told; Tab and Shift+Tab go from one to the next. In the file they are
+  Word's own marks (`w:permStart`, `w:permEnd`) and protection
+  (`w:documentProtection w:edit="readOnly"`, without a password), so Word
+  restricts it too, and a Word file restricted this way opens restricted.
+  `editor.makeEditable()`, `removeEditable()`, `setRestricted()`,
+  `nextEditable()`, `editableRanges`, `activeEditable`, `restricted`; in the
+  core `addEditableRange`, `removeEditableRange`, `editableRanges`,
+  `editableAt`, `setRestricted`, `keepsOutside` and `Doc.restricted`. With
+  `features.forms` (off unless true) the interface marks them: the Review
+  menu, the bar beside a selection and the "/" menu. In a room, restricting it
+  reaches everybody, and what the backend keeps is restricted too.
+- **The side panel open from the start**: `features.panelOpen`, true or the
+  tab to open it on, on a window wide enough for it to go beside the pages.
+  The panel says whether it is open (`panel.isOpen`) and when that changes
+  (`onToggle` in `createPanel`); in another language it stays as it was.
+
+- **No work lost when the collaboration server stops all at once.**
+  `backendStorage({ log: true })` (`--backend-log`) gives the backend every
+  change as it comes, on three more routes (`PUT`, `POST` and `GET
+  url/<id>/changes`), as lines of text it keeps and gives back; a room that
+  opens with a log starts again from where it was, with the same epoch, so
+  the editors in it come back as from a dropped connection, with what they
+  had not sent. The `PUT` that ends a session ends the log too. Without it,
+  a hard crash still loses up to `saveEvery` of work.
+- **The collaboration protocol has a version** (`PROTOCOL`, 1). The editor
+  says it when it comes in (`v`), the server says its own in `hello` and in
+  `/collab/ping`, and when they differ the editor is turned away saying so,
+  instead of having its changes refused one by one. One that says none, as
+  every editor and server of before, speaks 1. A closed `Session` says why
+  in `reason`: `'left'`, `'not-found'`, `'denied'`, `'removed'` or
+  `'outdated'`, and `DocsEditor` tells the person which.
+- **Taking access away at once, from the backend**: with `recheckKey` (the
+  `--backend-key` from the command line), `POST /collab/rooms/<id>/recheck`
+  and `POST /collab/recheck` have the server ask `/access` again right
+  then.
+- **Several processes**: `instance` (`--instance`) names each one, in
+  `X-Rebodocs-Instance` and `/collab/ping`, and the collaboration page has
+  the recipe to route each room to one process by its id.
+- **Pictures in templates.** `{{logo | image}}` (in Spanish, `imagen`) is
+  filled with a picture: its value is the picture as a `data:` address of a
+  PNG, a JPEG or a GIF (`data:image/png;base64,…`), so it travels in a JSON
+  as any other value. It goes in at its own size, at 96 pixels an inch, or
+  at the width the format says (`{{logo | image: 4cm}}`, in `cm`, `mm`,
+  `in`, `pt` or `px`), its shape kept, or at both (`image: 2in x 2in`); never
+  wider than the text of the page. In a block, each item gets its own; in a
+  header or a footer, it stays there; the same picture used twice is kept
+  once. A value that is not a picture puts nothing in, and
+  `variableProblems` says it. `pictureRun` and `pictureSize`, in the internal
+  API, are what `insertImage` is made of.
+
+### Changed
+
+- **The button of the side panel is at the end of the toolbar it opens on**,
+  beside the search, with an icon of a panel on that side: on the right, as
+  the panel comes, and at the start with `panel: 'left'`. It is pressed while
+  the panel is open and shows how many notes and changes there are; its name
+  says what the panel holds. `createToolbar` takes `panelOpen` and
+  `panelSide` for this; without them the button is on the right and is not
+  shown pressed.
+- **The files the editor and the engine make go to `fetch` and `Blob` as
+  they are.** `exportDocx`, `exportPdf` and `renderPdf(...).pdf`, the
+  editor's `exportDocx()` and `exportPdf()`, what `onSave` and
+  `versions.save` are given, and the handle's `exportDocx()` are typed
+  `Uint8Array<ArrayBuffer>`, which they always were: with TypeScript 5.7 or
+  later, `body: docx` and `new Blob([docx])` no longer need `as BodyInit` or
+  `as BlobPart`. A function of yours given to `onSave` or `versions.save`
+  that names its parameter `Uint8Array` still works, and the casts there
+  were can stay.
+
 ## 0.10.0
 
 ### Added

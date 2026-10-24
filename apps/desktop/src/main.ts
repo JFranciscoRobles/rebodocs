@@ -4,6 +4,7 @@
 
 import { createDoc, imageExtension } from '@rebodocs/core';
 import {
+  type Panel,
   Editor,
   IS_MAC,
   MAX_ZOOM,
@@ -13,6 +14,8 @@ import {
   createPanel,
   createResponsive,
   createRuler,
+  createSlashMenu,
+  createVariableSuggest,
   createSidebar,
   createStatusBar,
   createToolbar,
@@ -159,7 +162,7 @@ async function exportFile(file: { name: string; blob: Blob }): Promise<void> {
 
 async function exportPdf(): Promise<void> {
   const pdf = await editor.exportPdf(title().replace(/\.docx$/i, ''));
-  await exportFile({ name: fileName().replace(/\.docx$/i, '.pdf'), blob: new Blob([pdf as BlobPart], { type: 'application/pdf' }) });
+  await exportFile({ name: fileName().replace(/\.docx$/i, '.pdf'), blob: new Blob([pdf], { type: 'application/pdf' }) });
 }
 
 // Closing a window with changes asks first, also when the whole application is quit.
@@ -336,6 +339,7 @@ void win.onFocusChanged(({ payload: focused }) => {
 interface Mounted {
   toolbar: ReturnType<typeof createToolbar>;
   findBar: ReturnType<typeof createFindBar>;
+  panel: Panel;
   destroy(): void;
 }
 
@@ -349,22 +353,26 @@ function mount(): Mounted {
     onLocale: changeLocale,
   });
   const findBar = createFindBar(editor);
-  const panel = createPanel($('panel'), editor);
-  const bubble = createBubble(editor);
+  const panel = createPanel($('panel'), editor, { onToggle: () => toolbar.refresh() });
+  const bubble = createBubble(editor, { forms: true });
   editor.onLinkKey = () => bubble.ask('link');
+  const slash = createSlashMenu(editor, { ask: bubble.ask, forms: true });
+  const suggest = createVariableSuggest(editor);
   const toolbar = createToolbar($('toolbar'), editor, {
     onMenu: sidebar.toggle,
     onPanel: panel.toggle,
+    panelOpen: () => panel.isOpen,
     onFind: () => findBar.open(),
     title,
     dirty,
     onInsertVariable: () => bubble.ask('variable'),
     onInsertNote: () => bubble.ask('note'),
     onInsertLink: () => bubble.ask('link'),
+    forms: true,
   });
   const status = createStatusBar($('status'), editor);
-  const parts = [sidebar, findBar, panel, toolbar, createRuler($('ruler'), editor), status, bubble];
-  return { toolbar, findBar, destroy: () => parts.forEach((part) => part.destroy()) };
+  const parts = [sidebar, findBar, panel, toolbar, createRuler($('ruler'), editor), status, bubble, slash, suggest];
+  return { toolbar, findBar, panel, destroy: () => parts.forEach((part) => part.destroy()) };
 }
 
 function changeLocale(locale: string): void {
@@ -375,8 +383,11 @@ function changeLocale(locale: string): void {
   } catch {
     // Nowhere to keep it: it lasts until the window is closed.
   }
+  // The panel stays as it was, open or not.
+  const open = mounted.panel.isOpen;
   mounted.destroy();
   mounted = mount();
+  if (open) mounted.panel.show();
   shownTitle = '';
   showTitle();
   void installMenu();
@@ -384,6 +395,8 @@ function changeLocale(locale: string): void {
 }
 
 let mounted = mount();
+// Open from the start where there is room for it beside the pages.
+if (window.innerWidth >= 900) mounted.panel.show();
 createResponsive(document.body, editor);
 editor.onChange(showTitle);
 showTitle();

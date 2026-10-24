@@ -26,7 +26,9 @@ export function FullEditor({ docx, name, layout = 'included', theme }: Props) {
           author="Demo"
           locale="en"
           features={
-            layout === 'another' ? { files: true, language: true, theme: true, toolbar: 'tabs', panel: 'rail', statusBar: 'chips', menu: 'card' } : { files: true, language: true, theme: true }
+            layout === 'another'
+              ? { files: true, language: true, theme: true, forms: true, panelOpen: 'variables', toolbar: 'tabs', panel: 'rail', statusBar: 'chips', menu: 'card' }
+              : { files: true, language: true, theme: true, forms: true, panelOpen: 'variables' }
           }
           spellcheck={spellcheck}
           theme={theme}

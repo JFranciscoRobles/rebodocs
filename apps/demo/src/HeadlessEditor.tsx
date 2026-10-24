@@ -75,7 +75,7 @@ function TitleBar({ panels, onPanels }: { panels: boolean; onPanels: () => void 
   async function exportAs(format: string) {
     if (!docs || !editor) return;
     if (format === 'docx') docs.download();
-    else if (format === 'pdf') saveFile((await editor.exportPdf(base)) as BlobPart, `${base}.pdf`, 'application/pdf');
+    else if (format === 'pdf') saveFile(await editor.exportPdf(base), `${base}.pdf`, 'application/pdf');
     else if (format === 'md') saveFile(editor.exportMarkdown(), `${base}.md`, 'text/markdown;charset=utf-8');
   }
 
@@ -373,7 +373,7 @@ export function HeadlessEditor({ docx, name }: Props) {
   const [finding, setFinding] = useState(false);
 
   return (
-    <DocsProvider docx={docx} name={name} author="Demo" onSave={download} bubble spellcheck={spellcheck} onFindKey={() => setFinding(true)}>
+    <DocsProvider docx={docx} name={name} author="Demo" onSave={download} bubble slash variableSuggestions forms spellcheck={spellcheck} onFindKey={() => setFinding(true)}>
       <Shell finding={finding} setFinding={setFinding} />
     </DocsProvider>
   );

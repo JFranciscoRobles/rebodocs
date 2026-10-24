@@ -37,7 +37,7 @@ export default function EngineDemo() {
 
   const download = () => {
     if (!filled) return;
-    const url = URL.createObjectURL(new Blob([exportDocx(filled.doc) as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+    const url = URL.createObjectURL(new Blob([exportDocx(filled.doc)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
     const link = Object.assign(document.createElement('a'), { href: url, download: 'out.docx' });
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);

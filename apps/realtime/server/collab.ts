@@ -8,13 +8,27 @@
 //                                      work also as a version, signed by who changed it
 //   POST /backend/docs/<room>/access   { "ticket": "…" } → { "name": "…" }, or 403
 //
-// Those three are asked by the collaboration server, which shows a key. The
-// page asks for one thing, in `api.ts`: a ticket to come into a room.
+// And, for the server not to lose a change if it stops all at once
+// (`--backend-log`), the changes of each room as they come: lines of text,
+// kept under `logs/` beside the documents until the session ends.
+//
+//   PUT  /backend/docs/<room>/changes  a log starts: its first line
+//   POST /backend/docs/<room>/changes  more lines, after those there are
+//   GET  /backend/docs/<room>/changes  every line, or 404 when there is none
+//
+// Those are asked by the collaboration server, which shows a key. The page
+// asks for one thing, in `api.ts`: a ticket to come into a room.
 
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DOCX, type Store } from './store';
 import { VERSIONS, keepVersion } from './versions';
+
+/** Where the logs of the rooms are, beside the documents: not documents themselves. */
+export const LOGS = 'logs/';
+const logOf = (room: string) => `${LOGS}${room}.jsonl`;
+/** How many lines a log has; an empty one, which is how a log is let go of here, has none. */
+const linesOf = (log: Uint8Array | undefined) => (log ? Buffer.from(log).toString('utf8').split('\n').filter(Boolean).length : 0);
 
 /**
  * The room a document is worked on in. A room is named with letters, digits,
@@ -68,7 +82,7 @@ export function createCollabBackend(store: () => Store, options: CollabBackendOp
   // Which document each room is of. What is not here yet is looked for among the documents.
   const keys = new Map<string, string>();
   const keyOf = async (room: string): Promise<string | undefined> => {
-    if (!keys.has(room)) for (const file of await store().list()) if (!file.key.startsWith(VERSIONS)) keys.set(roomOf(file.key), file.key);
+    if (!keys.has(room)) for (const file of await store().list()) if (!file.key.startsWith(VERSIONS) && !file.key.startsWith(LOGS)) keys.set(roomOf(file.key), file.key);
     return keys.get(room);
   };
   const allowed = (request: IncomingMessage) => {
@@ -105,6 +119,28 @@ export function createCollabBackend(store: () => Store, options: CollabBackendOp
         const name = typeof ticket === 'string' ? options.tickets.check(room, ticket) : undefined;
         return name === undefined ? end(403) : end(200, { name });
       }
+      if (action === 'changes') {
+        const log = await store().get(logOf(room));
+        if (request.method === 'GET') {
+          if (!linesOf(log)) return end(404);
+          response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+          response.end(log);
+          return true;
+        }
+        const lines = await read(request, 100_000_000);
+        if (!lines) return end(413);
+        if (request.method === 'PUT') {
+          await store().put(logOf(room), lines, 'text/plain');
+          return end(204);
+        }
+        if (request.method === 'POST') {
+          // After those there are, and none missing in between: the first line is the file, the rest are changes.
+          if (!linesOf(log) || Number(request.headers['x-rebodocs-from']) !== linesOf(log) - 1) return end(409);
+          await store().put(logOf(room), Buffer.concat([log!, lines]), 'text/plain');
+          return end(204);
+        }
+        return end(405);
+      }
       if (action) return end(404);
 
       const key = await keyOf(room);
@@ -133,6 +169,8 @@ export function createCollabBackend(store: () => Store, options: CollabBackendOp
               }
             });
           await keepVersion(store(), key, file, authors.length ? { author: authors.join(', ') } : {});
+          // The document is the whole of the session now: its log goes, emptied, as the store cannot take a file away.
+          if (linesOf(await store().get(logOf(room)))) await store().put(logOf(room), new Uint8Array(), 'text/plain');
         }
         return end(204);
       }

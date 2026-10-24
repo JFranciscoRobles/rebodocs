@@ -142,6 +142,7 @@ export { type DocxSource, type EmbeddedFont, type StorySource, type SourceSlot, 
 export type { BasePart, EndnotePart, FootnotePart, StoryPart, TextBoxPart } from './stories';
 export type { XmlNode } from './docx/xml';
 export { NOTE_COLORS, addNote, setNoteText, setNoteColor, removeNote } from './notes';
+export { type EditableRange, addEditableRange, editableAt, editableRanges, keepsOutside, removeEditableRange, setRestricted } from './editable';
 export { type TocOptions, updateToc, insertToc } from './toc';
 export { setLink, removeLink, insertLink } from './links';
 export {

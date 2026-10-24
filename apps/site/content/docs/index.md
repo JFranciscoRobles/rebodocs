@@ -11,7 +11,9 @@ It was built to live inside another application: a CRM that fills contract and r
 - **Versions** kept by your application, compared word by word and restored.
 - **Compatibility with Word.** It reads and writes DOCX, and breaks lines and pages by the same rules, so a document looks the same in both.
 - **A file that survives.** What the editor does not understand stays in the DOCX untouched.
-- **Templates.** `{{client}}` in any document is a variable to fill.
+- **Templates.** `{{client}}` in any document is a variable to fill; typing `{{` lists the ones your application fills.
+- **Areas to fill in.** A document can be restricted to the areas meant to be filled, and the rest only read, in Word too.
+- **Commands with "/"**: headings, lists, tables, pictures, signatures, and commands of your own.
 - **PDF and DOCX on a server**, with the same layout, without a browser.
 - **Collaboration** in real time, with your backend keeping the files, and a version of each session of work if you want one.
 - **A phone-ready editor**: fit to width, pinch to zoom, touch selection.

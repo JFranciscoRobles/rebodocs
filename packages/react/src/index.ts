@@ -57,6 +57,11 @@ export type {
   Messages,
   NoteView,
   PanelTab,
+  SlashCommand,
+  SlashCommandId,
+  SlashMenuSettings,
+  VariableInfo,
+  VariableSuggestSettings,
   Texts,
   VersionInfo,
   VersionView,
@@ -78,5 +83,5 @@ export type {
   TemplateData,
   TemplateValue,
 } from '@rebodocs/core/internal';
-export type { CollabState, Peer, Session } from '@rebodocs/collab/browser';
+export type { ClosedReason, CollabState, Peer, Session } from '@rebodocs/collab/browser';
 export { type AssistantChat, type AssistantChatOptions, type ChatEntry, createAssistantChat } from '@rebodocs/mcp/browser';

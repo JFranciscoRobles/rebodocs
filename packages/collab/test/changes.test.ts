@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type Doc,
   type Paragraph,
+  addEditableRange,
   applyRunProps,
   createDoc,
   createParagraph,
@@ -18,6 +19,7 @@ import {
   docImage,
   paragraphText,
   restoreVersion,
+  setRestricted,
   trackEdit,
   insertTextBox,
   setParagraphProps,
@@ -70,6 +72,8 @@ function shape(doc: Doc): unknown {
     footnotes: doc.footnotes?.map((note) => [note.id, paragraphs(note.paragraphs)]),
     endnotes: doc.endnotes?.map((note) => [note.id, paragraphs(note.paragraphs)]),
     textBoxes: doc.textBoxes?.map((box) => [box.id, paragraphs(box.paragraphs)]),
+    // What is said of the document as a whole goes to the others too.
+    settings: [doc.trackRevisions, doc.restricted, doc.endnotesAt, doc.endnoteNumbering, doc.footnoteNumbering, doc.sectionStart, doc.noHeader, doc.noFooter, doc.compatMode],
   };
 }
 
@@ -142,6 +146,7 @@ describe('diff and apply', () => {
         trackRevisions: true,
       }),
     ],
+    ['areas to fill in, and restricting it to them', (doc) => setRestricted(addEditableRange(doc, { from: { para: 0, offset: 2 }, to: { para: 0, offset: 4 } }).doc, true)],
     [
       'where the notes at the end go, and how a section numbers them',
       (doc) => ({ ...sectioned(doc, 1), endnotesAt: 'sections', endnoteNumbering: { format: 'decimal', start: 3, restart: 'section' } }),

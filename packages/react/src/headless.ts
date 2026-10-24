@@ -58,6 +58,8 @@ const EMPTY: DocsState = {
   letterhead: false,
   trackChanges: false,
   changesView: 'all',
+  restricted: false,
+  activeEditable: undefined,
   revisionCount: 0,
   area: 'body',
   page: 1,

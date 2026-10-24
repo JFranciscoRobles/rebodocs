@@ -3,7 +3,7 @@ import { REPO } from '@/lib/site';
 import { CAPTION, CODE, LINK } from '../styles';
 import { Callout, HandTip, SectionHead } from '../ui';
 import { Conflicts, LazyRoom } from './Conflicts';
-import { OPTIONS, ROUTES } from './data';
+import { LOG_ROUTES, OPTIONS, ROUTES } from './data';
 
 const mono = 'font-code text-[14px]';
 const prose = 'm-0 mt-4 max-w-[760px] text-base leading-[1.7] text-ink-soft';
@@ -11,7 +11,7 @@ const h3 = 'm-0 mt-10 font-display text-xl font-bold tracking-[-0.01em]';
 
 /** The files of apps/realtime, and what each holds. */
 const DEMO_FILES: [path: string, what: string][] = [
-  ['server/collab.ts', 'The three routes, the tickets, the name of a room.'],
+  ['server/collab.ts', 'The three routes, the log of each room as it comes, the tickets, the name of a room.'],
   ['server/api.ts', 'What the page asks: the documents, a new one, a ticket.'],
   ['server/store.ts', 'Where the documents are kept: a folder, or an S3 bucket.'],
   ['server/versions.ts', 'A version for each session of work.'],
@@ -70,7 +70,7 @@ function Parts() {
  * set it up, and how it works inside.
  */
 export async function CollaborationPage() {
-  const [inside, server, runCode, serverCode, nextCode, accessCode, versionCode, ticketCode] = await Promise.all([
+  const [inside, server, runCode, serverCode, nextCode, accessCode, versionCode, ticketCode, logCode, recheckCode, routingCode] = await Promise.all([
     loadPart('collaboration-inside'),
     loadPart('collaboration-server'),
     highlight(
@@ -130,6 +130,67 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       LIGHT_THEME,
     ),
     highlight(`<DocsEditor collab={{ url: 'https://collab.example.com', room: documentId, ticket }} />`, 'tsx', LIGHT_THEME),
+    highlight(
+      `// app/api/docs/[id]/changes/route.ts — with --backend-log: lines of text, kept as they come
+const logOf = async (params: Promise<{ id: string }>) => \`logs/\${(await params).id}.jsonl\`;
+
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!allowed(request)) return new Response(null, { status: 401 });
+  await storage.put(await logOf(params), await request.text());          // a log starts
+  return new Response(null, { status: 204 });
+}
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!allowed(request)) return new Response(null, { status: 401 });
+  const key = await logOf(params);
+  const log = (await storage.getText(key)) ?? '';
+  // Optional: none went missing in between.
+  if (Number(request.headers.get('x-rebodocs-from')) !== log.split('\\n').filter(Boolean).length - 1) return new Response(null, { status: 409 });
+  await storage.put(key, log + (await request.text()));                 // more lines, after those
+  return new Response(null, { status: 204 });
+}
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!allowed(request)) return new Response(null, { status: 401 });
+  const log = await storage.getText(await logOf(params));
+  return log ? new Response(log) : new Response(null, { status: 404 });
+}
+
+// And in PUT /docs/<id>: the session ended, so the document is the whole of it.
+if (request.headers.get('x-rebodocs-session-end') === '1') await storage.delete(\`logs/\${id}.jsonl\`);`,
+      'ts',
+      LIGHT_THEME,
+    ),
+    highlight(
+      `// Your backend, when it takes someone's access away or changes it
+await fetch(\`https://collab.example.com/collab/rooms/\${documentId}/recheck\`, {
+  method: 'POST',
+  headers: { Authorization: \`Bearer \${process.env.REBODOCS_COLLAB_BACKEND_KEY}\` },
+});`,
+      'ts',
+      LIGHT_THEME,
+    ),
+    highlight(
+      `# nginx: each room to one process, by the id in its address
+map $uri $room { ~^/collab/rooms/([^/]+) $1; default $uri; }
+
+upstream collab {
+  hash $room consistent;
+  server 10.0.0.11:7420;
+  server 10.0.0.12:7420;
+}
+
+server {
+  location /collab/ {
+    proxy_pass http://collab;
+    proxy_http_version 1.1;
+    proxy_buffering off;        # the stream of events
+    proxy_read_timeout 1h;
+  }
+}`,
+      'nginx',
+      LIGHT_THEME,
+    ),
   ]);
 
   return (
@@ -288,6 +349,59 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         </p>
       </section>
 
+      <section aria-labelledby="when-the-server-stops" className="mt-24">
+        <SectionHead id="when-the-server-stops" badge="No lost work" color="green" title="When the server stops all at once">
+          By itself the server gives your backend the document a few seconds after the changes stop: if it is killed before, those seconds of work are gone. With{' '}
+          <code className={mono}>--backend-log</code> it gives your backend every change as it comes, and none is lost.
+        </SectionHead>
+        <p className={prose}>
+          The log is lines of text, one per change, after one with the file they are made to. Keep them as they come and give them back as they were: a file, a row, an object in a bucket. A room that
+          opens with a log starts again from where it was, with the same epoch, so the editors that were in it come back as from a dropped connection, with what they had not sent. Each change goes as
+          soon as it comes, one request at a time: what can still be lost is what was on its way.
+        </p>
+        <dl className="m-0 mt-5 max-w-[860px] rounded-2xl border border-border px-5">
+          {LOG_ROUTES.map(([route, when, what]) => (
+            <div key={route} className="border-t border-[#f0eee9] py-3 first:border-t-0">
+              <dt className="font-code text-[13.5px] font-semibold text-ink">{route}</dt>
+              <dd className="m-0 mt-1 text-[15px] leading-normal text-ink-soft">
+                <span className="text-muted">{when}</span> {what}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <div className={`mt-5 max-w-[860px] ${CODE}`} dangerouslySetInnerHTML={{ __html: logCode }} />
+        <p className={prose}>
+          The PUT of the document that ends a session ends the log too: let it go then, in the same request. A log left behind, by a server that stopped, is how the room picks up again; it is not a
+          history. In code it is <code className={mono}>{'backendStorage({ url, key, log: true })'}</code>.
+        </p>
+      </section>
+
+      <section aria-labelledby="taking-access-away" className="mt-24">
+        <SectionHead id="taking-access-away" badge="Access" color="pink" title="Taking access away">
+          The ticket is checked when someone comes in. When your system takes their access away, or lets them only watch, have the server ask again at once.
+        </SectionHead>
+        <div className={`mt-5 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: recheckCode }} />
+        <p className={prose}>
+          With <code className={mono}>--backend-key</code>, <code className={mono}>POST /collab/rooms/&lt;id&gt;/recheck</code> asks <code className={mono}>/access</code> again for everybody in that
+          room, and <code className={mono}>POST /collab/recheck</code> for every room of the process. Whoever it no longer lets in is sent away, and their editor says they no longer have access;
+          whoever it now lets only watch, or edit, comes back as that. Without a key there is no such route; <code className={mono}>--recheck-every</code> asks every so many seconds instead, and{' '}
+          <code className={mono}>server.recheck(id)</code> does it from code.
+        </p>
+      </section>
+
+      <section aria-labelledby="several-processes" className="mt-24">
+        <SectionHead id="several-processes" badge="Scale" color="purple" title="Several processes">
+          A room is held by one process, in its memory. To run several, send every request of a room to the same one: the id of the room is in the address.
+        </SectionHead>
+        <div className={`mt-5 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: routingCode }} />
+        <p className={prose}>
+          It takes <code className={mono}>--backend</code>, so that any process can open any document, and <code className={mono}>--backend-log</code>, so that a room whose process stops opens in
+          another where it was: its editors come back to the address they had, and the balancer sends them to the one that has it now. <code className={mono}>--instance</code> names each process, in{' '}
+          <code className={mono}>X-Rebodocs-Instance</code>, to see where a room is. Should a room open in two processes at once, while the balancer changes, your backend’s 409 to the log says so. A
+          recheck for every room reaches only the process the request goes to: ask room by room.
+        </p>
+      </section>
+
       <section aria-labelledby="what-people-see" className="mt-24">
         <SectionHead id="what-people-see" badge="In the editor" color="pink" title="What people see" />
         <div className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-4">
@@ -327,11 +441,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         <ul className="m-0 mt-5 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] gap-x-8 gap-y-3 p-0">
           {[
             'A room is named with letters, digits, - and _, from 8 to 64 of them. The id of a document in your system will do; the demo, which has file names, uses a digest of the name.',
-            'One process holds a room. Do not run several behind a load balancer without routing each room to one of them.',
-            'The ticket is checked on joining, and again only with --recheck-every or server.recheck(): without them, someone whose access you revoke stays until they disconnect.',
-            'A hard crash loses the changes since the last save: up to --save-after seconds (5) after people stop typing, up to --save-every (30) while they go on.',
+            'One process holds a room: with several, route each room to one of them (see Several processes).',
+            'The ticket is checked on joining, and again when your backend asks for it, with --recheck-every or server.recheck(): otherwise someone whose access you revoke stays until they disconnect.',
+            'Without --backend-log, a hard crash loses the changes since the last save: up to --save-after seconds (5) after people stop typing, up to --save-every (30) while they go on.',
             'The server keeps no versions: your application does, and the editor compares and restores them. Who changed what travels with tracked changes.',
-            'Clients of different versions in one room can end with different formatting: update the editors and the server together.',
+            'An editor and a server that speak different versions of the protocol do not meet: the editor is turned away and says one of them needs updating (session.reason is outdated).',
           ].map((item) => (
             <li key={item} className="flex items-start gap-2.5 text-[15px] leading-[1.55] text-ink-soft">
               <span aria-hidden="true" className="mt-2 size-1.5 flex-none rounded-full bg-[#c9c6bf]" />

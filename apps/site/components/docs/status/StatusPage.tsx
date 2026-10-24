@@ -124,6 +124,10 @@ const ROADMAP: [string, string][] = [
   ['Use it in a real application,', 'and fix what that shows.'],
   ['More of it tested in a browser.', 'The editor has its tests in Chrome now; the toolbar, the panels and the demos have none yet, and the measurements against Word could run there too.'],
   ['Collaboration that scales:', 'several server processes per room, and a log kept as it is written.'],
+  [
+    'Versions while people work:',
+    'a version every so often of editing (versionEvery), signed by who changed the document in that time, besides the one when the last person leaves; a room left open all day keeps none until then.',
+  ],
   ['Screen readers for real:', 'VoiceOver, NVDA and JAWS on the editor and on its PDF.'],
   ['Pasting pictures', 'from Word and the web: tables come with their look, pictures do not yet.'],
 ];

@@ -369,9 +369,9 @@ export function createSidebar(editor: Editor, options: SidebarOptions = {}): Sid
       button.setAttribute('aria-label', `${label} ${ext}. ${note}`);
       node.appendChild(button);
     };
-    format('export-docx', 'W', 'dx-docx', 'Word', '.docx', t('menu.docxNote'), () => give({ name: `${baseName()}.docx`, blob: new Blob([editor.exportDocx() as BlobPart], { type: DOCX_TYPE }) }));
+    format('export-docx', 'W', 'dx-docx', 'Word', '.docx', t('menu.docxNote'), () => give({ name: `${baseName()}.docx`, blob: new Blob([editor.exportDocx()], { type: DOCX_TYPE }) }));
     format('export-pdf', 'PDF', 'dx-pdf', 'PDF', '.pdf', t('menu.pdfNote'), () => {
-      void editor.exportPdf(baseName()).then((bytes) => give({ name: `${baseName()}.pdf`, blob: new Blob([bytes as BlobPart], { type: 'application/pdf' }) }));
+      void editor.exportPdf(baseName()).then((bytes) => give({ name: `${baseName()}.pdf`, blob: new Blob([bytes], { type: 'application/pdf' }) }));
     });
     format('export-md', 'M↓', 'dx-md', 'Markdown', '.md', t('menu.mdNote'), () =>
       give({ name: `${baseName()}.md`, blob: new Blob([editor.exportMarkdown()], { type: 'text/markdown;charset=utf-8' }) }),

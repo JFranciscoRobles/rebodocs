@@ -1,5 +1,6 @@
 import { DEFAULT_COLLAB_PORT, type Session, createRoom, joinRoom, pingServer } from '@rebodocs/collab/browser';
 import {
+  type Panel,
   type VersionInfo,
   type Versions,
   Editor,
@@ -11,6 +12,8 @@ import {
   createPanel,
   createResponsive,
   createRuler,
+  createSlashMenu,
+  createVariableSuggest,
   createSidebar,
   createStatusBar,
   createToolbar,
@@ -76,7 +79,7 @@ const markSaved = () => {
 /** The file on disk the document is saved to, once it is known. */
 let handle: FileHandle | undefined;
 
-const docxBlob = () => new Blob([editor.exportDocx() as BlobPart], { type: DOCX_TYPE });
+const docxBlob = () => new Blob([editor.exportDocx()], { type: DOCX_TYPE });
 /** A picker closed without choosing is not an error. */
 const cancelled = (error: unknown) => (error as Error).name === 'AbortError';
 
@@ -187,6 +190,7 @@ window.addEventListener('keydown', (e) => {
 interface Mounted {
   toolbar: ReturnType<typeof createToolbar>;
   status: ReturnType<typeof createStatusBar>;
+  panel: Panel;
   destroy(): void;
 }
 
@@ -208,19 +212,23 @@ function mount(): Mounted {
     dirty,
   });
   const findBar = createFindBar(editor);
-  const panel = createPanel($('panel'), editor, { versions });
-  const bubble = createBubble(editor);
+  const panel = createPanel($('panel'), editor, { versions, onToggle: () => toolbar.refresh() });
+  const bubble = createBubble(editor, { forms: true });
   editor.onLinkKey = () => bubble.ask('link');
+  const slash = createSlashMenu(editor, { ask: bubble.ask, forms: true });
+  const suggest = createVariableSuggest(editor);
   const toolbar = createToolbar($('toolbar'), editor, {
     layout: 'two-rows',
     onMenu: sidebar.toggle,
     onPanel: panel.toggle,
+    panelOpen: () => panel.isOpen,
     onFind: () => findBar.open(),
     title: () => fileName,
     dirty,
     onInsertVariable: () => bubble.ask('variable'),
     onInsertNote: () => bubble.ask('note'),
     onInsertLink: () => bubble.ask('link'),
+    forms: true,
   });
   const status = createStatusBar($('status'), editor, {
     layout: 'floating',
@@ -240,8 +248,8 @@ function mount(): Mounted {
       leave: leaveRoom,
     },
   });
-  const parts = [sidebar, findBar, panel, toolbar, createRuler($('ruler'), editor), status, bubble];
-  return { toolbar, status, destroy: () => parts.forEach((part) => part.destroy()) };
+  const parts = [sidebar, findBar, panel, toolbar, createRuler($('ruler'), editor), status, bubble, slash, suggest];
+  return { toolbar, status, panel, destroy: () => parts.forEach((part) => part.destroy()) };
 }
 
 // The way in for an assistant: the MCP server of this machine, which the person lets in with the "AI" button
@@ -356,6 +364,8 @@ if (theme === 'dark' || theme === 'auto') {
   editor.theme = theme;
 }
 let mounted = mount();
+// Open from the start where there is room for it beside the pages.
+if (window.innerWidth >= 900) mounted.panel.show();
 // A narrow window, as a phone's: the text set to its width, and the panel over the document.
 createResponsive($('app'), editor);
 if (query.get('room')) void findServer().then((url) => enterRoom(query.get('room')!, url));
@@ -368,8 +378,11 @@ function changeLocale(locale: string): void {
   } catch {
     // Nowhere to keep it: it lasts until the page is closed.
   }
+  // The panel stays as it was, open or not.
+  const open = mounted.panel.isOpen;
   mounted.destroy();
   mounted = mount();
+  if (open) mounted.panel.show();
   editor.focus();
 }
 

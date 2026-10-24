@@ -182,3 +182,13 @@ export const TOOLS: { sig: string; text: string }[] = [
   },
   { sig: 'insert_signatures', text: 'Signature lines after a paragraph, with the titles and names given.' },
 ];
+
+/** The Editor's members for stretches that may be changed, from editor.ts. */
+export const FORMS: { sig: string; text: string }[] = [
+  { sig: 'editor.makeEditable()', text: 'Makes the selection an area that can be changed, or the caret an empty one to write in, and returns its id. Not while restricted.' },
+  { sig: 'editor.removeEditable(id?)', text: 'Takes away that area, or the one the caret is in; its text stays. Not while restricted.' },
+  { sig: 'editor.editableRanges · editor.activeEditable', text: 'The areas, each with its id and range, in their order; the id of the one the caret is in.' },
+  { sig: 'editor.setRestricted(on) · editor.restricted', text: 'Restricts the document to its areas, or opens it all again. It is said in the file; it is not a step to undo.' },
+  { sig: 'editor.nextEditable(dir?)', text: 'Selects what the next area holds, or the one before with -1, going round: what Tab and Shift+Tab do while restricted.' },
+  { sig: 'editor.onRefused', text: 'Called when a change outside the areas is not made, for your interface to say so as well.' },
+];

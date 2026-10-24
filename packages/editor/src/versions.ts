@@ -35,7 +35,7 @@ export interface Versions {
    * gave it, if any. Without it, there is no button to do so: the
    * application keeps them when it wants, as each time the document is saved.
    */
-  save?(docx: Uint8Array, info: { label?: string; author?: string }): Promise<unknown>;
+  save?(docx: Uint8Array<ArrayBuffer>, info: { label?: string; author?: string }): Promise<unknown>;
 }
 
 /** The comparison over the document. */

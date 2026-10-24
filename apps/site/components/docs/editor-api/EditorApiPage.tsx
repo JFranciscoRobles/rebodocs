@@ -161,8 +161,8 @@ stop();`,
                 <a href={`#type-${type.name}`} className="font-code text-[15px] font-semibold text-ink hover:text-brand">
                   {type.name}
                 </a>
-                <a href={`${REPO}/blob/main/packages/core/src/${type.from}`} className="font-code text-xs text-muted hover:text-brand">
-                  core/src/{type.from}
+                <a href={`${REPO}/blob/main/packages/${type.from.includes('/') ? type.from : `core/src/${type.from}`}`} className="font-code text-xs text-muted hover:text-brand">
+                  {type.from.includes('/') ? type.from : `core/src/${type.from}`}
                 </a>
               </p>
               <p className="m-0 mt-1 text-[15px] leading-[1.55] text-ink-soft">{type.text}</p>

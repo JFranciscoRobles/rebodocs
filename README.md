@@ -147,7 +147,7 @@ npm run typecheck
 | `npm run build:packages` | Builds core, editor, collab and mcp into `packages/<name>/dist`. |
 | `npm run build:react` | Builds `@rebodocs/react` and packs it as a tarball. |
 | `npm run site` | The documentation site at http://localhost:5174. |
-| `npm run generate -- template.docx data.json -o out.pdf` | Fills a template without a browser. |
+| `npm run generate -- template.docx data.json -o out.pdf` | Fills a template without a browser; `npx -p @rebodocs/mcp rebodocs-generate` outside the repository. |
 | `npm run word-check` | Lays out the documents of `test-documents/` and compares them with the PDFs Word made of them. |
 | `npm run word-compare -- file.docx` | Compares one document with Word's PDF of it; `--word` has Word make it (macOS). |
 | `npm run locale -- fr texts/fr.json` | Starts or updates a translation of the interface. |

@@ -4,11 +4,12 @@
 // `doc.media` until export writes them into the package.
 
 import { insertTable, setCellProps } from './tables';
-import { type Doc, type Media, type Paragraph, type Position, type Run, ANCHOR_CHAR, OBJECT_CHAR, defined } from './model';
+import { type Doc, type Media, type Paragraph, type Position, type Run, type RunProps, ANCHOR_CHAR, OBJECT_CHAR, defined } from './model';
 import { normalizeRuns, propsAt, sliceRuns } from './ops';
 import { type Anchor, type DocxSource, type StoryPart, anchoredObject, imageInPart } from './docx/source';
 import { storyPath } from './stories';
 import { decodeEntities, escapeXml } from './docx/xml';
+import { jpegSize } from './png';
 
 const EMU_PER_POINT = 12700;
 /** What stands for the relationship id of a picture that is not in a package yet: this and its key in `doc.media`. */
@@ -93,12 +94,40 @@ export function insertImage(doc: Doc, pos: Position, image: Media & { width: num
   while (media[`imagen${n}`]) n++;
   const key = `imagen${n}`;
   media[key] = { bytes: image.bytes, type: image.type };
-  // Ids of drawings must not clash with the ones a file has: these start high.
-  const xml = drawingXml(key, 9000 + n, image.width, image.height);
-  const like = propsAt(doc, pos);
-  const props = defined({ fontFamily: like.fontFamily, fontSize: like.fontSize, object: xml, anchor: false, objectWidth: image.width, objectHeight: image.height });
-  const p = withRuns(doc.paragraphs[pos.para], pos.offset, [{ text: OBJECT_CHAR, props }]);
+  const p = withRuns(doc.paragraphs[pos.para], pos.offset, [pictureRun(key, n, image.width, image.height, propsAt(doc, pos))]);
   return { doc: { ...replaceParagraph(doc, pos.para, p), media }, pos: { para: pos.para, offset: pos.offset + 1 } };
+}
+
+/**
+ * A picture as a run of the text, its bytes under `key` in `doc.media`, `n`
+ * its number among the pictures put in here; set in the font of `like`, so
+ * its line keeps its height. What insertImage puts in, and what a template
+ * puts in place of a {{name | image}}.
+ */
+export function pictureRun(key: string, n: number, width: number, height: number, like: RunProps = {}): Run {
+  // Ids of drawings must not clash with the ones a file has: these start high.
+  const xml = drawingXml(key, 9000 + n, width, height);
+  return { text: OBJECT_CHAR, props: defined({ fontFamily: like.fontFamily, fontSize: like.fontSize, object: xml, anchor: false, objectWidth: width, objectHeight: height }) };
+}
+
+/** A run put at a place of the text, as one piece. */
+export function putRun(doc: Doc, pos: Position, run: Run): Doc {
+  return replaceParagraph(doc, pos.para, withRuns(doc.paragraphs[pos.para], pos.offset, [run]));
+}
+
+/** How many pixels across and down a PNG, a JPEG or a GIF is, by its header; undefined for anything else. */
+export function pictureSize(bytes: Uint8Array, type: string): { width: number; height: number } | undefined {
+  const at = (i: number) => bytes[i] ?? 0;
+  if (type === 'image/png' && bytes.length >= 24) {
+    const size = { width: (at(16) << 24) | (at(17) << 16) | (at(18) << 8) | at(19), height: (at(20) << 24) | (at(21) << 16) | (at(22) << 8) | at(23) };
+    return size.width > 0 && size.height > 0 ? size : undefined;
+  }
+  if (type === 'image/gif' && bytes.length >= 10) {
+    const size = { width: at(6) | (at(7) << 8), height: at(8) | (at(9) << 8) };
+    return size.width > 0 && size.height > 0 ? size : undefined;
+  }
+  if (type === 'image/jpeg') return jpegSize(bytes);
+  return undefined;
 }
 
 /** Gives the picture at `pos` another size, in points. */

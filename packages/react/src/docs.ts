@@ -8,13 +8,15 @@
 // out, not left to the browser. What is around them is: the background they
 // lie on, their shadow, the colour of the selection.
 
-import { type CollabState, type Peer, type Session, createRoom, joinRoom, pingServer } from '@rebodocs/collab/browser';
+import { type CollabState, PROTOCOL, type Peer, type Session, createRoom, joinRoom, pingServer } from '@rebodocs/collab/browser';
 import { type Doc, letterheadImage } from '@rebodocs/core/internal';
 import {
   type Bubble,
   type ChangesView,
   type EditArea,
   type FontSource,
+  type SlashMenuSettings,
+  type VariableSuggestSettings,
   type SpellChecker,
   type Theme,
   type ViewMode,
@@ -24,6 +26,8 @@ import {
   addFonts,
   fontFamilies,
   createBubble,
+  createSlashMenu,
+  createVariableSuggest,
   recallAuthor,
   setAuthor,
   t,
@@ -75,7 +79,7 @@ export interface DocsCoreOptions {
   /** The colours of the interface: 'light' (as it comes), 'dark', or 'auto' for the one the system is set to. The pages stay white. */
   theme?: Theme;
   /** Given the document when the person saves (⌘S, or `save()`): keeping it is the application's business. */
-  onSave?: (docx: Uint8Array, name: string) => void | Promise<void>;
+  onSave?: (docx: Uint8Array<ArrayBuffer>, name: string) => void | Promise<void>;
   /** Called when the document changes. */
   onChange?: (editor: Editor) => void;
   /** Called when the connection to the others, or who they are, changes. */
@@ -106,6 +110,28 @@ export interface DocsHeadlessOptions extends DocsCoreOptions, DocsKeys {
    * unless true; read when the document is made.
    */
   bubble?: boolean;
+  /**
+   * The menu a "/" brings up, typed at the start of a paragraph or after a
+   * space: headings, lists, a table, a picture, the signatures; with the
+   * `bubble`, a variable and a note too. Off unless given: true, or the
+   * commands it comes with that it keeps (`builtIns`) and the application's
+   * own (`commands`). Read when the document is made.
+   */
+  slash?: boolean | SlashMenuSettings;
+  /**
+   * Marking stretches that may be changed from the `bubble` and the `slash`
+   * menu. Off unless true. A restricted document is restricted all the same;
+   * `commands.makeEditable` and `commands.setRestricted` do it from your own
+   * buttons.
+   */
+  forms?: boolean;
+  /**
+   * The list "{{" brings up, of the variables a template may have: those
+   * the application fills (`variables`), those the document already uses,
+   * and a new one by the name typed. Off unless given; read when the
+   * document is made.
+   */
+  variableSuggestions?: boolean | VariableSuggestSettings;
 }
 
 export type LetterheadSource = Blob | { bytes: Uint8Array; type: string } | string;
@@ -144,6 +170,10 @@ export interface DocsState {
   trackChanges: boolean;
   /** How tracked changes are shown: marked, or the document with all of them accepted, or with none. */
   changesView: ChangesView;
+  /** Whether only the stretches marked for it may be changed; `editor.editableRanges` lists them. */
+  restricted: boolean;
+  /** The id of the stretch that may be changed the caret is in, if it is in one. */
+  activeEditable: string | undefined;
   /** How many changes there are to accept or reject; `editor.revisions` lists them. */
   revisionCount: number;
   /** Where typing goes: the text, or the header or footer. */
@@ -226,6 +256,10 @@ const COMMANDS = [
   'insertTextBox',
   'restoreVersion',
   'setTrackChanges',
+  'setRestricted',
+  'makeEditable',
+  'removeEditable',
+  'nextEditable',
   'setChangesView',
   'acceptRevision',
   'rejectRevision',
@@ -273,7 +307,7 @@ export interface Docs {
   readonly collab: Session | undefined;
   readonly assistant: AssistantLink | undefined;
   /** The document as a DOCX, as it is now. */
-  exportDocx(): Uint8Array;
+  exportDocx(): Uint8Array<ArrayBuffer>;
   /** Gives the document to `onSave`. */
   save(): Promise<void>;
   /** Downloads the document as a DOCX. */
@@ -392,9 +426,9 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
           void startWith(options.letterhead);
         }
         if (joined.state === 'closed') {
-          // Not left from here: the room is not there, or is not this person's to come into.
+          // Not left from here: the room is not there, is not this person's to come into, they were sent away, or the server speaks another version.
           session = undefined;
-          fail(t('collab.gone'));
+          fail(t(joined.reason === 'outdated' ? 'collab.outdated' : joined.reason === 'removed' ? 'collab.removed' : 'collab.gone'));
         }
         emit();
         options.onCollab?.(collabState(), session?.peers ?? []);
@@ -439,7 +473,9 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
 
   // --- The keys of the interface --------------------------------------------------
 
-  const bubble = options.bubble ? createBubble(editor) : undefined;
+  const bubble = options.bubble ? createBubble(editor, { forms: options.forms }) : undefined;
+  const slash = options.slash ? createSlashMenu(editor, { ...(options.slash === true ? {} : options.slash), ask: bubble?.ask, forms: options.forms }) : undefined;
+  const suggest = options.variableSuggestions ? createVariableSuggest(editor, options.variableSuggestions === true ? {} : options.variableSuggestions) : undefined;
   let keys: DocsKeys = {};
   const setKeys = (next: DocsKeys) => {
     keys = { onLinkKey: next.onLinkKey, onFindKey: next.onFindKey };
@@ -500,6 +536,8 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
       letterhead: editor.hasLetterhead,
       trackChanges: editor.trackChanges,
       changesView: editor.changesView,
+      restricted: editor.restricted,
+      activeEditable: editor.activeEditable,
       revisionCount: editor.revisions.length,
       area: editor.area,
       page: editor.currentPage,
@@ -563,7 +601,7 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
     save,
     download() {
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(new Blob([editor.exportDocx() as BlobPart], { type: DOCX_TYPE }));
+      link.href = URL.createObjectURL(new Blob([editor.exportDocx()], { type: DOCX_TYPE }));
       link.download = `${(name || t('file.default')).replace(/\.docx$/i, '')}.docx`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(link.href), 1000);
@@ -587,7 +625,9 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
       starting = true;
       emit();
       try {
-        if (!(await pingServer(server.url))) fail(t('collab.noServer', { url: server.url }));
+        const found = await pingServer(server.url);
+        if (!found) fail(t('collab.noServer', { url: server.url }));
+        else if (found.protocol !== PROTOCOL) fail(t('collab.outdated'));
         else enterRoom(server.url, await createRoom(server.url, editor.exportDocx(), name, server.token));
       } catch (error) {
         fail(t('collab.failed', { error: (error as Error).message }));
@@ -626,6 +666,8 @@ export function createDocs(container: HTMLElement, options: DocsHeadlessOptions 
       left?.leave();
       assistant?.disconnect();
       bubble?.destroy();
+      slash?.destroy();
+      suggest?.destroy();
       editor.onLinkKey = undefined;
       editor.destroy();
     },

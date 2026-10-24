@@ -122,6 +122,8 @@ export interface DocxSource {
   textBoxSources?: Map<string, StorySource>;
   /** Whether the settings of the file said its changes were tracked. */
   trackRevisions?: boolean;
+  /** Whether the file closed the document to changes but for its stretches marked for them: `Doc.restricted`. */
+  restricted?: boolean;
   /** Relationships of each part that was asked for them, by part path and then by id. */
   relationships?: Map<string, Map<string, string>>;
 }

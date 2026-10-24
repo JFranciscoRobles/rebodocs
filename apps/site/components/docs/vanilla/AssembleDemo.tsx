@@ -6,7 +6,21 @@
 // makes what is shown.
 
 import { exportDocx } from '@rebodocs/core';
-import { Editor, createBubble, createFindBar, createFocusMode, createPanel, createRuler, createSidebar, createStatusBar, createToolbar, getLocale, setLocale } from '@rebodocs/editor';
+import {
+  Editor,
+  createBubble,
+  createFindBar,
+  createFocusMode,
+  createPanel,
+  createRuler,
+  createSidebar,
+  createSlashMenu,
+  createStatusBar,
+  createVariableSuggest,
+  createToolbar,
+  getLocale,
+  setLocale,
+} from '@rebodocs/editor';
 import { useEffect, useRef, useState } from 'react';
 import { PASTEL_CLASS } from '@/lib/home';
 import { CAPTION } from '../styles';
@@ -18,6 +32,8 @@ const PIECES = [
   ['panel', 'Side panel'],
   ['status', 'Status bar'],
   ['bubble', 'Selection bar'],
+  ['slash', '“/” menu'],
+  ['suggest', '“{{” list'],
   ['find', 'Find'],
   ['menu', 'Menu'],
   ['focus', 'Full screen'],
@@ -35,6 +51,8 @@ function codeFor(on: Set<Piece>): string {
     has('panel') && 'createPanel',
     has('status') && 'createStatusBar',
     has('bubble') && 'createBubble',
+    has('slash') && 'createSlashMenu',
+    has('suggest') && 'createVariableSuggest',
     has('find') && 'createFindBar',
     has('menu') && 'createSidebar',
     has('focus') && 'createFocusMode',
@@ -42,17 +60,23 @@ function codeFor(on: Set<Piece>): string {
   const lines = [`import { ${imports.join(', ')} } from '@rebodocs/editor';`, '', `const editor = new Editor(document.querySelector('#pages')!);`, 'editor.loadDocx(bytes);'];
   if (has('menu')) lines.push(`const menu = createSidebar(editor, {\n  fileName: () => 'lease.docx',\n  within: document.querySelector('#app')!,   // over the editor, not the whole page\n});`);
   if (has('find')) lines.push('const find = createFindBar(editor);');
-  if (has('panel')) lines.push(`const panel = createPanel(document.querySelector('#panel')!, editor);`);
+  if (has('panel'))
+    lines.push(
+      `const panel = createPanel(document.querySelector('#panel')!, editor${has('toolbar') ? ', {\n  onToggle: () => toolbar.refresh(),   // the button is pressed while it is open\n}' : ''});`,
+    );
   if (has('bubble')) lines.push('const bubble = createBubble(editor);', `editor.onLinkKey = () => bubble.ask('link');     // ⌘K`);
+  if (has('slash')) lines.push(`createSlashMenu(editor${has('bubble') ? ', { ask: bubble.ask }' : ''});${has('bubble') ? '' : '   // without the bubble: no variable, no note'}`);
+  if (has('suggest')) lines.push(`createVariableSuggest(editor, { variables: ['tenant', 'rent'] });`);
   if (has('focus')) lines.push('const focus = createFocusMode(editor);');
   if (has('toolbar')) {
     const options = [
       has('menu') && 'onMenu: menu.toggle',
       has('panel') && 'onPanel: panel.toggle',
+      has('panel') && 'panelOpen: () => panel.isOpen',
       has('find') && 'onFind: () => find.open()',
       has('bubble') && `onInsertLink: () => bubble.ask('link')`,
     ].filter(Boolean);
-    lines.push(`createToolbar(document.querySelector('#toolbar')!, editor${options.length ? `, {\n  ${options.join(',\n  ')},\n}` : ''});`);
+    lines.push(`${has('panel') ? 'const toolbar = ' : ''}createToolbar(document.querySelector('#toolbar')!, editor${options.length ? `, {\n  ${options.join(',\n  ')},\n}` : ''});`);
   }
   if (has('ruler')) lines.push(`createRuler(document.querySelector('#ruler')!, editor);`);
   if (has('status')) lines.push(`createStatusBar(document.querySelector('#status')!, editor${has('focus') ? ', {\n  focus: { on: () => focus.on, toggle: focus.toggle },\n}' : ''});`);
@@ -60,7 +84,7 @@ function codeFor(on: Set<Piece>): string {
 }
 
 export default function AssembleDemo() {
-  const [on, setOn] = useState<Set<Piece>>(() => new Set(['toolbar', 'ruler', 'status', 'bubble', 'find']));
+  const [on, setOn] = useState<Set<Piece>>(() => new Set(['toolbar', 'ruler', 'status', 'bubble', 'slash', 'suggest', 'find']));
   const [ready, setReady] = useState(false);
   const editorRef = useRef<Editor | undefined>(undefined);
   const box = {
@@ -97,15 +121,19 @@ export default function AssembleDemo() {
     const keep = <T extends { destroy(): void }>(part: T) => (parts.push(part), part);
     const menu = has('menu') ? keep(createSidebar(editor, { fileName: () => 'lease.docx', within: box.app.current! })) : undefined;
     const find = has('find') ? keep(createFindBar(editor)) : undefined;
-    const panel = has('panel') ? keep(createPanel(box.panel.current!, editor)) : undefined;
+    let toolbar: ReturnType<typeof createToolbar> | undefined;
+    const panel = has('panel') ? keep(createPanel(box.panel.current!, editor, { onToggle: () => toolbar?.refresh() })) : undefined;
     const bubble = has('bubble') ? keep(createBubble(editor)) : undefined;
     editor.onLinkKey = bubble ? () => bubble.ask('link') : undefined;
+    if (has('slash')) keep(createSlashMenu(editor, { ask: bubble?.ask }));
+    if (has('suggest')) keep(createVariableSuggest(editor, { variables: ['tenant', 'rent'] }));
     const focus = has('focus') ? keep(createFocusMode(editor)) : undefined;
     if (has('toolbar'))
-      keep(
+      toolbar = keep(
         createToolbar(box.toolbar.current!, editor, {
           onMenu: menu?.toggle,
           onPanel: panel?.toggle,
+          panelOpen: () => !!panel?.isOpen,
           onFind: find ? () => find.open() : undefined,
           onInsertLink: bubble ? () => bubble.ask('link') : undefined,
         }),
@@ -145,8 +173,8 @@ export default function AssembleDemo() {
         <div ref={box.toolbar} />
         <div ref={box.ruler} />
         <div className="relative flex min-h-0 flex-1">
-          <div ref={box.panel} />
           <div ref={box.pages} className="min-w-0 flex-1" />
+          <div ref={box.panel} />
         </div>
         <div ref={box.status} />
       </div>

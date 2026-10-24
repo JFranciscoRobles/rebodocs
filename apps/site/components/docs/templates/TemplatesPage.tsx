@@ -3,7 +3,7 @@ import { LIGHT_THEME, highlight } from '@/lib/docs';
 import { PASTEL_CLASS } from '@/lib/home';
 import { CAPTION, CODE, LINK } from '../styles';
 import { HandTip, SectionHead } from '../ui';
-import { ALIASES, BLOCK_KINDS, BLOCK_RULES, CORE, EDITOR, FORMAT_ROWS, LOCALES, PANEL, RULES, TOOLS } from './data';
+import { ALIASES, BLOCK_KINDS, BLOCK_RULES, CORE, EDITOR, FORMAT_ROWS, FORMS, LOCALES, PANEL, RULES, TOOLS } from './data';
 import FormatsDemo from './FormatsDemo';
 import { LazyEditorDemo } from './Lazy';
 
@@ -86,7 +86,7 @@ function Template({ text }: { text: string }) {
  * a language, the panel, the calls, the tools of an assistant and signatures.
  */
 export async function TemplatesPage() {
-  const [core, locale, cli] = await Promise.all([
+  const [core, locale, cli, suggest, forms] = await Promise.all([
     highlight(
       `import { importDocx, variableNames, variableProblems, fillVariables, exportDocx } from '@rebodocs/core';
 
@@ -112,6 +112,29 @@ fillVariables(doc, values, { locale: 'de-DE', currency: 'EUR' });  // 13. Oktobe
 npx -p @rebodocs/mcp rebodocs-generate template.docx data.json -o out.docx --locale en-US
 npx -p @rebodocs/mcp rebodocs-generate template.docx data.json -o out.pdf --fonts ./fonts`,
       'bash',
+      LIGHT_THEME,
+    ),
+    highlight(
+      `<DocsEditor
+  docx={file}
+  features={{
+    variableSuggestions: {
+      variables: [
+        { name: 'client', title: 'Who signs' },
+        { name: 'amount', example: '$1,200' },
+      ],
+    },
+  }}
+/>`,
+      'tsx',
+      LIGHT_THEME,
+    ),
+    highlight(
+      `editor.setSelection(from, to);
+editor.makeEditable();             // the selection, or an empty blank at the caret
+editor.setRestricted(true);        // only the areas can change now
+const docx = editor.exportDocx();  // and Word restricts it the same`,
+      'ts',
       LIGHT_THEME,
     ),
   ]);
@@ -306,6 +329,20 @@ npx -p @rebodocs/mcp rebodocs-generate template.docx data.json -o out.pdf --font
           </a>{' '}
           gives the names, their formats and uses, a preview of a value, and fill.
         </p>
+        <h3 className={h3}>Typing “{'{{'}”</h3>
+        <p className={prose}>
+          Two braces bring up a list of the variables: those your application says it fills first, with what each is or a value it may have, then those the document already uses. What is typed after
+          the braces narrows it, by any word of a name (<code className={mono}>cli</code> finds <code className={mono}>client_name</code>); Enter or Tab writes the one chosen whole, so a name is not
+          mistyped and left unfilled. A name that is in neither is offered as a new variable. A closing brace, a <code className={mono}>#</code> or a <code className={mono}>|</code> leaves it, for a
+          block or a format written by hand.
+        </p>
+        <div className={`mt-6 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: suggest }} />
+        <p className={prose}>
+          It is on in <code className={mono}>DocsEditor</code> unless <code className={mono}>variableSuggestions: false</code>; <code className={mono}>fromDocument: false</code> leaves out the names
+          of the document, <code className={mono}>allowNew: false</code> the new one, and <code className={mono}>variables</code> may be a function, asked each time the list opens. Headless it is the{' '}
+          <code className={mono}>variableSuggestions</code> option of <code className={mono}>DocsProvider</code>, off unless given; without React,{' '}
+          <code className={mono}>{'createVariableSuggest(editor, { variables })'}</code>.
+        </p>
         <h3 className={h3}>The Editor</h3>
         <Signatures rows={EDITOR} />
       </section>
@@ -342,6 +379,34 @@ npx -p @rebodocs/mcp rebodocs-generate template.docx data.json -o out.pdf --font
           has a tool for each step, on a file or on the document open in an editor.
         </SectionHead>
         <Signatures rows={TOOLS} />
+      </section>
+
+      <section aria-labelledby="areas-to-fill-in" className="mt-24">
+        <SectionHead id="areas-to-fill-in" badge="Forms" color="green" title="Areas to fill in">
+          A document restricted to some areas: whoever has it can change those and nothing else, as Word’s Restrict editing with exceptions for everyone. A template sent to be filled in, with its
+          clauses as they were written.
+        </SectionHead>
+        <p className={prose}>
+          Outside the areas the document is read, copied and noted on; a change there is not made, the areas flash, and a screen reader is told why. Tab and Shift+Tab go from one area to the next,
+          selecting what it holds. An area may be empty, a blank shown as a small box. The areas are shaded on the page, more strongly while the document is restricted.
+        </p>
+        <div className={`mt-6 max-w-[760px] ${CODE}`} dangerouslySetInnerHTML={{ __html: forms }} />
+        <p className={prose}>
+          In the file the areas are the marks Word writes (<code className={mono}>w:permStart</code> and <code className={mono}>w:permEnd</code> for everyone), and the restriction is{' '}
+          <code className={mono}>w:documentProtection w:edit=&quot;readOnly&quot;</code> without a password: Word lets only the areas be changed, and its Restrict editing pane can stop it. A Word file
+          restricted this way opens restricted here.
+        </p>
+        <p className={prose}>
+          With <code className={mono}>features.forms</code> the interface marks them: <strong>Mark the selection as editable</strong>, <strong>Remove editable area</strong> and{' '}
+          <strong>Restrict editing</strong> in the Review menu, <strong>Editable</strong> in the bar beside a selection, and <strong>Editable area</strong> in the “/” menu. It is off unless true, so
+          that whoever is sent a restricted document cannot open it again; the restriction holds without it, and your code decides. Headless it is the <code className={mono}>forms</code> option, and{' '}
+          <code className={mono}>state.restricted</code> and <code className={mono}>state.activeEditable</code> say where things stand.
+        </p>
+        <Signatures rows={FORMS} />
+        <p className={prose}>
+          A restricted document refuses your code too: open it with <code className={mono}>setRestricted(false)</code> before filling its variables outside the areas, and restrict it again after. Each
+          person in a shared room has it restricted in their own copy, so a change made by someone with it open still comes in.
+        </p>
       </section>
 
       <section aria-labelledby="signatures" className="mt-24">

@@ -50,7 +50,8 @@ export function startCollab(backendUrl: string): CollabServer {
   return (rooms = createCollabServer({
     port: collabPort,
     host: process.env.COLLAB_HOST,
-    storage: backendStorage({ url: backendUrl, key: process.env.COLLAB_BACKEND_KEY }),
+    // Every change logged as it comes, as in apps/realtime: the server can stop at any moment and lose none.
+    storage: backendStorage({ url: backendUrl, key: process.env.COLLAB_BACKEND_KEY, log: process.env.COLLAB_LOG !== '0' }),
     saveAfter: 2000,
     idle: 1500,
   }));

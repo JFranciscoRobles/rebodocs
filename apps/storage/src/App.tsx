@@ -128,7 +128,7 @@ export function App() {
     [open?.key],
   );
 
-  async function save(docx: Uint8Array) {
+  async function save(docx: Uint8Array<ArrayBuffer>) {
     if (!open) return;
     try {
       say(`Saving ${open.key}…`);
@@ -198,6 +198,7 @@ export function App() {
               docx={open.docx}
               name={open.key.split('/').pop()}
               locale="en"
+              features={{ panelOpen: true }}
               versions={versions}
               onSave={(docx) => save(docx)}
               onReady={(docs) => (handle.current = docs)}

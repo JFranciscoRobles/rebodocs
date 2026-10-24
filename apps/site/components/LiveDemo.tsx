@@ -37,7 +37,14 @@ export function LiveDemo() {
       </div>
       <div className="h-[min(720px,78vh)] min-h-[460px]">
         {file ? (
-          <DocsEditor docx={file} name="receipt.docx" locale="en" features={{ files: true, language: true, theme: true }} versions={versions} spellcheck={spellcheck} />
+          <DocsEditor
+            docx={file}
+            name="receipt.docx"
+            locale="en"
+            features={{ files: true, language: true, theme: true, forms: true, panelOpen: 'variables' }}
+            versions={versions}
+            spellcheck={spellcheck}
+          />
         ) : (
           <p className="grid h-full place-items-center text-sm text-muted">{failed ? 'The sample document could not be loaded.' : 'Opening the document…'}</p>
         )}

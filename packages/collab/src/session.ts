@@ -10,11 +10,11 @@
 import { type Doc, importDocx } from '@rebodocs/core/internal';
 import { encode, stampIds, toBase64 } from './changes';
 import { type CollabHost, type HostHistory, Mirror, through } from './mirror';
-import { type Entry, type Hello, type OpsPost, PREFIX, type Presence, type PresencePost, type ServerEvent, readEvent } from './protocol';
+import { type Entry, type Hello, type OpsPost, PREFIX, PROTOCOL, type Presence, type PresencePost, type ServerEvent, readEvent } from './protocol';
 import { type Sending, Sync } from './sync';
 
 export type { CollabHost, HostHistory, HostSelection, PeerCaret } from './mirror';
-export { DEFAULT_COLLAB_PORT } from './protocol';
+export { DEFAULT_COLLAB_PORT, PROTOCOL } from './protocol';
 
 export interface Peer {
   client: string;
@@ -23,6 +23,14 @@ export interface Peer {
 }
 
 export type CollabState = 'connecting' | 'on' | 'offline' | 'closed';
+
+/**
+ * Why a session is closed: left from here; the room is not on the server;
+ * this person may not come into it; they were sent away while in it; or the
+ * editor and the server speak different versions, and one of them is to be
+ * brought up to date.
+ */
+export type ClosedReason = 'left' | 'not-found' | 'denied' | 'removed' | 'outdated';
 
 export interface CollabOptions {
   /** Where the server is. */
@@ -38,6 +46,8 @@ export interface CollabOptions {
 export interface Session {
   readonly room: string;
   readonly state: CollabState;
+  /** Why it is closed, once it is. */
+  readonly reason: ClosedReason | undefined;
   /** The name the document was shared under. */
   readonly title: string;
   /** The others in the room. */
@@ -68,11 +78,15 @@ export async function createRoom(url: string, docx: Uint8Array, name: string, to
   return answer.room;
 }
 
-/** Whether a collaboration server answers at an address, and whether it asks for a word to start sharing. */
-export async function pingServer(url: string): Promise<{ token: boolean } | undefined> {
+/**
+ * Whether a collaboration server answers at an address, whether it asks for a
+ * word to start sharing, and the version it speaks: one not `PROTOCOL` sends
+ * this editor away.
+ */
+export async function pingServer(url: string): Promise<{ token: boolean; protocol: number } | undefined> {
   try {
     const answer = (await (await fetch(`${clean(url)}${PREFIX}/ping`)).json()) as { collab?: number; token?: boolean };
-    return answer.collab ? { token: !!answer.token } : undefined;
+    return answer.collab ? { token: !!answer.token, protocol: answer.collab } : undefined;
   } catch {
     return undefined;
   }
@@ -117,6 +131,7 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
   let key = '';
   let name = options.name ?? '';
   let state: CollabState = 'connecting';
+  let reason: ClosedReason | undefined;
   let title = '';
   let readOnly = false;
   let color = '';
@@ -230,6 +245,13 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
   // --- The connection -------------------------------------------------------------
 
   const start = async (hello: Hello) => {
+    // A server that speaks another version: nothing it says is to be taken.
+    if ((hello.protocol ?? 1) !== PROTOCOL) {
+      reason = 'outdated';
+      state = 'closed';
+      stream?.abort();
+      return;
+    }
     // A server of before gives no key, and asks for none.
     key = hello.key ?? '';
     title = hello.name;
@@ -326,7 +348,7 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
       const leaving = () => listening.abort();
       stop.signal.addEventListener('abort', leaving);
       try {
-        const query = `client=${me}&key=${encodeURIComponent(key)}&name=${encodeURIComponent(name)}&epoch=${sync.epoch}&from=${sync.rev}${options.ticket ? `&ticket=${encodeURIComponent(options.ticket)}` : ''}`;
+        const query = `v=${PROTOCOL}&client=${me}&key=${encodeURIComponent(key)}&name=${encodeURIComponent(name)}&epoch=${sync.epoch}&from=${sync.rev}${options.ticket ? `&ticket=${encodeURIComponent(options.ticket)}` : ''}`;
         await listen(`${url}/events?${query}`, listening.signal, (event) => {
           queue = queue.then(async () => {
             if (state !== 'closed' && (await hear(event))) wait = 500;
@@ -336,7 +358,8 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
       } catch (error) {
         // A room that is not there is not going to be, and neither is one this person may not come into: nothing to come back to.
         const status = (error as { status?: number }).status;
-        if (status === 404 || status === 403) {
+        if (status === 404 || status === 403 || status === 426) {
+          reason = status === 404 ? 'not-found' : status === 403 ? 'denied' : 'outdated';
           state = 'closed';
           break;
         }
@@ -348,7 +371,10 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
       } finally {
         stop.signal.removeEventListener('abort', leaving);
       }
-      if (removed) state = 'closed';
+      if (removed) {
+        reason = 'removed';
+        state = 'closed';
+      }
       if ((state as CollabState) === 'closed') break;
       // Let go of to load the room again: at once, without saying it went.
       if (sync.carry && !sync.loaded) continue;
@@ -370,6 +396,9 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
     room,
     get state() {
       return state;
+    },
+    get reason() {
+      return reason;
     },
     get title() {
       return title;
@@ -399,6 +428,7 @@ export function joinRoom(host: CollabHost, room: string, options: CollabOptions)
     leave() {
       if (state === 'closed') return;
       state = 'closed';
+      reason = 'left';
       clearTimeout(retry);
       clearTimeout(presenceTimer);
       stop.abort();

@@ -544,6 +544,12 @@ export interface Doc {
   endnotesAt?: 'sections';
   /** Whether what is typed and taken out is kept as changes to accept or reject, as Word's "Track changes". */
   trackRevisions?: boolean;
+  /**
+   * Whether only the stretches marked for it may be changed, and the rest of
+   * the document only read, copied and noted on: Word's "Restrict editing"
+   * set to no changes, with exceptions for everyone. See `editable.ts`.
+   */
+  restricted?: boolean;
   /** Pictures put in since the document was made or opened, by the key their drawing names. */
   media?: Record<string, Media>;
   /** The notes on stretches of the text, which holds the marks of where each one is. See `notes.ts`. */

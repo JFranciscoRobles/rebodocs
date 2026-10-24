@@ -10,13 +10,13 @@
 // long and random, and is all there is to keep. This is the HTTP of it: what
 // a room does is in room.ts. Node only.
 
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
 import { importDocx } from '@rebodocs/core/internal';
 import { decode, fromBase64 } from './changes';
-import { type OpsPost, PREFIX, type PresencePost, eventText } from './protocol';
+import { type OpsPost, PREFIX, PROTOCOL, type PresencePost, eventText } from './protocol';
 import { type CollabEvent, type Listener, Room, type RoomContext } from './room';
 import { type Entry, type RoomStorage, type Session, folderStorage, memoryStorage } from './storage';
 
@@ -65,6 +65,14 @@ export interface CollabServerOptions {
    * comes back as that. `recheck` does it at once.
    */
   recheckEvery?: number;
+  /**
+   * What the system shows, as `Authorization: Bearer …`, to have the server
+   * ask again at once who may be in a room: `POST /collab/rooms/<id>/recheck`,
+   * or `POST /collab/recheck` for every room. For a system whose server of
+   * rooms runs apart from it, when it takes someone's access away. Without it
+   * there is no such address.
+   */
+  recheckKey?: string;
   /** Told what happens: who comes and goes, the changes being folded, the documents being given to the storage, and what goes wrong, which goes to the console when there is nothing to tell. */
   onEvent?: (event: CollabEvent) => void;
   /**
@@ -73,6 +81,13 @@ export interface CollabServerOptions {
    * While changes keep coming, it is told at least every four times as long.
    */
   checkAfter?: number;
+  /**
+   * What this process is called, among several behind one address: said in
+   * `X-Rebodocs-Instance` on everything it answers, and by `ping`, to see
+   * which one a room is in. Each room is to be in one process: the one the
+   * address of the room is sent to (see the page on collaboration).
+   */
+  instance?: string;
 }
 
 export interface CollabServer {
@@ -200,7 +215,10 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
     });
   };
 
-  const cors = { 'Access-Control-Allow-Origin': '*' };
+  const cors: Record<string, string> = {
+    'Access-Control-Allow-Origin': '*',
+    ...(options.instance && { 'X-Rebodocs-Instance': options.instance, 'Access-Control-Expose-Headers': 'X-Rebodocs-Instance, X-Epoch' }),
+  };
   const json = (res: ServerResponse, status: number, data: unknown): void => {
     res.writeHead(status, { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(data));
   };
@@ -232,6 +250,8 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
   /** Someone comes in, and listens to the room from then on. */
   const listen = async (req: IncomingMessage, res: ServerResponse, url: URL, room: Room) => {
     const query = url.searchParams;
+    // An editor that speaks another version is told so, and which one this server speaks: one that says none speaks the first.
+    if (Number(query.get('v') || 1) !== PROTOCOL) return json(res, 426, { error: 'version', protocol: PROTOCOL });
     const id = (query.get('client') ?? '').slice(0, 64);
     if (!id) return json(res, 400, { error: 'client' });
     // An id somebody is in the room with: only whoever has its key comes back with it.
@@ -285,7 +305,13 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
       return;
     }
     const [, , what, id, action] = path.split('/');
-    if (req.method === 'GET' && what === 'ping') return void json(res, 200, { collab: 1, token: !!options.token });
+    // The system took someone's access away, or changed it: asked again at once, in the room it says or in all.
+    if (req.method === 'POST' && options.recheckKey && ((what === 'rooms' && id && action === 'recheck') || (what === 'recheck' && !id))) {
+      if (!bearer(req, options.recheckKey)) return void json(res, 401, { error: 'key' });
+      await recheck(what === 'rooms' ? id : undefined);
+      return void json(res, 200, {});
+    }
+    if (req.method === 'GET' && what === 'ping') return void json(res, 200, { collab: PROTOCOL, token: !!options.token, ...(options.instance && { instance: options.instance }) });
     if (req.method === 'POST' && what === 'rooms' && !id) return share(req, res, url);
 
     const room = what === 'rooms' && id ? await find(id) : undefined;
@@ -297,7 +323,7 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
       if (!inside()) return void json(res, 403, { error: 'access' });
       // The document as it is now, for whoever wants the file without an editor; or the file the changes are made to.
       if (action === 'docx') docx(res, room.current());
-      else docx(res, room.base, { 'X-Epoch': String(room.epoch), 'Access-Control-Expose-Headers': 'X-Epoch' });
+      else docx(res, room.base, { 'X-Epoch': String(room.epoch), 'Access-Control-Expose-Headers': options.instance ? 'X-Rebodocs-Instance, X-Epoch' : 'X-Epoch' });
       return;
     }
     if (req.method === 'GET' && action === 'events') return listen(req, res, url, room);
@@ -343,6 +369,13 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
       server?.closeAllConnections();
     },
   };
+}
+
+/** Whether a request shows `key` as `Authorization: Bearer …`, compared in a time that does not say how much of it was right. */
+function bearer(req: IncomingMessage, key: string): boolean {
+  const given = Buffer.from(/^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1] ?? '');
+  const wanted = Buffer.from(key);
+  return given.length === wanted.length && timingSafeEqual(given, wanted);
 }
 
 /** The rooms kept in a folder, by name: for whoever runs the server to see what it holds. */

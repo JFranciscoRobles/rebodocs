@@ -13,7 +13,7 @@ const STATE: [string, string][] = [
   ['Text at the selection', 'bold, italic, underline, strike, fontFamily, fontSize, color, highlight, link'],
   ['Paragraph', 'align, lineHeight, styleId, list'],
   ['What can be done', 'canUndo, canRedo, collapsed, inTable, canEditTables, canMergeCells, canSplitCell, pictureSelected'],
-  ['Review', 'trackChanges, changesView, revisionCount'],
+  ['Review', 'trackChanges, changesView, revisionCount, restricted, activeEditable'],
   ['Where', 'area (body, header or footer), page, pageCount'],
   ['View', 'zoom, view, fit, touch'],
   ['Document', 'name, dirty, saves, letterhead, fonts'],
@@ -34,7 +34,10 @@ const COMMANDS: [string, string][] = [
   ['Templates', 'insertVariable, fillVariables, insertSignatures'],
   ['Links and notes', 'setLink, removeLink, addNote, setNoteText, setNoteColor, removeNote, selectNote'],
   ['Structure', 'insertToc, updateToc, goToHeading, moveSection, insertFootnote, insertEndnote, insertTextBox, restoreVersion'],
-  ['Review', 'setTrackChanges, setChangesView, acceptRevision, rejectRevision, acceptAllRevisions, rejectAllRevisions, goToRevision, selectRevision'],
+  [
+    'Review',
+    'setTrackChanges, setChangesView, acceptRevision, rejectRevision, acceptAllRevisions, rejectAllRevisions, goToRevision, selectRevision, setRestricted, makeEditable, removeEditable, nextEditable',
+  ],
   ['Columns and sections', 'setColumns, insertColumnBreak, insertSectionBreak'],
   ['Page', 'setPage, setPageNumbering, setFirstPageDifferent, setOwnHeaders, setEndnotesAt, setNoteNumbering, setArea, setLetterhead, setLetterheadFile, fitLetterheadMargins, removeLetterhead'],
   ['Search', 'find, findStep, replaceFound, replaceAllFound'],
@@ -78,7 +81,7 @@ useEffect(() => {
  */
 export async function HeadlessPage() {
   const smallest = readFileSync(join(process.cwd(), 'components/docs/headless/Smallest.tsx'), 'utf8');
-  const [first, use, find, keys, bubble, variable, ruler, autosave, focus, loading, replace] = await Promise.all([
+  const [first, use, find, keys, bubble, variable, ruler, autosave, focus, loading, replace, slash, commands] = await Promise.all([
     highlight(smallest, 'tsx', LIGHT_THEME),
     highlight(`const { state, commands, editor, docs, ready } = useDocs();`, 'ts', LIGHT_THEME),
     highlight(
@@ -171,6 +174,29 @@ useEffect(() => {
       `const doc = await loadVersion({ list: async () => [], load: async () => bytes }, file.name);
 commands.restoreVersion(doc);`,
       'ts',
+      LIGHT_THEME,
+    ),
+    highlight(
+      `<DocsProvider docx={file} bubble slash>
+  <DocsSurface className="h-full" />
+</DocsProvider>`,
+      'tsx',
+      LIGHT_THEME,
+    ),
+    highlight(
+      `<DocsProvider
+  docx={file}
+  slash={{
+    builtIns: ['heading1', 'heading2', 'bullets', 'table'],   // false for none
+    commands: [
+      { label: 'Privacy notice', group: 'Clauses', keywords: 'gdpr', html: '<p><b>Privacy.</b> We keep…</p>' },
+      { label: 'Closing', group: 'Clauses', text: 'Yours sincerely,\nThe management' },
+      { label: 'Today', run: (editor) => editor.insertText(new Date().toLocaleDateString()) },
+      { label: 'Next blank', when: (editor) => editor.restricted, run: (editor) => editor.nextEditable() },
+    ],
+  }}
+>`,
+      'tsx',
       LIGHT_THEME,
     ),
   ]);
@@ -310,6 +336,49 @@ commands.restoreVersion(doc);`,
             Styling
           </a>
           .
+        </p>
+      </section>
+
+      <section aria-labelledby="the-slash-menu" className="mt-24">
+        <SectionHead id="the-slash-menu" badge="Menu" color="blue" title="The “/” menu">
+          <code className={mono}>{'<DocsProvider slash>'}</code> gives the document the menu a “/” brings up, the one the included interface has: what can be put where the caret is, or made of its
+          paragraph, without reaching for the toolbar.
+        </SectionHead>
+        {block(slash)}
+        <p className={prose}>
+          It comes up when the “/” is typed at the start of a paragraph or after a space, so a date like 12/05, “and/or” or an address is left alone. What is typed after it narrows the list, by name
+          or by what each one does, and without minding accents; h1, h2, h3, ul, ol and toc find their own. ↑ and ↓ choose, Enter or Tab (or a click) does it in place of the “/” and what followed it,
+          and Escape leaves them as text. It goes by itself when the caret leaves the command, or when nothing is found and a space is typed.
+        </p>
+        {rows(
+          [
+            ['Text', 'Normal, Heading 1 to 3 (those the document has styles for), a bulleted list, a numbered list'],
+            ['Insert', 'A 3 × 3 table, a picture, a page break, a table of contents, a text box, a footnote'],
+            ['Template', 'A variable, the signatures, a note on the word before the “/”, and with forms an area to fill in'],
+          ],
+          120,
+        )}
+        <p className={prose}>
+          Only what can be done there is offered: in a table there is no table, no signatures, no page break and no table of contents; in a header or a footer, no page break, table of contents, text
+          box, footnote or note; a table of contents only while there is none. The variable and the note ask for their name and their text in the bar beside the selection, so they are offered only
+          with <code className={mono}>bubble</code> too. Doing a command is two steps for ⌘Z: the first undoes the command, the second gives back what was typed.
+        </p>
+        <p className={prose}>
+          Like the bar, it is put in <code className={mono}>document.body</code> and takes its colours from the --dx-ui-… variables; it opens under the caret, or over it when there is more room there,
+          the keyboard of a phone counted. It is off unless asked for, and read when the document is made. Without React it is the <code className={mono}>slash</code> option of{' '}
+          <code className={mono}>createDocs</code>, or <code className={mono}>{'createSlashMenu(editor, { ask: bubble.ask })'}</code> on a bare editor.
+        </p>
+        <h3 className="m-0 mt-12 font-display text-xl font-bold tracking-[-0.01em]">Your own commands</h3>
+        <p className={prose}>
+          Given settings in place of <code className={mono}>true</code>, the menu keeps only the commands of its own you name in <code className={mono}>builtIns</code> (normal, heading1, heading2,
+          heading3, bullets, numbers, table, image, pageBreak, toc, textBox, footnote, variable, signatures, note, field), or none with <code className={mono}>false</code>, and offers yours after
+          them, those of one <code className={mono}>group</code> under one heading, “More” when none is given. Each puts in <code className={mono}>text</code>, a paragraph for each line, or{' '}
+          <code className={mono}>html</code> with its formatting, as pasting it would, or does what its <code className={mono}>run</code> says once the “/” is gone; <code className={mono}>when</code>{' '}
+          says where it is offered. <code className={mono}>commands</code> may be a function, asked each time the menu opens.
+        </p>
+        {block(commands)}
+        <p className={prose}>
+          In <code className={mono}>DocsEditor</code> the same settings go in <code className={mono}>features.slash</code>.
         </p>
       </section>
 

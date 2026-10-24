@@ -4,7 +4,7 @@ Made by `node tools/api-report.mjs` from `src/index.ts`; do not change it by han
 package promises: a change to it is a change of its API, and goes in the changelog. What the engine keeps
 to itself is in `src/internal.ts`, for the packages of the repository, with no promise.
 
-238 names.
+245 names.
 
 ## model
 
@@ -263,6 +263,7 @@ export interface Doc {
   footnoteNumbering?: NoteNumbering;
   endnotesAt?: 'sections';
   trackRevisions?: boolean;
+  restricted?: boolean;
   media?: Record<string, Media>;
   notes?: Note[];
   styles?: ParagraphStyle[];
@@ -578,7 +579,7 @@ export interface Variable {
 }
 export function isVariableName(name: string): boolean
 export function variableText(name: string, formats: string[] = []): string
-export type FormatId = 'upper' | 'lower' | 'capital' | 'bold' | 'italic' | 'underline' | 'date' | 'dateLong' | 'dateFull' | 'number' | 'currency';
+export type FormatId = 'upper' | 'lower' | 'capital' | 'bold' | 'italic' | 'underline' | 'date' | 'dateLong' | 'dateFull' | 'number' | 'currency' | 'image';
 export function formatText(id: FormatId, arg = '', language = 'en'): string
 export interface FormatProblem {
   format: string;
@@ -672,7 +673,7 @@ export interface TrueType {
   kerning?(left: number, right: number): number;
   cff?: boolean;
 }
-export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array
+export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array<ArrayBuffer>
 ```
 
 ## fonts
@@ -690,7 +691,7 @@ export class FontMeasurer implements TextMeasurer
 
 ```ts
 export interface Rendered {
-  pdf: Uint8Array;
+  pdf: Uint8Array<ArrayBuffer>;
   layout: Layout;
   missingFonts: Map<string, string>;
   missingPictures: number;
@@ -741,7 +742,7 @@ export interface DocxOptions {
   replaceLanguage?: boolean;
   subsetFonts?: boolean;
 }
-export function exportDocx(whole: Doc, options: DocxOptions = {}): Uint8Array
+export function exportDocx(whole: Doc, options: DocxOptions = {}): Uint8Array<ArrayBuffer>
 ```
 
 ## docx/source
@@ -780,6 +781,7 @@ export interface DocxSource {
   notes?: Note[];
   textBoxSources?: Map<string, StorySource>;
   trackRevisions?: boolean;
+  restricted?: boolean;
   relationships?: Map<string, Map<string, string>>;
 }
 export interface EmbeddedFont {
@@ -864,6 +866,21 @@ export function addNote(doc: Doc, range: Range, note: { text: string; author: st
 export function setNoteText(doc: Doc, id: string, text: string): Doc
 export function setNoteColor(doc: Doc, id: string, color: string): Doc
 export function removeNote(doc: Doc, id: string): Doc
+```
+
+## editable
+
+```ts
+export interface EditableRange {
+  id: string;
+  range: Range;
+}
+export function addEditableRange(doc: Doc, range: Range): { doc: Doc; id: string }
+export function editableAt(doc: Pick<Doc, 'paragraphs'>, pos: Position): EditableRange | undefined
+export function editableRanges(doc: Pick<Doc, 'paragraphs'>): EditableRange[]
+export function keepsOutside(before: Doc, after: Doc): boolean
+export function removeEditableRange(doc: Doc, id: string): Doc
+export function setRestricted(doc: Doc, on: boolean): Doc
 ```
 
 ## toc

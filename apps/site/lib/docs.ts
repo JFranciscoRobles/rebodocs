@@ -10,7 +10,7 @@ import { type Highlighter, createHighlighter } from 'shiki';
 const THEME = 'github-dark-dimmed';
 /** The landing page shows its code on white. */
 export const LIGHT_THEME = 'github-light';
-const LANGS = ['ts', 'tsx', 'js', 'json', 'bash', 'html', 'css'];
+const LANGS = ['ts', 'tsx', 'js', 'json', 'bash', 'html', 'css', 'nginx'];
 
 let highlighter: Promise<Highlighter> | undefined;
 const shiki = () => (highlighter ??= createHighlighter({ themes: [THEME, LIGHT_THEME], langs: LANGS }));

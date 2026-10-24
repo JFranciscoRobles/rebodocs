@@ -273,6 +273,8 @@ export class Keys {
           else this.editor.setArea('body');
           break;
         case 'Tab':
+          // Restricted, from one stretch that may be changed to the next, as Word goes.
+          if (this.editor.restricted && this.editor.nextEditable(e.shiftKey ? -1 : 1)) break;
           if (this.editor.text.paragraphs[this.editor.selection.focus.para].cell) this.moveToCell(e.shiftKey ? -1 : 1);
           else if (this.editor.tabChangesLevel()) this.editor.shiftListLevel(e.shiftKey ? -1 : 1);
           else this.editor.insertText('\t');

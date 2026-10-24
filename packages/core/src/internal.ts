@@ -22,6 +22,7 @@ export { type DocxOptions, exportDocx, documentXml } from './docx/export';
 export { type DocxSource, type EmbeddedFont, documentLanguage, embeddedFonts, objectImage } from './docx/source';
 export { parseXml, escapeXml, type XmlNode } from './docx/xml';
 export * from './notes';
+export * from './editable';
 export * from './toc';
 export * from './links';
 export * from './stories';

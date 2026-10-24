@@ -10,7 +10,7 @@ import { PASTEL_CLASS } from '@/lib/home';
 import { CAPTION } from '../styles';
 import { Readout } from '../ui';
 
-type Feature = 'menu' | 'panel' | 'ruler' | 'statusBar' | 'find' | 'focus' | 'title' | 'responsive' | 'files' | 'language';
+type Feature = 'menu' | 'panel' | 'ruler' | 'statusBar' | 'find' | 'slash' | 'variableSuggestions' | 'forms' | 'focus' | 'title' | 'responsive' | 'files' | 'language';
 
 /** Each switch, with whether it is on when not given. */
 const FEATURES: [Feature, boolean][] = [
@@ -19,6 +19,9 @@ const FEATURES: [Feature, boolean][] = [
   ['ruler', true],
   ['statusBar', true],
   ['find', true],
+  ['slash', true],
+  ['variableSuggestions', true],
+  ['forms', false],
   ['focus', true],
   ['title', true],
   ['responsive', true],

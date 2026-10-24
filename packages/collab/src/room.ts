@@ -8,7 +8,7 @@
 import { randomBytes } from 'node:crypto';
 import { type Doc, exportDocx, importDocx } from '@rebodocs/core/internal';
 import { type Op, apply, digest, renameIds, restamp, stampIds, transform } from './changes';
-import { type Entry, type EventName, type Events, type Hello, type OpsPost, type PeerInfo, type Presence, eventText } from './protocol';
+import { type Entry, type EventName, type Events, type Hello, type OpsPost, PROTOCOL, type PeerInfo, type Presence, eventText } from './protocol';
 import type { Kept, RoomStorage, Session } from './storage';
 
 /** The colours people are told apart by, in the order they are given out. */
@@ -187,6 +187,7 @@ export class Room {
     // What it has of the room is of use only if it is of the room as it is now.
     const from = known.epoch === this.epoch ? Math.max(0, Math.min(known.from || 0, this.log.length)) : 0;
     return {
+      protocol: PROTOCOL,
       client: id,
       key: client.key,
       color: client.color,
