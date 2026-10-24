@@ -70,6 +70,7 @@ export const ALIASES: Record<FormatId, string[]> = {
   dateFull: ['dateFull'],
   number: [],
   currency: ['importe'],
+  image: ['picture', 'foto'],
 };
 
 /** The rows of the table of formats: the "written as" columns are worked out by formatValue when the site is built. */
