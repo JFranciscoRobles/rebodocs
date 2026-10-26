@@ -63,6 +63,26 @@ const pdf = await editor.exportPdf('Contract');
 | `createResponsive` | Narrow windows and on-screen keyboards. |
 | `createSpellChecker` | Spell checking with Hunspell dictionaries you give, read in a worker: `editor.spellChecker = createSpellChecker({ dictionaries: { es: { aff, dic } } })`. |
 | `createVersionView` | Two versions compared, over the document. |
+| `createViewer` | A document only to read: one page under another, each whole on the screen, or all at once, with the status bar floating over them; `print()`. |
+| `pageThumbnail`, `pagePicture` | The first page of a document for a thumbnail: as the element the editor draws, or as a JPEG or PNG of a size, its pictures in it. |
+
+### A document to read
+
+```ts
+import { importDocx } from '@rebodocs/core';
+import { createViewer, pagePicture, setLocale } from '@rebodocs/editor';
+
+setLocale('es');
+const viewer = createViewer(element, importDocx(bytes)); // element has a size
+viewer.setLayout('all'); // every page at once, as large as lets them fit; 'pages' for one under another
+viewer.print();
+viewer.destroy();
+
+const thumbnail = await pagePicture(importDocx(bytes), 480); // a JPEG, its longest side 480 pixels
+```
+
+The bar's own views do the same as `setLayout`; its notes, its flowing text
+and its language are left out, the document only being read.
 
 ## Theming
 

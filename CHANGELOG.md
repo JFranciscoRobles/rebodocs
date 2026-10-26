@@ -4,6 +4,22 @@ Every package of Rebodocs is released at the same version. Before 1.0, a
 minor version (0.x.0) may change the API; such changes are listed under
 **Changed** with what to do about them.
 
+## Unreleased
+
+### Added
+
+- **A viewer: a document only to read.** `createViewer(element, doc)` in
+  `@rebodocs/editor`, `<DocsViewer docx>` in `@rebodocs/react`: the editor
+  read only, with no caret, one page under another and each whole on the
+  screen, or all of them at once as large as lets them fit (down to the
+  least zoom for a long one); the status bar floats over the pages, without
+  the notes, the flowing text and the language, its views setting the pages
+  out the same way; `print()` and `setLayout()`.
+- **The first page for a thumbnail.** `pageThumbnail(doc)` gives it as the
+  editor draws it, its pictures as data, out of sight and one at a time;
+  `pagePicture(doc, size, { type, quality })` as a JPEG or a PNG, drawn
+  through an SVG onto a canvas, its pictures in it.
+
 ## 0.11.0
 
 ### Added

@@ -136,6 +136,19 @@ the selection. `locale` sets the language of the few texts the library still
 draws there (the bar, what a screen reader is told). A [complete interface](https://github.com/JFranciscoRobles/rebodocs/tree/main/apps/demo/src/HeadlessEditor.tsx)
 built on the hooks is in the repository.
 
+## Only to read
+
+```tsx
+import { DocsViewer } from '@rebodocs/react';
+
+<DocsViewer docx={bytes} locale="es" style={{ height: 600 }} onReady={(viewer) => (printer.current = viewer)} />
+```
+
+One page under another, each whole on the screen, and the bar of the zoom
+over them, whose grid sets every page out at once (`layout="all"` to start
+so). `onReady` gives the viewer, to `print()` or `setLayout()`. Its first
+page for a thumbnail: `pagePicture(doc, size)` and `pageThumbnail(doc)`.
+
 ## Without React
 
 ```ts
