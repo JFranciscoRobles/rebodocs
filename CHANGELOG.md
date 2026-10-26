@@ -1,18 +1,31 @@
 # Changelog
 
-Every package of Rebodocs is released at the same version. Before 1.0, a
-minor version (0.x.0) may change the API; such changes are listed under
-**Changed** with what to do about them.
+Every package of Rebodocs is released at the same version, but for a patch
+(0.x.y) of one package alone, which says which. Before 1.0, a minor version
+(0.x.0) may change the API; such changes are listed under **Changed** with
+what to do about them.
 
 ## Unreleased
 
 ### Fixed
 
-- **The types of `DocsViewer`** say it gives a `ReactNode`, as the other
-  components do: its declaration had every property of `CSSProperties`
-  written out in it, 75 KB, in `@rebodocs/viewer/react` and in
-  `@rebodocs/react`; it is 1 KB.
+- **The types of `DocsViewer` in `@rebodocs/react`** say it gives a
+  `ReactNode`, as the other components do: its declaration had every
+  property of `CSSProperties` written out in it, 75 KB; it is 1 KB. (In
+  `@rebodocs/viewer/react` since 0.12.1.)
 - The status of each package's README says 0.12.
+
+## 0.12.1
+
+Of `@rebodocs/viewer` alone; it asks for `@rebodocs/core` and
+`@rebodocs/editor` 0.12.0.
+
+### Fixed
+
+- **The types of `DocsViewer`** in `@rebodocs/viewer/react` say it gives a
+  `ReactNode`, as the other components do: its declaration had every
+  property of `CSSProperties` written out in it, 75 KB; it is 1 KB.
+- Its README says 0.12.
 
 ## 0.12.0
 

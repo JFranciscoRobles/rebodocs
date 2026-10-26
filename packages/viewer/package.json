@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/viewer",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "A DOCX document only to read, in the browser: its pages as Word lays them out, a bar to zoom and print, and its first page as a thumbnail. With or without React.",
   "license": "MIT",
   "private": true,

@@ -4,10 +4,10 @@
 // points at the sources; npm gets the one written here.
 //
 // What another package of the repository the package uses is left out of its
-// files and named as a dependency at the same version, as all are published
-// together: `@rebodocs/editor` asks npm for `@rebodocs/core`, it does not carry
-// a copy. `@rebodocs/react` is the exception, built on its own, with everything
-// inside.
+// files and named as a dependency at the version that package is at, the same
+// for all when they are published together: `@rebodocs/editor` asks npm for
+// `@rebodocs/core`, it does not carry a copy. `@rebodocs/react` is the
+// exception, built on its own, with everything inside.
 //
 //   npm run build -w @rebodocs/<name>
 //   npm publish ./packages/<name>/dist
@@ -109,6 +109,8 @@ export async function buildPackage(name, spec) {
 
   const typesOf = (output) => `./types/${name}/${spec.entries[output].replace(/\.ts$/, '.d.ts')}`;
   const version = source.version;
+  // Each package of the repository it uses, at the version that package is at: one patched alone still asks for the others as they are.
+  const versionOf = (dep) => JSON.parse(readFileSync(join(packages, dep.slice('@rebodocs/'.length), 'package.json'), 'utf8')).version;
   const published = {
     name: source.name,
     version,
@@ -134,7 +136,7 @@ export async function buildPackage(name, spec) {
           .map(([path, output]) => [path.slice(2), [typesOf(output).slice(2)]]),
       ),
     },
-    dependencies: Object.fromEntries([...ours.map((dep) => [dep, version]), ...theirs.filter((dep) => !(dep in peers)).map((dep) => [dep, deps[dep]])].sort(([a], [b]) => a.localeCompare(b))),
+    dependencies: Object.fromEntries([...ours.map((dep) => [dep, versionOf(dep)]), ...theirs.filter((dep) => !(dep in peers)).map((dep) => [dep, deps[dep]])].sort(([a], [b]) => a.localeCompare(b))),
     ...(source.peerDependencies ? { peerDependencies: peers, peerDependenciesMeta: source.peerDependenciesMeta } : {}),
     publishConfig: { access: 'public' },
   };
