@@ -28,6 +28,7 @@
     "@rebodocs/core": "^0.11.0",
     "@rebodocs/editor": "^0.11.0",
     "@rebodocs/mcp": "^0.11.0",
+    "@rebodocs/viewer": "^0.11.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/markdown-it": "^14.2.0",
     "@types/turndown": "^5.0.6",

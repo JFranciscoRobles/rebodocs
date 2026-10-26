@@ -178,4 +178,4 @@ export {
   decideAllRevisions,
 } from './revisions';
 export { type TextBoxLook, insertTextBox } from './textboxes';
-export { type ClipRun, type ClipParagraph, type ClipTable, type ClipCell, type Clip, insertClip } from './clipboard';
+export { type ClipRun, type ClipImage, type ClipParagraph, type ClipTable, type ClipCell, type Clip, insertClip } from './clipboard';

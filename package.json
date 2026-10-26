@@ -20,6 +20,7 @@
     "realtime": "npm run dev -w @rebodocs/realtime-demo",
     "assistant": "npm run dev -w @rebodocs/assistant-demo",
     "crm": "npm run dev -w @rebodocs/crm-demo",
+    "viewer": "npm run dev -w @rebodocs/viewer-demo",
     "desktop": "npm run dev -w @rebodocs/desktop",
     "build:desktop": "npm run build -w @rebodocs/desktop",
     "build": "npm run build -w @rebodocs/playground",
@@ -29,7 +30,7 @@
     "lint": "biome check .",
     "api": "node tools/api-report.mjs",
     "format": "biome check --write .",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p apps/demo && tsc --noEmit -p apps/storage && tsc --noEmit -p apps/realtime && tsc --noEmit -p apps/assistant && tsc --noEmit -p apps/crm",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p apps/demo && tsc --noEmit -p apps/storage && tsc --noEmit -p apps/realtime && tsc --noEmit -p apps/assistant && tsc --noEmit -p apps/crm && tsc --noEmit -p apps/viewer",
     "word-compare": "node tools/word-compare.mjs",
     "a11y": "node tools/a11y-audit.mjs",
     "generate": "vite-node packages/mcp/src/generate.ts --",
@@ -44,7 +45,7 @@
     "site": "npm run build -w @rebodocs/react && npm run dev -w @rebodocs/site",
     "build:site": "npm run build -w @rebodocs/react && npm run build -w @rebodocs/site",
     "build:react": "npm run build -w @rebodocs/react && npm pack -w @rebodocs/react --pack-destination packages/react",
-    "build:packages": "npm run build -w @rebodocs/core -w @rebodocs/editor -w @rebodocs/collab -w @rebodocs/mcp",
+    "build:packages": "npm run build -w @rebodocs/core -w @rebodocs/editor -w @rebodocs/viewer -w @rebodocs/collab -w @rebodocs/mcp",
     "build:mcp": "npm run build -w @rebodocs/mcp"
   },
   "devDependencies": {

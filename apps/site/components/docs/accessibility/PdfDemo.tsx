@@ -7,6 +7,8 @@
 import { type Doc, type FontFile, readFont, renderPdf, setAltText } from '@rebodocs/core';
 import { unzlibSync } from 'fflate';
 import { useEffect, useMemo, useState } from 'react';
+import { useT } from '@/components/i18n';
+import type { L } from '@/lib/i18n';
 import { PASTEL_CLASS } from '@/lib/home';
 import { CAPTION } from '../styles';
 import { DemoBox, Readout } from '../ui';
@@ -89,17 +91,19 @@ function readTags(pdf: Uint8Array): Tag[] {
   return tags;
 }
 
-const LANGUAGES = [
-  ['en-GB', 'English'],
-  ['es-MX', 'Spanish'],
-  ['', 'None'],
-] as const;
+const LANGUAGES: [string, L][] = [
+  ['en-GB', { en: 'English', es: 'Inglés', zh: '英文' }],
+  ['es-MX', { en: 'Spanish', es: 'Español', zh: '西班牙文' }],
+  ['zh-CN', { en: 'Chinese', es: 'Chino', zh: '中文' }],
+  ['', { en: 'None', es: 'Ninguno', zh: '无' }],
+];
 
 export default function PdfDemo() {
   const [doc, setDoc] = useState<Doc>();
   const [fonts, setFonts] = useState<FontFile[]>([]);
   const [language, setLanguage] = useState('en-GB');
   const [described, setDescribed] = useState(true);
+  const t = useT();
 
   useEffect(() => {
     void lease().then(setDoc);
@@ -134,61 +138,75 @@ export default function PdfDemo() {
 
   const pill = (on: boolean) =>
     `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
-  const why = !made ? '' : made.universal ? 'said' : !made.lang ? 'not said: no language' : !described ? 'not said: a picture has no description' : 'not said';
+  const why = !made
+    ? ''
+    : made.universal
+      ? t({ en: 'said', es: 'lo dice', zh: '已声明' })
+      : !made.lang
+        ? t({ en: 'not said: no language', es: 'no lo dice: sin idioma', zh: '未声明：没有语言' })
+        : !described
+          ? t({ en: 'not said: a picture has no description', es: 'no lo dice: una imagen no tiene descripción', zh: '未声明：有图片没有描述' })
+          : t({ en: 'not said', es: 'no lo dice', zh: '未声明' });
 
   return (
     <DemoBox
-      title="What a screen reader finds in the PDF"
+      title={t({ en: 'What a screen reader finds in the PDF', es: 'Lo que encuentra un lector de pantalla en el PDF', zh: '屏幕阅读器在 PDF 中找到的内容' })}
       aside={
         <>
           <div>
-            <p className={CAPTION}>Language</p>
+            <p className={CAPTION}>{t({ en: 'Language', es: 'Idioma', zh: '语言' })}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {LANGUAGES.map(([tag, name]) => (
-                <button key={name} type="button" aria-pressed={language === tag} className={pill(language === tag)} onClick={() => setLanguage(tag)}>
-                  {name}
+                <button key={name.en} type="button" aria-pressed={language === tag} className={pill(language === tag)} onClick={() => setLanguage(tag)}>
+                  {t(name)}
                 </button>
               ))}
             </div>
           </div>
           <div className="flex flex-wrap gap-1.5">
             <button type="button" aria-pressed={described} className={pill(described)} onClick={() => setDescribed(!described)}>
-              The picture has a description
+              {t({ en: 'The picture has a description', es: 'La imagen tiene descripción', zh: '图片有描述' })}
             </button>
           </div>
           <Readout
-            label="The PDF"
+            label={t({ en: 'The PDF', es: 'El PDF', zh: 'PDF' })}
             lines={
               made
                 ? [
-                    ['tagged', 'yes', 'good'],
-                    ['language', made.lang ?? 'none', made.lang ? 'good' : 'warn'],
-                    ['bookmarks', String(made.bookmarks)],
+                    [t({ en: 'tagged', es: 'etiquetado', zh: '带标签' }), t({ en: 'yes', es: 'sí', zh: '是' }), 'good'],
+                    [t({ en: 'language', es: 'idioma', zh: '语言' }), made.lang ?? t({ en: 'none', es: 'ninguno', zh: '无' }), made.lang ? 'good' : 'warn'],
+                    [t({ en: 'bookmarks', es: 'marcadores', zh: '书签' }), String(made.bookmarks)],
                     ['PDF/UA', why, made.universal ? 'good' : 'warn'],
-                    ['size', `${(made.pdf.length / 1024).toFixed(0)} KB`, 'dim'],
+                    [t({ en: 'size', es: 'tamaño', zh: '大小' }), `${(made.pdf.length / 1024).toFixed(0)} KB`, 'dim'],
                   ]
-                : [['', 'making it…', 'dim']]
+                : [['', t({ en: 'making it…', es: 'haciéndolo…', zh: '正在生成…' }), 'dim']]
             }
           />
           {url && (
             <a href={url} download="lease.pdf" className="self-start rounded-full bg-ink px-4 py-2 text-[13px] font-semibold text-white no-underline hover:opacity-90">
-              Download the PDF
+              {t({ en: 'Download the PDF', es: 'Descargar el PDF', zh: '下载 PDF' })}
             </a>
           )}
         </>
       }
     >
-      <ol tabIndex={0} aria-label="The tags of the PDF" className="m-0 grid max-h-[560px] list-none gap-0.5 overflow-auto p-0 font-code text-[13px] leading-[1.55]">
+      <ol
+        tabIndex={0}
+        aria-label={t({ en: 'The tags of the PDF', es: 'Las etiquetas del PDF', zh: 'PDF 的标签' })}
+        className="m-0 grid max-h-[560px] list-none gap-0.5 overflow-auto p-0 font-code text-[13px] leading-[1.55]"
+      >
         {made ? (
           made.tags.map((tag, i) => (
             <li key={i} className="flex gap-2" style={{ paddingLeft: tag.depth * 18 }}>
               <span className="flex-none font-semibold text-[#8250df]">{tag.type}</span>
-              {tag.alt !== undefined && <span className={tag.alt ? 'text-[#1a7f37]' : 'text-[#a04100]'}>{tag.alt ? `“${tag.alt}”` : 'no description'}</span>}
+              {tag.alt !== undefined && (
+                <span className={tag.alt ? 'text-[#1a7f37]' : 'text-[#a04100]'}>{tag.alt ? `“${tag.alt}”` : t({ en: 'no description', es: 'sin descripción', zh: '无描述' })}</span>
+              )}
               {tag.text && <span className="min-w-0 text-ink-soft">{tag.text}</span>}
             </li>
           ))
         ) : (
-          <li className="text-muted">Making the PDF…</li>
+          <li className="text-muted">{t({ en: 'Making the PDF…', es: 'Haciendo el PDF…', zh: '正在生成 PDF…' })}</li>
         )}
       </ol>
     </DemoBox>

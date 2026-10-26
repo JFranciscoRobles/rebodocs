@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useT } from '@/components/i18n';
 import type { Pastel } from '@/lib/home';
 import { PASTEL_CLASS } from '@/lib/home';
 import { useUntilFound } from './keys';
@@ -56,13 +57,14 @@ export function TabPanel({ id, labelledBy, on, onFound, children }: { id: string
 }
 
 /** A demo to try, with a line on what it shows; `aside` goes beside it, `children` is the demo itself. */
-export function DemoBox({ children, aside, title = 'Try it' }: { children: ReactNode; aside?: ReactNode; title?: string }) {
+export function DemoBox({ children, aside, title }: { children: ReactNode; aside?: ReactNode; title?: string }) {
+  const t = useT();
   return (
     <div className="mt-7 flex flex-wrap overflow-hidden rounded-[18px] border border-border">
       <div className="min-w-0 flex-[1.6_1_440px] bg-surface px-7 py-6">
         <p className={`${CAPTION} flex items-center gap-2`}>
           <span className="size-2 animate-pulse-dot rounded-full bg-brand" aria-hidden="true" />
-          {title}
+          {title ?? t({ en: 'Try it', es: 'Pruébalo', zh: '试一试' })}
         </p>
         <div className="mt-3 rounded-[14px] border border-border bg-white p-5">{children}</div>
       </div>

@@ -16,6 +16,7 @@ It was built to live inside another application: a CRM that fills contract and r
 - **Commands with "/"**: headings, lists, tables, pictures, signatures, and commands of your own.
 - **PDF and DOCX on a server**, with the same layout, without a browser.
 - **Collaboration** in real time, with your backend keeping the files, and a version of each session of work if you want one.
+- **Chinese and other languages.** Lines of Chinese break between characters, never starting with “。” or “，”, and the interface speaks English, Spanish and Chinese.
 - **A phone-ready editor**: fit to width, pinch to zoom, touch selection.
 
 ## The packages
@@ -24,6 +25,7 @@ It was built to live inside another application: a CRM that fills contract and r
 | --- | --- |
 | `@rebodocs/react` | You have a React or Next.js application and want the editor in a screen of it. |
 | `@rebodocs/editor` | You want the editor in a page with no framework, or to build on its pieces. |
+| `@rebodocs/viewer` | You only show documents: pages to read, thumbnails, no editing. |
 | `@rebodocs/core` | You generate or transform documents in code: fill a template, make a PDF. |
 | `@rebodocs/collab` | Several people must work on the same document at once. |
 | `@rebodocs/mcp` | An AI assistant should read and edit documents: Claude Desktop and other MCP clients, or Claude in a chat of your application. |

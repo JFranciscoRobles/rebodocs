@@ -1,5 +1,5 @@
 export { DocsEditor, type DocsEditorProps } from './DocsEditor';
-export { DocsViewer, type DocsViewerProps } from './DocsViewer';
+export { DocsViewer, type DocsViewerProps } from '@rebodocs/viewer/react';
 export { type DocsFeatures, type DocsHandle, type DocsOptions, mountDocs } from './mount';
 export { DocsProvider, type DocsProviderProps, DocsSurface, type DocsSurfaceProps, type UseDocs, useDocs, useDocsValue } from './headless';
 export {
@@ -34,9 +34,6 @@ export {
   addLocale,
   createSpellChecker,
   createVersionView,
-  createViewer,
-  pagePicture,
-  pageThumbnail,
   fontFamilies,
   inkOn,
   getLocale,
@@ -70,11 +67,9 @@ export type {
   VersionInfo,
   VersionView,
   Versions,
-  Viewer,
-  ViewerLayout,
-  ViewerOptions,
-  PagePictureOptions,
 } from '@rebodocs/editor';
+export { createViewer, pagePicture, pageThumbnail } from '@rebodocs/viewer';
+export type { PagePictureOptions, Viewer, ViewerLayout, ViewerOptions, ViewerSource } from '@rebodocs/viewer';
 export { NOTE_COLORS, compareDocs } from '@rebodocs/core/internal';
 export type {
   ActiveFormat,

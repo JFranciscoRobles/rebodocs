@@ -6,6 +6,8 @@
 // order, each told below. Checked in apps/storage/src/api.ts and server/api.ts.
 
 import { useState } from 'react';
+import { useT } from '@/components/i18n';
+import type { L } from '@/lib/i18n';
 import { roving } from '../keys';
 
 type Who = 'browser' | 'backend' | 'bucket';
@@ -51,47 +53,111 @@ const LAYOUTS: Layout[] = [
   },
 ];
 
-const BOXES: Record<Who, { name: string; says: string }> = {
-  browser: { name: 'The browser', says: 'the editor · no keys' },
-  backend: { name: 'Your backend', says: 'has the keys · signs' },
-  bucket: { name: 'The bucket', says: 'R2 · S3 · MinIO · B2' },
+const BOXES: Record<Who, { name: L; says: L }> = {
+  browser: { name: { en: 'The browser', es: 'El navegador', zh: '浏览器' }, says: { en: 'the editor · no keys', es: 'el editor · sin claves', zh: '编辑器 · 无密钥' } },
+  backend: { name: { en: 'Your backend', es: 'Tu backend', zh: '你的后端' }, says: { en: 'has the keys · signs', es: 'tiene las claves · firma', zh: '持有密钥 · 签名' } },
+  bucket: { name: { en: 'The bucket', es: 'El bucket', zh: '存储桶' }, says: { en: 'R2 · S3 · MinIO · B2', es: 'R2 · S3 · MinIO · B2', zh: 'R2 · S3 · MinIO · B2' } },
 };
 
 interface Step {
   edge: Edge;
   what: string;
-  text: string;
+  text: L;
 }
 
-const FLOWS: { name: string; sums: string; steps: Step[] }[] = [
+const FLOWS: { name: L; sums: L; steps: Step[] }[] = [
   {
-    name: 'Open a document',
-    sums: 'The file comes from the bucket straight to the browser.',
+    name: { en: 'Open a document', es: 'Abrir un documento', zh: '打开文档' },
+    sums: { en: 'The file comes from the bucket straight to the browser.', es: 'El archivo va del bucket directo al navegador.', zh: '文件直接从存储桶到达浏览器。' },
     steps: [
-      { edge: 'browser>backend', what: 'GET /api/url?key=contract.docx', text: 'An address to read this file from, please.' },
-      { edge: 'backend>browser', what: '{ url }', text: 'Signed with the keys, for this file and five minutes.' },
-      { edge: 'browser>bucket', what: 'GET url', text: 'The browser goes to the bucket with it: no key, only the address.' },
-      { edge: 'bucket>browser', what: 'the DOCX', text: 'The bytes, given to the editor as its docx.' },
+      {
+        edge: 'browser>backend',
+        what: 'GET /api/url?key=contract.docx',
+        text: { en: 'An address to read this file from, please.', es: 'Una dirección para leer este archivo, por favor.', zh: '请给我一个读取该文件的地址。' },
+      },
+      {
+        edge: 'backend>browser',
+        what: '{ url }',
+        text: { en: 'Signed with the keys, for this file and five minutes.', es: 'Firmada con las claves, para este archivo y cinco minutos.', zh: '用密钥签名，仅对该文件有效，期限五分钟。' },
+      },
+      {
+        edge: 'browser>bucket',
+        what: 'GET url',
+        text: {
+          en: 'The browser goes to the bucket with it: no key, only the address.',
+          es: 'El navegador va al bucket con ella: sin clave, solo la dirección.',
+          zh: '浏览器带着它访问存储桶：没有密钥，只有地址。',
+        },
+      },
+      { edge: 'bucket>browser', what: 'the DOCX', text: { en: 'The bytes, given to the editor as its docx.', es: 'Los bytes, dados al editor como su docx.', zh: '字节作为 docx 交给编辑器。' } },
     ],
   },
   {
-    name: 'Save it',
-    sums: 'What onSave hands back goes to the bucket, not through your server.',
+    name: { en: 'Save it', es: 'Guardarlo', zh: '保存文档' },
+    sums: {
+      en: 'What onSave hands back goes to the bucket, not through your server.',
+      es: 'Lo que devuelve onSave va al bucket, no pasa por tu servidor.',
+      zh: 'onSave 返回的内容直接写入存储桶，不经过你的服务器。',
+    },
     steps: [
-      { edge: 'browser>backend', what: 'POST /api/url?key=contract.docx', text: 'An address to write this file to.' },
-      { edge: 'backend>browser', what: '{ url, type }', text: 'Signed for a PUT of that Content-Type and no other.' },
-      { edge: 'browser>bucket', what: 'PUT url · content-type', text: 'The document, sent with the type that was signed.' },
-      { edge: 'bucket>browser', what: '200', text: 'Stored. A version goes beside it the same way, through POST /api/versions.' },
+      {
+        edge: 'browser>backend',
+        what: 'POST /api/url?key=contract.docx',
+        text: { en: 'An address to write this file to.', es: 'Una dirección para escribir este archivo.', zh: '请给我一个写入该文件的地址。' },
+      },
+      {
+        edge: 'backend>browser',
+        what: '{ url, type }',
+        text: { en: 'Signed for a PUT of that Content-Type and no other.', es: 'Firmada para un PUT de ese Content-Type y ningún otro.', zh: '签名只允许使用该 Content-Type 的 PUT。' },
+      },
+      {
+        edge: 'browser>bucket',
+        what: 'PUT url · content-type',
+        text: { en: 'The document, sent with the type that was signed.', es: 'El documento, enviado con el tipo que se firmó.', zh: '以签名时的类型发送文档。' },
+      },
+      {
+        edge: 'bucket>browser',
+        what: '200',
+        text: {
+          en: 'Stored. A version goes beside it the same way, through POST /api/versions.',
+          es: 'Guardado. Una versión va a su lado de la misma forma, con POST /api/versions.',
+          zh: '已保存。版本也以同样的方式通过 POST /api/versions 保存在旁边。',
+        },
+      },
     ],
   },
   {
-    name: 'Make the PDF',
-    sums: 'The one thing the server does with the files itself: work for a server.',
+    name: { en: 'Make the PDF', es: 'Hacer el PDF', zh: '生成 PDF' },
+    sums: {
+      en: 'The one thing the server does with the files itself: work for a server.',
+      es: 'Lo único que el servidor hace con los archivos él mismo: trabajo para un servidor.',
+      zh: '这是服务器唯一亲自处理文件的环节：本来就是服务器的工作。',
+    },
     steps: [
-      { edge: 'browser>backend', what: 'POST /api/pdf · { client, … }', text: 'The values of the variables, as JSON.' },
-      { edge: 'backend>bucket', what: 'GET contract.docx', text: 'The template, as it was last saved, read with the keys.' },
-      { edge: 'backend>bucket', what: 'PUT contract.pdf', text: 'Filled, laid out with font files, and stored beside it.' },
-      { edge: 'backend>browser', what: '{ key, url, pages }', text: 'Where it is, with an address to open it from.' },
+      {
+        edge: 'browser>backend',
+        what: 'POST /api/pdf · { client, … }',
+        text: { en: 'The values of the variables, as JSON.', es: 'Los valores de las variables, como JSON.', zh: '变量的值，以 JSON 形式发送。' },
+      },
+      {
+        edge: 'backend>bucket',
+        what: 'GET contract.docx',
+        text: { en: 'The template, as it was last saved, read with the keys.', es: 'La plantilla, como se guardó por última vez, leída con las claves.', zh: '用密钥读取最近一次保存的模板。' },
+      },
+      {
+        edge: 'backend>bucket',
+        what: 'PUT contract.pdf',
+        text: {
+          en: 'Filled, laid out with font files, and stored beside it.',
+          es: 'Llenada, maquetada con archivos de fuentes, y guardada a su lado.',
+          zh: '填写后用字体文件排版，并保存在模板旁边。',
+        },
+      },
+      {
+        edge: 'backend>browser',
+        what: '{ key, url, pages }',
+        text: { en: 'Where it is, with an address to open it from.', es: 'Dónde está, con una dirección para abrirlo.', zh: '返回 PDF 的位置及打开它的地址。' },
+      },
     ],
   },
 ];
@@ -99,15 +165,21 @@ const FLOWS: { name: string; sums: string; steps: Step[] }[] = [
 export function Flow() {
   const [chosen, setChosen] = useState(0);
   const flow = FLOWS[chosen];
+  const t = useT();
 
   return (
     <div className="mt-7 flex flex-wrap items-stretch gap-6">
-      <div role="radiogroup" aria-label="What happens?" className="flex min-w-0 flex-[1_1_240px] flex-col gap-3" onKeyDown={(event) => roving(event, setChosen)}>
+      <div
+        role="radiogroup"
+        aria-label={t({ en: 'What happens?', es: '¿Qué pasa?', zh: '发生了什么？' })}
+        className="flex min-w-0 flex-[1_1_240px] flex-col gap-3"
+        onKeyDown={(event) => roving(event, setChosen)}
+      >
         {FLOWS.map((f, i) => {
           const on = i === chosen;
           return (
             <button
-              key={f.name}
+              key={f.name.en}
               type="button"
               role="radio"
               aria-checked={on}
@@ -119,8 +191,8 @@ export function Flow() {
                 <span className={`size-2.5 rounded-full ${on ? 'bg-brand' : ''}`} />
               </span>
               <span>
-                <span className="block text-base font-semibold">{f.name}</span>
-                <span className={`mt-1.5 block text-sm leading-snug ${on ? 'text-ink-soft' : 'text-muted'}`}>{f.sums}</span>
+                <span className="block text-base font-semibold">{t(f.name)}</span>
+                <span className={`mt-1.5 block text-sm leading-snug ${on ? 'text-ink-soft' : 'text-muted'}`}>{t(f.sums)}</span>
               </span>
             </button>
           );
@@ -138,7 +210,7 @@ export function Flow() {
             <li key={i} className="flex items-start gap-3">
               <span className="mt-0.5 flex size-5.5 flex-none items-center justify-center rounded-full bg-brand font-code text-[12px] font-semibold text-white">{i + 1}</span>
               <span className="text-[15px] leading-normal text-ink-soft">
-                <code className="font-code text-[13.5px] text-ink">{step.what}</code> — {step.text}
+                <code className="font-code text-[13.5px] text-ink">{step.what}</code> — {t(step.text)}
               </span>
             </li>
           ))}
@@ -152,6 +224,7 @@ const smooth = 'transition-[stroke,opacity,fill] duration-350';
 
 /** The three, and the lines between them: those the requests take lit, with their number on them. */
 function Drawing({ layout, steps }: { layout: Layout; steps: Step[] }) {
+  const t = useT();
   const arrow = (live: boolean) => `flow-${layout.id}-${live ? 'on' : 'off'}`;
   const lanes = Object.keys(layout.edges) as Edge[];
   /** The numbers on each lane: a lane taken twice carries both. */
@@ -161,7 +234,12 @@ function Drawing({ layout, steps }: { layout: Layout; steps: Step[] }) {
     <svg
       viewBox={`0 0 ${layout.width} ${layout.height}`}
       role="img"
-      aria-label={steps.map((step, i) => `${i + 1}. ${step.edge.replace('>', ' to ')}: ${step.what}`).join('; ')}
+      aria-label={steps
+        .map((step, i) => {
+          const [from, to] = step.edge.split('>') as [Who, Who];
+          return `${i + 1}. ${t(BOXES[from].name)} → ${t(BOXES[to].name)}: ${step.what}`;
+        })
+        .join('; ')}
       className={`h-auto w-full ${layout.id === 'wide' ? 'hidden sm:block' : 'mx-auto block max-w-[360px] sm:hidden'}`}
     >
       <defs>
@@ -194,10 +272,10 @@ function Drawing({ layout, steps }: { layout: Layout; steps: Step[] }) {
               className={`${smooth} ${on ? (keys ? 'fill-pastel-blue stroke-brand' : 'fill-white stroke-brand') : 'fill-hover stroke-border-strong'}`}
             />
             <text x={x + w / 2} y={y + h / 2 - 4} textAnchor="middle" className={`${smooth} font-text text-[15px] font-semibold ${on ? 'fill-ink' : 'fill-faint'}`}>
-              {BOXES[who].name}
+              {t(BOXES[who].name)}
             </text>
             <text x={x + w / 2} y={y + h / 2 + 14} textAnchor="middle" className={`${smooth} font-code text-[11px] ${on ? 'fill-muted' : 'fill-faint'}`}>
-              {BOXES[who].says}
+              {t(BOXES[who].says)}
             </text>
           </g>
         );

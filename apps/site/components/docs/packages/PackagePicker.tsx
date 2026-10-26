@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useT } from '@/components/i18n';
+import type { L } from '@/lib/i18n';
 import { InstallCommand } from '../InstallCommand';
 import { roving } from '../keys';
 import { GOALS, type PackageName, type Presence, short } from './data';
@@ -21,15 +23,24 @@ const LAYOUTS: Layout[] = [
   {
     id: 'wide',
     width: 600,
-    height: 250,
+    height: 256,
     box: [164, 60],
-    at: { '@rebodocs/core': [18, 28], '@rebodocs/editor': [218, 28], '@rebodocs/react': [418, 28], '@rebodocs/mcp': [18, 168], '@rebodocs/collab': [218, 168] },
+    at: {
+      '@rebodocs/core': [18, 28],
+      '@rebodocs/editor': [218, 28],
+      '@rebodocs/react': [418, 28],
+      '@rebodocs/collab': [18, 168],
+      '@rebodocs/mcp': [218, 168],
+      '@rebodocs/viewer': [418, 168],
+    },
     uses: [
       ['@rebodocs/editor', '@rebodocs/core', 'M218 58H188'],
       ['@rebodocs/react', '@rebodocs/editor', 'M418 58H388'],
-      ['@rebodocs/mcp', '@rebodocs/core', 'M100 168V94'],
-      ['@rebodocs/collab', '@rebodocs/core', 'M250 168L160 94'],
-      ['@rebodocs/react', '@rebodocs/collab', 'M500 88V198H388'],
+      ['@rebodocs/collab', '@rebodocs/core', 'M100 168V94'],
+      ['@rebodocs/mcp', '@rebodocs/core', 'M250 168L160 94'],
+      ['@rebodocs/viewer', '@rebodocs/editor', 'M450 168L360 94'],
+      ['@rebodocs/react', '@rebodocs/viewer', 'M520 88V162'],
+      ['@rebodocs/react', '@rebodocs/collab', 'M582 58H592V244H100V234'],
     ],
   },
   {
@@ -37,21 +48,30 @@ const LAYOUTS: Layout[] = [
     width: 320,
     height: 320,
     box: [96, 56],
-    at: { '@rebodocs/core': [112, 14], '@rebodocs/editor': [8, 130], '@rebodocs/collab': [112, 130], '@rebodocs/mcp': [216, 130], '@rebodocs/react': [8, 250] },
+    at: {
+      '@rebodocs/core': [112, 14],
+      '@rebodocs/editor': [8, 130],
+      '@rebodocs/collab': [112, 130],
+      '@rebodocs/mcp': [216, 130],
+      '@rebodocs/viewer': [8, 250],
+      '@rebodocs/react': [216, 250],
+    },
     uses: [
       ['@rebodocs/editor', '@rebodocs/core', 'M60 130L128 76'],
       ['@rebodocs/collab', '@rebodocs/core', 'M160 130V76'],
       ['@rebodocs/mcp', '@rebodocs/core', 'M260 130L192 76'],
-      ['@rebodocs/react', '@rebodocs/editor', 'M56 250V192'],
-      ['@rebodocs/react', '@rebodocs/collab', 'M104 278H160V192'],
+      ['@rebodocs/viewer', '@rebodocs/editor', 'M56 250V192'],
+      ['@rebodocs/react', '@rebodocs/editor', 'M216 262L100 192'],
+      ['@rebodocs/react', '@rebodocs/collab', 'M240 250L184 192'],
+      ['@rebodocs/react', '@rebodocs/viewer', 'M216 290H110'],
     ],
   },
 ];
 /** Whole class names, so Tailwind finds them. */
-const LOOK: Record<Presence, { box: string; name: string; label: string }> = {
-  install: { box: 'fill-pastel-blue stroke-brand', name: 'fill-brand', label: 'install it' },
-  inside: { box: 'fill-pastel-yellow stroke-[#b07a00] [stroke-dasharray:5_4]', name: 'fill-pastel-yellow-fg', label: 'comes inside' },
-  none: { box: 'fill-hover stroke-border-strong opacity-55', name: 'fill-faint', label: 'not needed' },
+const LOOK: Record<Presence, { box: string; name: string; label: L }> = {
+  install: { box: 'fill-pastel-blue stroke-brand', name: 'fill-brand', label: { en: 'install it', es: 'instálalo', zh: '安装' } },
+  inside: { box: 'fill-pastel-yellow stroke-[#b07a00] [stroke-dasharray:5_4]', name: 'fill-pastel-yellow-fg', label: { en: 'comes inside', es: 'viene dentro', zh: '已内置' } },
+  none: { box: 'fill-hover stroke-border-strong opacity-55', name: 'fill-faint', label: { en: 'not needed', es: 'no hace falta', zh: '不需要' } },
 };
 const smooth = 'transition-[fill,stroke,opacity] duration-350';
 
@@ -59,15 +79,21 @@ const smooth = 'transition-[fill,stroke,opacity] duration-350';
 export function PackagePicker() {
   const [chosen, setChosen] = useState(0);
   const goal = GOALS[chosen];
+  const t = useT();
 
   return (
     <div className="mt-7 flex flex-wrap items-stretch gap-6">
-      <div role="radiogroup" aria-label="What are you making?" className="flex min-w-0 flex-[1_1_280px] flex-col gap-3" onKeyDown={(event) => roving(event, setChosen)}>
+      <div
+        role="radiogroup"
+        aria-label={t({ en: 'What are you making?', es: '¿Qué estás haciendo?', zh: '你要做什么？' })}
+        className="flex min-w-0 flex-[1_1_280px] flex-col gap-3"
+        onKeyDown={(event) => roving(event, setChosen)}
+      >
         {GOALS.map((g, i) => {
           const on = i === chosen;
           return (
             <button
-              key={g.want}
+              key={g.want.en}
               type="button"
               role="radio"
               aria-checked={on}
@@ -79,7 +105,7 @@ export function PackagePicker() {
                 <span className={`size-2.5 rounded-full ${on ? 'bg-brand' : ''}`} />
               </span>
               <span>
-                <span className="block text-base font-semibold">{g.want}</span>
+                <span className="block text-base font-semibold">{t(g.want)}</span>
                 <span className={`mt-1.5 block font-code text-sm ${on ? 'text-brand' : 'text-muted'}`}>{g.use}</span>
               </span>
             </button>
@@ -96,26 +122,26 @@ export function PackagePicker() {
         <div className="flex flex-wrap gap-4 text-[13px] text-ink-soft">
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-3.5 rounded-[3px] border-[1.5px] border-brand bg-pastel-blue" />
-            Install it
+            {t({ en: 'Install it', es: 'Instálalo', zh: '需要安装' })}
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-3.5 rounded-[3px] border-[1.5px] border-dashed border-[#b07a00] bg-pastel-yellow" />
-            Comes inside what you install
+            {t({ en: 'Comes inside what you install', es: 'Viene dentro de lo que instalas', zh: '已内置在你安装的包中' })}
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-3.5 rounded-[3px] border-[1.5px] border-border-strong bg-hover" />
-            Not needed
+            {t({ en: 'Not needed', es: 'No hace falta', zh: '不需要' })}
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="h-0 w-4 border-t-[1.6px] border-brand" />
-            uses
+            {t({ en: 'uses', es: 'usa', zh: '依赖' })}
           </span>
         </div>
         <div key={chosen} className="flex animate-enter flex-col items-start gap-2.5">
           {goal.commands.map((command) => (
             <InstallCommand key={command} command={command} />
           ))}
-          <p className="m-0 text-[15px] leading-normal text-ink-soft">{goal.note}</p>
+          <p className="m-0 text-[15px] leading-normal text-ink-soft">{t(goal.note)}</p>
         </div>
       </div>
     </div>
@@ -124,6 +150,7 @@ export function PackagePicker() {
 
 /** The packages and who uses whom, each box coloured by how it is in the application. */
 function Drawing({ layout, presence }: { layout: Layout; presence: Record<PackageName, Presence> }) {
+  const t = useT();
   const [w, h] = layout.box;
   const names = Object.keys(layout.at) as PackageName[];
   const arrow = (live: boolean) => `pkg-${layout.id}-${live ? 'on' : 'off'}`;
@@ -131,7 +158,7 @@ function Drawing({ layout, presence }: { layout: Layout; presence: Record<Packag
     <svg
       viewBox={`0 0 ${layout.width} ${layout.height}`}
       role="img"
-      aria-label={names.map((name) => `${name}: ${LOOK[presence[name]].label}`).join(', ')}
+      aria-label={names.map((name) => `${name}: ${t(LOOK[presence[name]].label)}`).join(', ')}
       className={`h-auto w-full ${layout.id === 'wide' ? 'hidden sm:block' : 'mx-auto block max-w-[360px] sm:hidden'}`}
     >
       <defs>
@@ -155,7 +182,7 @@ function Drawing({ layout, presence }: { layout: Layout; presence: Record<Packag
               {short(name)}
             </text>
             <text x={x + w / 2} y={y + h / 2 + 14} textAnchor="middle" className={`${smooth} font-text text-[11.5px] ${look.name}`}>
-              {look.label}
+              {t(look.label)}
             </text>
           </g>
         );

@@ -147,7 +147,10 @@ import { DocsViewer } from '@rebodocs/react';
 One page under another, each whole on the screen, and the bar of the zoom
 over them, whose grid sets every page out at once (`layout="all"` to start
 so). `onReady` gives the viewer, to `print()` or `setLayout()`. Its first
-page for a thumbnail: `pagePicture(doc, size)` and `pageThumbnail(doc)`.
+page for a thumbnail: `pagePicture(docx, size)` and `pageThumbnail(docx)`.
+An application that only shows documents can take
+[`@rebodocs/viewer`](https://www.npmjs.com/package/@rebodocs/viewer) alone,
+with the same `DocsViewer` in `@rebodocs/viewer/react`.
 
 ## Without React
 

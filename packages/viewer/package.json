@@ -1,0 +1,27 @@
+{
+  "name": "@rebodocs/viewer",
+  "version": "0.11.0",
+  "description": "A DOCX document only to read, in the browser: its pages as Word lays them out, a bar to zoom and print, and its first page as a thumbnail. With or without React.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./react": "./src/react.ts"
+  },
+  "dependencies": {
+    "@rebodocs/core": "*",
+    "@rebodocs/editor": "*"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  }
+}

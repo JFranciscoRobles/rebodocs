@@ -1,0 +1,22 @@
+{
+  "name": "@rebodocs/viewer-demo",
+  "version": "0.11.0",
+  "description": "Documents only to read: a shelf of them with the first page of each as a thumbnail, and each one opened in the viewer.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "samples": "vite-node scripts/samples.ts && vite-node ../demo/scripts/sample.ts public/samples/agreement.docx",
+    "dev": "npm run samples && vite",
+    "build": "npm run samples && tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@rebodocs/viewer": "^0.11.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.1"
+  }
+}

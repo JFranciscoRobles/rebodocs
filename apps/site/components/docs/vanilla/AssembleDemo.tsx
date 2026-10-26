@@ -22,24 +22,27 @@ import {
   setLocale,
 } from '@rebodocs/editor';
 import { useEffect, useRef, useState } from 'react';
+import { useEditorLocale } from '@/components/editorLocale';
+import { useT } from '@/components/i18n';
+import type { L } from '@/lib/i18n';
 import { PASTEL_CLASS } from '@/lib/home';
 import { CAPTION } from '../styles';
 import { lease } from '../accessibility/sample';
 
-const PIECES = [
-  ['toolbar', 'Toolbar'],
-  ['ruler', 'Ruler'],
-  ['panel', 'Side panel'],
-  ['status', 'Status bar'],
-  ['bubble', 'Selection bar'],
-  ['slash', '“/” menu'],
-  ['suggest', '“{{” list'],
-  ['find', 'Find'],
-  ['menu', 'Menu'],
-  ['focus', 'Full screen'],
-] as const;
+type Piece = 'toolbar' | 'ruler' | 'panel' | 'status' | 'bubble' | 'slash' | 'suggest' | 'find' | 'menu' | 'focus';
 
-type Piece = (typeof PIECES)[number][0];
+const PIECES: [Piece, L][] = [
+  ['toolbar', { en: 'Toolbar', es: 'Barra de herramientas', zh: '工具栏' }],
+  ['ruler', { en: 'Ruler', es: 'Regla', zh: '标尺' }],
+  ['panel', { en: 'Side panel', es: 'Panel lateral', zh: '侧边栏' }],
+  ['status', { en: 'Status bar', es: 'Barra de estado', zh: '状态栏' }],
+  ['bubble', { en: 'Selection bar', es: 'Barra de selección', zh: '选区工具条' }],
+  ['slash', { en: '“/” menu', es: 'Menú “/”', zh: '“/” 菜单' }],
+  ['suggest', { en: '“{{” list', es: 'Lista “{{”', zh: '“{{” 列表' }],
+  ['find', { en: 'Find', es: 'Buscar', zh: '查找' }],
+  ['menu', { en: 'Menu', es: 'Menú', zh: '菜单' }],
+  ['focus', { en: 'Full screen', es: 'Pantalla completa', zh: '全屏' }],
+];
 
 /** The code that makes the pieces chosen, wired as they are here. */
 function codeFor(on: Set<Piece>): string {
@@ -87,6 +90,8 @@ export default function AssembleDemo() {
   const [on, setOn] = useState<Set<Piece>>(() => new Set(['toolbar', 'ruler', 'status', 'bubble', 'slash', 'suggest', 'find']));
   const [ready, setReady] = useState(false);
   const editorRef = useRef<Editor | undefined>(undefined);
+  const t = useT();
+  const editorLocale = useEditorLocale();
   const box = {
     app: useRef<HTMLDivElement>(null),
     toolbar: useRef<HTMLDivElement>(null),
@@ -99,7 +104,7 @@ export default function AssembleDemo() {
   // The editor, once: the pieces come and go around it, and the document and its history stay.
   useEffect(() => {
     const was = getLocale();
-    setLocale('en');
+    setLocale(editorLocale);
     const editor = new Editor(box.pages.current!);
     editorRef.current = editor;
     void lease().then((doc) => {
@@ -160,11 +165,11 @@ export default function AssembleDemo() {
   return (
     <div className="mt-7 overflow-hidden rounded-[18px] border border-border">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-border bg-surface px-6 py-4">
-        <p className={CAPTION}>Pieces</p>
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Pieces">
+        <p className={CAPTION}>{t({ en: 'Pieces', es: 'Piezas', zh: '部件' })}</p>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label={t({ en: 'Pieces', es: 'Piezas', zh: '部件' })}>
           {PIECES.map(([piece, name]) => (
             <button key={piece} type="button" aria-pressed={on.has(piece)} className={pill(on.has(piece))} onClick={() => toggle(piece)}>
-              {name}
+              {t(name)}
             </button>
           ))}
         </div>
@@ -179,8 +184,12 @@ export default function AssembleDemo() {
         <div ref={box.status} />
       </div>
       <div className="border-t border-border bg-surface px-6 py-5">
-        <p className={CAPTION}>The code of what is shown</p>
-        <pre tabIndex={0} aria-label="The code of what is shown" className="m-0 mt-2.5 overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3.5 font-code text-[12.5px] leading-[1.65] text-[#edece8]">
+        <p className={CAPTION}>{t({ en: 'The code of what is shown', es: 'El código de lo que se ve', zh: '当前效果的代码' })}</p>
+        <pre
+          tabIndex={0}
+          aria-label={t({ en: 'The code of what is shown', es: 'El código de lo que se ve', zh: '当前效果的代码' })}
+          className="m-0 mt-2.5 overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3.5 font-code text-[12.5px] leading-[1.65] text-[#edece8]"
+        >
           {codeFor(on)}
         </pre>
       </div>

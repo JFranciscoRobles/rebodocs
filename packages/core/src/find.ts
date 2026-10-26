@@ -4,6 +4,7 @@
 
 import { type Doc, type Position, type Range, defined } from './model';
 import { deleteRange, insertText, propsAt } from './ops';
+import { isCjk } from './cjk';
 
 export interface FindOptions {
   /** Capital and small letters count as different. */
@@ -37,7 +38,9 @@ export function findAll(doc: Doc, query: string, options: FindOptions = {}): Ran
     if (hay.length !== text.length || needle.length !== query.length) return;
     for (let i = hay.indexOf(needle); i >= 0; i = hay.indexOf(needle, i + needle.length)) {
       const end = i + needle.length;
-      if (options.wholeWord && ((i > 0 && WORD_CHAR.test(text[i - 1])) || (end < text.length && WORD_CHAR.test(text[end])))) continue;
+      // Chinese has no spaces to part its words: a character beside one is no longer word, as in Word.
+      const joined = (k: number) => WORD_CHAR.test(text[k]) && !isCjk(text[k]);
+      if (options.wholeWord && ((i > 0 && joined(i - 1)) || (end < text.length && joined(end)))) continue;
       out.push({ from: { para, offset: at[i] }, to: { para, offset: at[end - 1] + 1 } });
     }
   });

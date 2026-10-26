@@ -9,7 +9,7 @@ import { defineConfig } from 'vitest/config';
 
 const CHROME = ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'];
 const chrome = !process.env.CI && CHROME.some((path) => existsSync(path));
-const BROWSER_TESTS = 'packages/editor/test/browser/**/*.test.ts';
+const BROWSER_TESTS = 'packages/{editor,viewer}/test/browser/**/*.test.ts';
 
 export default defineConfig({
   test: {

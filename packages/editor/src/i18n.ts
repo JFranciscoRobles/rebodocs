@@ -1332,12 +1332,23 @@ const listeners = new Set<() => void>();
 
 /** The language of a tag like `en-US` or `es_MX`, when the interface speaks it. */
 function known(locale: string): string | undefined {
+  if (LOCALES[locale]) return locale;
   const code = locale.toLowerCase().split(/[-_]/)[0];
-  return LOCALES[locale] ? locale : LOCALES[code] ? code : undefined;
+  // Chinese is written two ways: Traditional in Taiwan, Hong Kong and Macao, Simplified elsewhere.
+  if (code === 'zh') {
+    const script = /[-_](hant|tw|hk|mo)\b/i.test(locale) ? 'zh-Hant' : 'zh-Hans';
+    if (LOCALES[script]) return script;
+  }
+  return LOCALES[code] ? code : undefined;
 }
 
-/** Until one is set: the first of the browser's languages the interface speaks, or English. */
-let current = (typeof navigator === 'undefined' ? [] : (navigator.languages ?? [navigator.language])).map((one) => one && known(one)).find(Boolean) ?? FALLBACK;
+/** The first of the browser's languages the interface speaks, or English. */
+const fromBrowser = () => (typeof navigator === 'undefined' ? [] : (navigator.languages ?? [navigator.language])).map((one) => one && known(one)).find(Boolean) ?? FALLBACK;
+
+/** Until one is set: the browser's. */
+let current = fromBrowser();
+/** Whether a language was set: until then, one added later that the browser asks for is taken. */
+let chosen = false;
 
 /** The language the interface is in. */
 export function getLocale(): string {
@@ -1355,7 +1366,11 @@ export function locales(): { code: string; name: string }[] {
  * its words: whoever built it is told, through `onLocaleChange`, to build it again.
  */
 export function setLocale(locale: string): void {
-  const next = known(locale) ?? FALLBACK;
+  chosen = true;
+  show(known(locale) ?? FALLBACK);
+}
+
+function show(next: string): void {
   if (next === current) return;
   current = next;
   for (const listener of [...listeners]) listener();
@@ -1370,13 +1385,17 @@ export function onLocaleChange(listener: () => void): () => void {
 /**
  * Adds a language, or changes texts of one there is. What it leaves out is
  * said in English. Its name in the list of languages is its `locale.name`,
- * or, without one, what the browser calls it.
+ * or, without one, what the browser calls it. While no language has been
+ * set, one the browser asks for before the one shown is taken: a browser in
+ * Chinese shows Chinese once `zh-Hans` is added.
  */
 export function addLocale(locale: string, texts: Texts): void {
   const name = texts['locale.name'] ?? LOCALES[locale]?.['locale.name'] ?? nameOf(locale);
   LOCALES[locale] = { ...EN, ...LOCALES[locale], ...texts, 'locale.name': name } as Messages;
+  const next = chosen ? current : fromBrowser();
   // The language being shown has other words now: whoever drew them is told to draw them again.
-  if (locale === current) for (const listener of [...listeners]) listener();
+  if (next !== current) show(next);
+  else if (locale === current) for (const listener of [...listeners]) listener();
 }
 
 /** What a language calls itself: "Français" for `fr`. Its code where the browser does not know. */

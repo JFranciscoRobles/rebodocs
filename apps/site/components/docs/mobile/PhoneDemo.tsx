@@ -5,19 +5,22 @@
 // the editor under the finger.
 
 import { exportDocx } from '@rebodocs/core';
-import { type DocsHandle, DocsEditor, getLocale, setLocale } from '@rebodocs/react';
+import { type DocsHandle, DocsEditor } from '@rebodocs/react';
 import { useEffect, useRef, useState } from 'react';
+import { useEditorLocale } from '@/components/editorLocale';
+import { useT } from '@/components/i18n';
+import type { L } from '@/lib/i18n';
 import { PASTEL_CLASS } from '@/lib/home';
 import { CAPTION } from '../styles';
 import { Readout } from '../ui';
 import { lease } from '../accessibility/sample';
 
-const WIDTHS = [
-  [360, 'Small phone'],
-  [390, 'Phone'],
-  [768, 'Tablet'],
-  [0, 'All of it'],
-] as const;
+const WIDTHS: [number, L][] = [
+  [360, { en: 'Small phone', es: 'Teléfono pequeño', zh: '小屏手机' }],
+  [390, { en: 'Phone', es: 'Teléfono', zh: '手机' }],
+  [768, { en: 'Tablet', es: 'Tableta', zh: '平板' }],
+  [0, { en: 'All of it', es: 'Todo', zh: '全宽' }],
+];
 
 interface Seen {
   width: number;
@@ -35,12 +38,11 @@ export default function PhoneDemo() {
   const [seen, setSeen] = useState<Seen>();
   const handle = useRef<DocsHandle | undefined>(undefined);
   const frame = useRef<HTMLDivElement>(null);
+  const t = useT();
+  const editorLocale = useEditorLocale();
 
   useEffect(() => {
-    const was = getLocale();
-    setLocale('en');
     void lease().then((doc) => setFile(exportDocx(doc)));
-    return () => setLocale(was);
   }, []);
 
   /** What the editor makes of the width it has, read from it. */
@@ -96,18 +98,18 @@ export default function PhoneDemo() {
     <div className="mt-7 overflow-hidden rounded-[18px] border border-border">
       <div className="flex flex-wrap items-end gap-x-8 gap-y-4 border-b border-border bg-surface px-6 py-5">
         <div>
-          <p className={CAPTION}>Width of the window</p>
+          <p className={CAPTION}>{t({ en: 'Width of the window', es: 'Ancho de la ventana', zh: '窗口宽度' })}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {WIDTHS.map(([px, name]) => (
-              <button key={name} type="button" aria-pressed={width === px} className={pill(width === px)} onClick={() => setWidth(px)}>
-                {name}
+              <button key={name.en} type="button" aria-pressed={width === px} className={pill(width === px)} onClick={() => setWidth(px)}>
+                {t(name)}
                 {px ? ` · ${px}` : ''}
               </button>
             ))}
           </div>
         </div>
         <button type="button" aria-pressed={reading} className={pill(reading)} onClick={toggleReading}>
-          Reading view
+          {t({ en: 'Reading view', es: 'Vista de lectura', zh: '阅读视图' })}
         </button>
       </div>
       <div className="flex flex-wrap items-start justify-center gap-6 bg-[#ebe9e4] px-4 py-6">
@@ -117,29 +119,43 @@ export default function PhoneDemo() {
           style={{ width: width ? width + 12 : '100%' }}
         >
           {file ? (
-            <DocsEditor docx={file} name="lease.docx" locale="en" author="Ana" onReady={ready} features={{ panel: false }} />
+            <DocsEditor docx={file} name="lease.docx" locale={editorLocale} author="Ana" onReady={ready} features={{ panel: false }} />
           ) : (
-            <p className="m-0 grid h-full place-items-center text-sm text-muted">Opening the editor…</p>
+            <p className="m-0 grid h-full place-items-center text-sm text-muted">{t({ en: 'Opening the editor…', es: 'Abriendo el editor…', zh: '正在打开编辑器…' })}</p>
           )}
         </div>
         <div className="w-[260px] max-w-full">
           <Readout
-            label="What the editor made of it"
+            label={t({ en: 'What the editor made of it', es: 'Lo que hizo el editor con eso', zh: '编辑器的处理结果' })}
             lines={
               seen
                 ? [
-                    ['width', `${seen.width} px`],
-                    ['narrow', seen.narrow ? 'yes, under 600' : 'no', seen.narrow ? 'good' : 'dim'],
+                    [t({ en: 'width', es: 'ancho', zh: '宽度' }), `${seen.width} px`],
+                    [
+                      t({ en: 'narrow', es: 'angosto', zh: '窄屏' }),
+                      seen.narrow ? t({ en: 'yes, under 600', es: 'sí, menos de 600', zh: '是，小于 600' }) : t({ en: 'no', es: 'no', zh: '否' }),
+                      seen.narrow ? 'good' : 'dim',
+                    ],
                     ['zoom', `${Math.round(seen.zoom * 100)} %`],
-                    ['around pages', seen.gap],
-                    ['ruler', seen.ruler ? 'shown' : 'put away', seen.ruler ? 'dim' : 'good'],
-                    ['view', seen.view === 'flow' ? 'reading' : 'pages'],
-                    ['by touch', seen.touch ? 'yes' : 'no', seen.touch ? 'good' : 'dim'],
+                    [t({ en: 'around pages', es: 'alrededor de las páginas', zh: '页面周围' }), seen.gap],
+                    [
+                      t({ en: 'ruler', es: 'regla', zh: '标尺' }),
+                      seen.ruler ? t({ en: 'shown', es: 'visible', zh: '显示' }) : t({ en: 'put away', es: 'guardada', zh: '收起' }),
+                      seen.ruler ? 'dim' : 'good',
+                    ],
+                    [t({ en: 'view', es: 'vista', zh: '视图' }), seen.view === 'flow' ? t({ en: 'reading', es: 'lectura', zh: '阅读' }) : t({ en: 'pages', es: 'páginas', zh: '分页' })],
+                    [t({ en: 'by touch', es: 'táctil', zh: '触控' }), seen.touch ? t({ en: 'yes', es: 'sí', zh: '是' }) : t({ en: 'no', es: 'no', zh: '否' }), seen.touch ? 'good' : 'dim'],
                   ]
-                : [['', 'opening…', 'dim']]
+                : [['', t({ en: 'opening…', es: 'abriendo…', zh: '正在打开…' }), 'dim']]
             }
           />
-          <p className="m-0 mt-3 text-[13.5px] leading-normal text-ink-soft">Open this page on a phone to try the gestures on it: “by touch” turns on with the first touch.</p>
+          <p className="m-0 mt-3 text-[13.5px] leading-normal text-ink-soft">
+            {t({
+              en: 'Open this page on a phone to try the gestures on it: “by touch” turns on with the first touch.',
+              es: 'Abre esta página en un teléfono para probar los gestos: “táctil” se enciende con el primer toque.',
+              zh: '在手机上打开本页面即可试用手势：首次触摸后“触控”会变为“是”。',
+            })}
+          </p>
         </div>
       </div>
     </div>

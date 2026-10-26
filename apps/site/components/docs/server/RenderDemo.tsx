@@ -22,6 +22,7 @@ import {
   setParagraphStyle,
 } from '@rebodocs/core';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useT } from '@/components/i18n';
 import { PASTEL_CLASS } from '@/lib/home';
 import { CAPTION } from '../styles';
 import { DemoBox, Readout } from '../ui';
@@ -82,7 +83,7 @@ export default function RenderDemo() {
     try {
       data = JSON.parse(typed) as TemplateData;
     } catch {
-      return { error: 'That is not JSON.' };
+      return { error: 'JSON' };
     }
     if (!fonts.length) return undefined;
     const started = performance.now();
@@ -116,6 +117,7 @@ export default function RenderDemo() {
   const pill = (on: boolean) =>
     `cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${on ? `border-transparent ${PASTEL_CLASS.blue}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`;
   const ok = made && !('error' in made) ? made : undefined;
+  const t = useT();
 
   return (
     <DemoBox
@@ -123,7 +125,7 @@ export default function RenderDemo() {
       aside={
         <>
           <label className={CAPTION}>
-            The data, as JSON
+            {t({ en: 'The data, as JSON', es: 'Los datos, como JSON', zh: '数据（JSON）' })}
             <textarea
               value={values}
               onChange={(e) => setValues(e.target.value)}
@@ -133,28 +135,34 @@ export default function RenderDemo() {
             />
           </label>
           <div>
-            <p className={CAPTION}>The fonts</p>
+            <p className={CAPTION}>{t({ en: 'The fonts', es: 'Las fuentes', zh: '字体' })}</p>
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
               <button type="button" aria-pressed={arial} onClick={() => setArial(!arial)} className={pill(arial)}>
-                The template asks for Arial
+                {t({ en: 'The template asks for Arial', es: 'La plantilla pide Arial', zh: '模板使用 Arial' })}
               </button>
               <label className="cursor-pointer rounded-full border border-border bg-white px-3 py-1 text-[13px] font-semibold text-ink-soft hover:bg-hover">
-                Give a .ttf…
+                {t({ en: 'Give a .ttf…', es: 'Dar un .ttf…', zh: '提供 .ttf…' })}
                 <input type="file" accept=".ttf,.otf" multiple className="sr-only" onChange={(e) => void add(e.target.files)} />
               </label>
             </div>
-            <p className="m-0 mt-1.5 text-[13px] leading-normal text-muted">Given: Courier Prime{own.length ? `, ${[...new Set(own.map((font) => font.family))].join(', ')}` : ''}.</p>
+            <p className="m-0 mt-1.5 text-[13px] leading-normal text-muted">
+              {t({ en: 'Given: ', es: 'Dadas: ', zh: '已提供：' })}Courier Prime{own.length ? `, ${[...new Set(own.map((font) => font.family))].join(', ')}` : ''}.
+            </p>
           </div>
           <Readout
-            label="What it gives"
+            label={t({ en: 'What it gives', es: 'Lo que da', zh: '输出' })}
             lines={
               made && 'error' in made
-                ? [['JSON.parse', made.error ?? '', 'warn']]
+                ? [['JSON.parse', t({ en: 'That is not JSON.', es: 'Eso no es JSON.', zh: '这不是有效的 JSON。' }), 'warn']]
                 : [
                     ['layout.pages.length', ok ? String(ok.pages) : '…'],
                     ['pdf.length', ok ? `${(ok.pdf.length / 1024).toFixed(1)} KB` : '…'],
-                    ['missingFonts', ok ? (ok.missing.length ? ok.missing.map(([asked, used]) => `${asked} → ${used}`).join(', ') : 'none') : '…', ok?.missing.length ? 'warn' : 'good'],
-                    ['time', ok ? `${Math.round(ok.ms)} ms` : '…', 'dim'],
+                    [
+                      'missingFonts',
+                      ok ? (ok.missing.length ? ok.missing.map(([asked, used]) => `${asked} → ${used}`).join(', ') : t({ en: 'none', es: 'ninguna', zh: '无' })) : '…',
+                      ok?.missing.length ? 'warn' : 'good',
+                    ],
+                    [t({ en: 'time', es: 'tiempo', zh: '耗时' }), ok ? `${Math.round(ok.ms)} ms` : '…', 'dim'],
                   ]
             }
           />
@@ -179,10 +187,10 @@ export default function RenderDemo() {
         </>
       }
     >
-      <div role="group" aria-label="What to look at" className="mb-3 flex gap-1.5">
+      <div role="group" aria-label={t({ en: 'What to look at', es: 'Qué mirar', zh: '查看内容' })} className="mb-3 flex gap-1.5">
         {(
           [
-            ['pdf', 'The PDF'],
+            ['pdf', t({ en: 'The PDF', es: 'El PDF', zh: 'PDF' })],
             ['markdown', 'exportMarkdown'],
           ] as [Output, string][]
         ).map(([value, label]) => (
@@ -193,9 +201,9 @@ export default function RenderDemo() {
       </div>
       {output === 'pdf' ? (
         url ? (
-          <iframe title="The PDF" src={`${url}#toolbar=0&view=FitH`} className="h-[520px] w-full rounded-lg border border-border bg-white" />
+          <iframe title={t({ en: 'The PDF', es: 'El PDF', zh: 'PDF' })} src={`${url}#toolbar=0&view=FitH`} className="h-[520px] w-full rounded-lg border border-border bg-white" />
         ) : (
-          <p className="m-0 grid h-[520px] place-items-center text-sm text-muted">Reading the fonts…</p>
+          <p className="m-0 grid h-[520px] place-items-center text-sm text-muted">{t({ en: 'Reading the fonts…', es: 'Leyendo las fuentes…', zh: '正在读取字体…' })}</p>
         )
       ) : (
         <pre className="m-0 h-[520px] overflow-auto whitespace-pre-wrap rounded-lg bg-surface px-4 py-3 font-code text-[13px] leading-[1.6] text-ink">{ok?.markdown ?? ''}</pre>

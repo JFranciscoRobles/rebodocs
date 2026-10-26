@@ -1,6 +1,7 @@
 // Layout engine: breaks paragraphs into lines and lines into pages.
 // It has no DOM dependency; text metrics come from a TextMeasurer.
 
+import { breaksBetween, cjkPieces, hasCjk, lastChar } from './cjk';
 import { shownRevision } from './revisions';
 import {
   type CellLines,
@@ -40,6 +41,8 @@ export interface FontSpec {
   italic: boolean;
   /** Whether the pairs of letters the font sets closer are set so: kerning, as Word does it. */
   kern?: boolean;
+  /** The font of the Chinese and Japanese characters, when it is not `family`. */
+  eastAsia?: string;
 }
 
 export interface FontMetrics {
@@ -369,7 +372,14 @@ const CONTINUOUS_BREAK = 12;
 
 export function fontOf(props: ResolvedRunProps): FontSpec {
   const kern = props.kern > 0 && props.fontSize >= props.kern;
-  return { family: props.fontFamily, size: props.fontSize, bold: props.bold, italic: props.italic, ...(kern ? { kern } : {}) };
+  return {
+    family: props.fontFamily,
+    size: props.fontSize,
+    bold: props.bold,
+    italic: props.italic,
+    ...(kern ? { kern } : {}),
+    ...(props.fontEastAsia && props.fontEastAsia !== props.fontFamily ? { eastAsia: props.fontEastAsia } : {}),
+  };
 }
 
 type PieceKind = 'word' | 'space' | 'tab' | 'break' | 'pagebreak' | 'columnbreak' | 'object';
@@ -505,10 +515,14 @@ function tokenize(para: Paragraph, measurer: TextMeasurer): Piece[] {
     // A word may break after a hyphen inside it, as in Word: "pre-" ends one line and "approved" starts the next.
     const first = pieces.length;
     for (const match of run.text.matchAll(/\t|\n|\f| +|[^\t\n\f -]*[^\t\n\f -]-+(?=[^\t\n\f -])|[^\t\n\f ]+/g)) {
-      const text = match[0];
-      const kind = pieceKind(text);
-      const width = kind === 'word' || kind === 'space' ? measurer.width(text, font) : 0;
-      pieces.push({ kind, text, start: offset + match.index, props, font, width, metrics });
+      const kind = pieceKind(match[0]);
+      // Chinese has no spaces: a word of it is cut where a line may break, between its characters.
+      for (const { text, from } of kind === 'word' ? cjkPieces(match[0]) : [{ text: match[0], from: 0 }]) {
+        const width = kind === 'word' || kind === 'space' ? measurer.width(text, font) : 0;
+        // Set in a font of its own, Chinese makes its line as tall as that font, as in Word.
+        const own = font.eastAsia && kind === 'word' && hasCjk(text) ? measurer.metrics({ ...font, family: font.eastAsia }) : metrics;
+        pieces.push({ kind, text, start: offset + match.index + from, props, font, width, metrics: own });
+      }
     }
     // Kerned, the pair a piece ends and the next of the run starts sets the first closer to the second, as within a word.
     if (font.kern && measurer.pair) {
@@ -529,10 +543,15 @@ function groupPieces(pieces: Piece[]): Piece[][] {
     const prev = groups[groups.length - 1];
     const after = prev?.[prev.length - 1];
     // The number of a note stays with the word it follows.
-    if ((piece.kind === 'word' || piece.mark) && prev && prev[0].kind === 'word' && !after!.text.endsWith('-')) prev.push(piece);
+    if ((piece.kind === 'word' || piece.mark) && prev && prev[0].kind === 'word' && !after!.text.endsWith('-') && !cjkBreak(after!, piece)) prev.push(piece);
     else groups.push([piece]);
   }
   return groups;
+}
+
+/** Whether a line may break between two words with no space between them: where one of them is Chinese. */
+function cjkBreak(before: Piece, after: Piece): boolean {
+  return before.kind === 'word' && after.kind === 'word' && !after.mark && breaksBetween(lastChar(before.text), String.fromCodePoint(after.text.codePointAt(0) ?? 0));
 }
 
 function countSpaces(text: string): number {
@@ -770,28 +789,42 @@ function breakParagraph(
     let visible = 0;
     let spaces = 0;
     let hasTab = false;
+    // Between two Chinese characters, where the line could have broken: justified, it stretches there as at a space.
+    const gaps = new Set<number>();
     for (let i = 0; i < visibleCount; i++) {
       visible += cur[i].width;
       if (cur[i].kind === 'space') spaces += cur[i].text.length;
       if (cur[i].kind === 'tab') hasTab = true;
+      if (i > 0 && cjkBreak(cur[i - 1], cur[i])) gaps.add(i);
     }
 
     const slack = Math.max(0, lineAvail - visible);
     let shift = 0;
     let wordSpacing = 0;
+    let stretched = false;
     if (pp.align === 'center') shift = slack / 2;
     else if (pp.align === 'right') shift = slack;
-    else if (pp.align === 'justify' && !forced && !lastLine && spaces > 0 && !hasTab) wordSpacing = slack / spaces;
+    else if (pp.align === 'justify' && !forced && !lastLine && spaces + gaps.size > 0 && !hasTab) {
+      wordSpacing = slack / (spaces + gaps.size);
+      stretched = gaps.size > 0;
+    }
     // A line that only fits with its spaces shrunk is shrunk, the last line of the paragraph too.
     if (shrink && visible > lineAvail + EPSILON && spaces > 0 && !hasTab) wordSpacing = (lineAvail - visible) / spaces;
 
     const fragments: Fragment[] = [];
     let x = lineIndent + shift;
-    for (const p of cur) {
+    for (let i = 0; i < cur.length; i++) {
+      const p = cur[i];
       const advance = p.kind === 'space' ? p.width + p.text.length * wordSpacing : p.width;
       const prev = fragments[fragments.length - 1];
       const isText = p.kind === 'word' || p.kind === 'space';
-      if (isText && prev && prev.kind === 'text' && prev.props === p.props) {
+      // The stretch between two characters goes at the end of the first, and the second starts a fragment of its own where it lands.
+      const gap = stretched && gaps.has(i);
+      if (gap && prev) {
+        prev.width += wordSpacing;
+        x += wordSpacing;
+      }
+      if (isText && !gap && prev && prev.kind === 'text' && prev.props === p.props) {
         prev.text += p.text;
         prev.end += p.text.length;
         prev.width += advance;
@@ -820,7 +853,7 @@ function breakParagraph(
       start,
       end,
       x: lineIndent + shift,
-      width: visible + spaces * wordSpacing,
+      width: visible + (spaces + (stretched ? gaps.size : 0)) * wordSpacing,
       ascent,
       descent,
       height: (ascent + descent) * pp.lineHeight + room.pad,
@@ -980,6 +1013,9 @@ function breakParagraph(
           else hi = mid - 1;
         }
         if (lo === 0 && cur.length === 0) lo = 1;
+        // Never between the two halves of a character past the first plane, as some Chinese ones are.
+        const unit = p.text.charCodeAt(lo - 1);
+        if (lo < p.text.length && unit >= 0xd800 && unit < 0xdc00) lo += lo === 1 && cur.length === 0 ? 1 : -1;
         if (lo > 0) {
           const headText = p.text.slice(0, lo);
           push({ ...p, text: headText, width: measurer.width(headText, p.font) });

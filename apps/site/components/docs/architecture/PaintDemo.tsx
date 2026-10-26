@@ -1,10 +1,17 @@
 'use client';
 
 import { type KeyboardEvent, type MouseEvent, useRef, useState } from 'react';
+import { useT } from '@/components/i18n';
+import type { L } from '@/lib/i18n';
 import { DemoBox, Readout } from '../ui';
-import { useFontOf, useLines } from './lines';
+import { tokensOf, useFontOf, useLines } from './lines';
 
-const START = 'Payment is due within fifteen days of this receipt, by bank transfer to the account below. Late payments add a fee each month.';
+/** The paragraph of the demo, and the words before which the caret starts, in each language of the site. */
+const STARTS: L<[text: string, caret: string]> = {
+  en: ['Payment is due within fifteen days of this receipt, by bank transfer to the account below. Late payments add a fee each month.', ' within'],
+  es: ['El pago vence a los quince días de este recibo, por transferencia bancaria a la cuenta de abajo. Los pagos tardíos suman un recargo cada mes.', ' a los'],
+  zh: ['应在本收据开具后十五天内，以银行转账方式付款至下方账户。逾期付款每月加收费用。', '十五天'],
+};
 const MAX = 260;
 const WIDTH = 300;
 const LINE = 24;
@@ -13,17 +20,16 @@ const PAD = 22;
 const toggle = (on: boolean) =>
   `cursor-pointer rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors ${on ? 'border-ink bg-ink text-white' : 'border-border-strong bg-white text-ink hover:bg-hover'}`;
 
-/** Where each word of `text` starts and ends, in the order the line breaker places them. */
-const tokensOf = (text: string) => [...text.matchAll(/\S+/g)].map((m) => ({ start: m.index, end: m.index + m[0].length }));
-
 /**
  * A page as the editor paints it, and typed in as the editor is: a hidden
  * textarea at the caret takes the keys, each one becomes a change to the text,
  * and the text is broken into lines and placed again.
  */
 export function PaintDemo() {
+  const t = useT();
+  const [START, from] = t(STARTS);
   const [text, setText] = useState(START);
-  const [caret, setCaret] = useState(START.indexOf(' within'));
+  const [caret, setCaret] = useState(START.indexOf(from));
   const [last, setLast] = useState<string>();
   const [focused, setFocused] = useState(false);
   const [spans, setSpans] = useState(true);
@@ -51,7 +57,7 @@ export function PaintDemo() {
   while (i >= 0 && tokens[i].start > caret) i--;
   if (i >= 0 && placed[i]) {
     const word = placed[i];
-    const x = caret <= tokens[i].end ? word.x + measure(text.slice(tokens[i].start, caret)) : word.x + word.width + measure(' ');
+    const x = caret <= tokens[i].end ? word.x + measure(text.slice(tokens[i].start, caret)) : word.x + word.width + (word.space ? measure(' ') : 0);
     at = { x: PAD + x, y: PAD + word.y };
   }
 
@@ -109,33 +115,50 @@ export function PaintDemo() {
       aside={
         <>
           <Readout
-            label="On the page"
+            label={t({ en: 'On the page', es: 'En la página', zh: '页面上' })}
             lines={[
-              ['last operation', last ?? 'none yet', last ? 'warn' : 'dim'],
-              ['widths asked', `${asked}, new words only`, asked ? 'warn' : 'good'],
-              ['spans placed', String(count), 'good'],
-              ['lines', `${lines.length}, at any zoom`, 'good'],
-              ['zoom', zoom === 100 ? 'none' : `transform: scale(${scale})`, 'warn'],
-              ['focus', focused ? `hidden textarea at ${Math.round(at.x)}, ${Math.round(at.y)}` : 'elsewhere', focused ? 'warn' : 'dim'],
-              ['contenteditable', 'none', 'good'],
+              [t({ en: 'last operation', es: 'última operación', zh: '最近的操作' }), last ?? t({ en: 'none yet', es: 'ninguna todavía', zh: '暂无' }), last ? 'warn' : 'dim'],
+              [
+                t({ en: 'widths asked', es: 'anchos pedidos', zh: '询问的宽度' }),
+                t({ en: `${asked}, new words only`, es: `${asked}, solo palabras nuevas`, zh: `${asked}，仅限新词` }),
+                asked ? 'warn' : 'good',
+              ],
+              [t({ en: 'spans placed', es: 'spans colocados', zh: '定位的 span' }), String(count), 'good'],
+              [t({ en: 'lines', es: 'líneas', zh: '行数' }), t({ en: `${lines.length}, at any zoom`, es: `${lines.length}, a cualquier zoom`, zh: `${lines.length}，任何缩放下都相同` }), 'good'],
+              [t({ en: 'zoom', es: 'zoom', zh: '缩放' }), zoom === 100 ? t({ en: 'none', es: 'ninguno', zh: '无' }) : `transform: scale(${scale})`, 'warn'],
+              [
+                t({ en: 'focus', es: 'foco', zh: '焦点' }),
+                focused
+                  ? t({
+                      en: `hidden textarea at ${Math.round(at.x)}, ${Math.round(at.y)}`,
+                      es: `textarea oculto en ${Math.round(at.x)}, ${Math.round(at.y)}`,
+                      zh: `隐藏的 textarea，位于 ${Math.round(at.x)}, ${Math.round(at.y)}`,
+                    })
+                  : t({ en: 'elsewhere', es: 'en otro lugar', zh: '在别处' }),
+                focused ? 'warn' : 'dim',
+              ],
+              ['contenteditable', t({ en: 'none', es: 'ninguno', zh: '无' }), 'good'],
             ]}
           />
           <p className="m-0 text-[15px] leading-[1.6] text-ink-soft">
-            Click in the text and type: the keys go to a real textarea at the caret, each becomes a change to the text, and the lines are broken and placed again. Zoom scales pages laid out at their
-            real size, so no line breaks differently.
+            {t({
+              en: 'Click in the text and type: the keys go to a real textarea at the caret, each becomes a change to the text, and the lines are broken and placed again. Zoom scales pages laid out at their real size, so no line breaks differently.',
+              es: 'Haz clic en el texto y escribe: las teclas van a un textarea real en el cursor, cada una se convierte en un cambio del texto, y las líneas se vuelven a cortar y colocar. El zoom escala páginas compuestas a su tamaño real, así que ninguna línea se corta distinto.',
+              zh: '在文字中点击并输入：按键进入光标处真实的 textarea，每次按键都变成对文字的一次更改，然后重新分行和定位。缩放只是按比例放大按真实尺寸排好的页面，因此任何一行的换行位置都不会改变。',
+            })}
           </p>
         </>
       }
     >
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" aria-pressed={spans} onClick={() => setSpans(!spans)} className={toggle(spans)}>
-          Show the spans
+          {t({ en: 'Show the spans', es: 'Mostrar los spans', zh: '显示 span' })}
         </button>
         <button type="button" aria-pressed={textarea} onClick={() => setTextarea(!textarea)} className={toggle(textarea)}>
-          Show the textarea
+          {t({ en: 'Show the textarea', es: 'Mostrar el textarea', zh: '显示 textarea' })}
         </button>
         <label htmlFor="paint-zoom" className="ml-auto text-[13px] text-ink-soft">
-          Zoom
+          {t({ en: 'Zoom', es: 'Zoom', zh: '缩放' })}
         </label>
         <input id="paint-zoom" type="range" min={60} max={140} step={10} value={zoom} onChange={(event) => setZoom(Number(event.target.value))} className="w-[120px] accent-brand" />
         <span className="w-[44px] font-code text-[13px]">{zoom}%</span>
@@ -160,7 +183,7 @@ export function PaintDemo() {
             ))}
             <textarea
               ref={input}
-              aria-label="The paragraph of the demo: type to change it"
+              aria-label={t({ en: 'The paragraph of the demo: type to change it', es: 'El párrafo del demo: escribe para cambiarlo', zh: '演示段落：输入即可修改' })}
               autoCapitalize="off"
               autoCorrect="off"
               spellCheck={false}
@@ -195,18 +218,26 @@ export function PaintDemo() {
         </div>
       </div>
       <div className="mt-3 flex items-center gap-3 text-[13px] text-muted">
-        <span>{text.length >= MAX ? 'That is as long as the demo goes.' : 'Click in the text and type; ← → and Backspace work too.'}</span>
+        <span>
+          {text.length >= MAX
+            ? t({ en: 'That is as long as the demo goes.', es: 'Hasta ahí llega el demo.', zh: '演示最多只能这么长。' })
+            : t({
+                en: 'Click in the text and type; ← → and Backspace work too.',
+                es: 'Haz clic en el texto y escribe; ← → y Retroceso también funcionan.',
+                zh: '在文字中点击并输入；← → 和 Backspace 也可以使用。',
+              })}
+        </span>
         {text !== START && (
           <button
             type="button"
             onClick={() => {
               setText(START);
-              setCaret(START.indexOf(' within'));
+              setCaret(START.indexOf(from));
               setLast(undefined);
             }}
             className="ml-auto cursor-pointer border-0 bg-transparent p-0 text-[13px] text-muted underline"
           >
-            Start again
+            {t({ en: 'Start again', es: 'Empezar de nuevo', zh: '重新开始' })}
           </button>
         )}
       </div>

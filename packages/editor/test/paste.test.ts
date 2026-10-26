@@ -2,9 +2,11 @@
 // tables. The HTML is the kind Word and Google Docs write, read by a DOM of
 // the tests' own (linkedom), as the page reads it with the browser's.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { DOMParser, parseHTML } from 'linkedom';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { clipFromHtml } from '../src/paste';
+import { clipFromHtml, readClipImages, rtfPictures } from '../src/paste';
 
 beforeAll(() => {
   const { window } = parseHTML('<!doctype html><html><body></body></html>');
@@ -98,5 +100,52 @@ describe('pasting a table', () => {
     ]);
     // White text, as Word writes it.
     expect(clip.paragraphs[0].runs[0].props.color).toBe('FFFFFF');
+  });
+});
+
+describe('pasting pictures', () => {
+  const fixture = (name: string) => readFileSync(join(import.meta.dirname, 'fixtures', name), 'latin1');
+  /** The bytes of a data: address. */
+  const bytesOf = (src: string) => Uint8Array.from(atob(src.split(',')[1]), (c) => c.charCodeAt(0));
+
+  it('reads those of Word for Mac in its HTML, at the size its VML says, in points', () => {
+    // What Word for Mac put on the clipboard copying a title with a picture of 60×30 pt in it and a line with one of 45×45.
+    const clip = read(Buffer.from(fixture('word-mac-pictures.html'), 'latin1').toString('utf8'))!;
+    const images = clip.paragraphs.flatMap((p) => p.runs.filter((r) => r.image).map((r) => r.image!));
+    expect(clip.paragraphs.map(words)).toEqual(['Before the picture ', 'After it.']);
+    expect(images.map((i) => [i.width, i.height])).toEqual([
+      [60, 30],
+      [45, 45],
+    ]);
+    // Word says image/png of what is a JPEG: the bytes say what it is.
+    expect(images.every((i) => i.src.startsWith('data:image/png;base64,/9j/'))).toBe(true);
+  });
+
+  it('takes the pictures of RTF, as Word on Windows gives them for the file:/// of its HTML', async () => {
+    const pictures = rtfPictures(fixture('word-mac-pictures.rtf'));
+    expect(pictures.map((p) => [Math.round(p.width), Math.round(p.height)])).toEqual([
+      [60, 30],
+      [45, 45],
+    ]);
+    expect([...bytesOf(pictures[0].src).slice(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    const html = `<p>Before <img width=80 height=40 src="file:///C:/Users/someone/AppData/Local/Temp/msohtmlclip1/01/clip_image001.png"> after</p>`;
+    const clip = await readClipImages(read(html)!, fixture('word-mac-pictures.rtf'));
+    const image = clip.paragraphs[0].runs.find((r) => r.image)!.image!;
+    expect(image.src).toBe(pictures[0].src);
+    expect([image.width, image.height]).toEqual([60, 30]);
+  });
+
+  it('leaves out a picture it cannot read, and a speck put there to count visits, keeping the text', async () => {
+    const clip = read('<p>One <img src="https://example.com/pixel.gif" width=1 height=1>two <img src="file:///nowhere.png"> three</p>')!;
+    expect(clip.paragraphs[0].runs.filter((r) => r.image)).toHaveLength(1);
+    const read2 = await readClipImages(clip);
+    expect(read2.paragraphs[0].runs.some((r) => r.image)).toBe(false);
+    expect(words(read2.paragraphs[0])).toBe('One two  three');
+  });
+
+  it('keeps a paragraph that is only a picture', () => {
+    const clip = read('<p><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width=40 height=40></p>')!;
+    expect(clip.paragraphs).toHaveLength(1);
+    expect(clip.paragraphs[0].runs[0].image).toMatchObject({ width: 30, height: 30 });
   });
 });

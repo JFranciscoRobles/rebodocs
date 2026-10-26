@@ -16,6 +16,7 @@ import { zlibSync } from 'fflate';
 import { type Band, type FontSpec, type Fragment, type Layout, type LayoutPage, type Line, type TextBoxBand, type TextMeasurer, boxLines, noteRules } from './layout';
 import { type Border, type Doc, DEFAULT_BORDER } from './model';
 import { linkHref } from './links';
+import { isCjk } from './cjk';
 import { altText, isDecorative } from './images';
 import { outline } from './outline';
 import { type Element, StructTree } from './pdftags';
@@ -596,6 +597,33 @@ function standardFont(spec: FontSpec): string {
   return `Helvetica${style('-Bold', '-Oblique', '-BoldOblique')}`;
 }
 
+/**
+ * The fonts for Chinese and Japanese every reader has, by the characters they
+ * cover: one stands in for the Chinese characters a document's fonts do not
+ * have, as Helvetica does for the latin ones.
+ */
+const CJK_FONTS = {
+  simplified: { name: 'STSong-Light', ordering: 'GB1', supplement: 4, encoding: 'UniGB-UTF16-H' },
+  traditional: { name: 'MSung-Light', ordering: 'CNS1', supplement: 4, encoding: 'UniCNS-UTF16-H' },
+  japanese: { name: 'KozMinPro-Regular-Acro', ordering: 'Japan1', supplement: 4, encoding: 'UniJIS-UTF16-H' },
+} as const;
+
+type CjkFont = (typeof CJK_FONTS)[keyof typeof CJK_FONTS];
+
+/** The font for Chinese a language is written in: Traditional in Taiwan, Hong Kong and Macao. */
+function cjkFontOf(language: string | undefined): CjkFont {
+  if (/^ja\b/i.test(language ?? '')) return CJK_FONTS.japanese;
+  if (/^zh-(?:Hant|TW|HK|MO)\b/i.test(language ?? '')) return CJK_FONTS.traditional;
+  return CJK_FONTS.simplified;
+}
+
+/** UTF-16 as four hex digits a unit: what the encodings of the fonts for Chinese take. */
+function utf16Hex(text: string): string {
+  let codes = '';
+  for (let i = 0; i < text.length; i++) codes += hex(text.charCodeAt(i), 4);
+  return `<${codes}>`;
+}
+
 interface PdfFont {
   /** The name the page content calls it by. */
   name: string;
@@ -603,6 +631,10 @@ interface PdfFont {
   /** The font file, for one that goes into the PDF. */
   file?: { bytes: Uint8Array; font: TrueType; used: Map<number, number> };
   standard?: string;
+  /** For one of the fonts for Chinese every reader has: which. */
+  cjk?: CjkFont;
+  /** Whether it has a glyph for a character. */
+  has(code: number): boolean;
   /** What the file lacks of the face asked for, drawn as the browser draws it: thicker, or slanted. */
   fake?: { bold: boolean; italic: boolean };
   /** `text` as the string operand that shows it in this font. */
@@ -756,6 +788,7 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array<A
         file: { bytes, font: parsed, used },
         // The regular face given for a bold or italic one the application did not give.
         fake: { bold: spec.bold && !parsed.bold, italic: spec.italic && !parsed.italic && !parsed.italicAngle },
+        has: (code) => parsed.glyph(code) !== 0,
         encode(text) {
           let codes = '';
           for (const ch of text) {
@@ -772,6 +805,7 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array<A
         name,
         id: out.reserve(),
         standard: standardFont(spec),
+        has: (code) => winAnsi(code) !== 0x3f || code === 0x3f,
         encode(text) {
           let codes = '';
           for (const ch of text) codes += hex(winAnsi(ch.codePointAt(0)!), 2);
@@ -780,6 +814,24 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array<A
       };
     }
     fonts.set(key, font);
+    return font;
+  };
+
+  const language = (resources.language ?? (doc && documentLanguage(doc)))?.replace(/[^A-Za-z0-9-]/g, '');
+  /** The font the Chinese characters of a text are drawn in where its own has none: the document's font for them, or the one every reader has. */
+  const cjkFontFor = (spec: FontSpec): PdfFont => {
+    const own: FontSpec = { ...spec, family: spec.eastAsia ?? '', eastAsia: undefined };
+    if (spec.eastAsia && (fonts.get(`${own.family}|${own.bold}|${own.italic}`)?.file || resources.font?.(own))) {
+      const found = fontFor(own);
+      if (found.file) return found;
+    }
+    const cjk = cjkFontOf(language);
+    const key = `cjk|${cjk.name}`;
+    let font = fonts.get(key);
+    if (!font) {
+      font = { name: `F${fonts.size + 1}`, id: out.reserve(), standard: cjk.name, cjk, has: () => true, encode: utf16Hex };
+      fonts.set(key, font);
+    }
     return font;
   };
 
@@ -917,14 +969,32 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array<A
       const slant = font.fake?.italic ? 0.2 : 0;
       // Bold as an outline round each letter in its own colour; italic as a slant of the letters.
       ops += `${bold ? 'q ' : ''}BT /${font.name} ${num(size)} Tf ${rgb(f.props.color)} rg${bold ? ` 2 Tr ${rgb(f.props.color)} RG ${num(size * 0.03)} w` : ''}\n`;
-      // Word by word, each where the layout measured it to start: a word and the spaces after it.
+      // Word by word, each where the layout measured it to start: a word and the spaces after it. A Chinese
+      // character the font has not is drawn on its own, in a font for Chinese, where the layout put it.
+      let shown = font;
       for (const match of f.text.matchAll(/\S+\s*|\s+/g)) {
-        const before = f.text.slice(0, match.index);
-        const spaces = f.wordSpacing ? (before.match(/ /g)?.length ?? 0) * f.wordSpacing : 0;
-        const x = f.x + (before ? resources.measurer.width(before, f.font) : 0) + spaces;
         const word = match[0].replace(/\s+$/, ' ');
-        // A space alone too, where a stretch starts with one: it shows nothing, and a reader takes it for the gap between two words.
-        ops += `1 0 ${slant} 1 ${num(x)} ${num(height - line.baseline)} Tm ${kernedText(font, word, !!f.font.kern)}\n`;
+        const parts: { text: string; at: number; font: PdfFont }[] = [];
+        let at = 0;
+        for (const ch of word) {
+          const code = ch.codePointAt(0)!;
+          const use = isCjk(ch) && !font.has(code) ? cjkFontFor(f.font) : font;
+          const last = parts[parts.length - 1];
+          if (last && last.font === use && use === font) last.text += ch;
+          else parts.push({ text: ch, at, font: use });
+          at += ch.length;
+        }
+        for (const part of parts) {
+          const before = f.text.slice(0, match.index + part.at);
+          const spaces = f.wordSpacing ? (before.match(/ /g)?.length ?? 0) * f.wordSpacing : 0;
+          const x = f.x + (before ? resources.measurer.width(before, f.font) : 0) + spaces;
+          if (part.font !== shown) {
+            ops += `/${part.font.name} ${num(size)} Tf\n`;
+            shown = part.font;
+          }
+          // A space alone too, where a stretch starts with one: it shows nothing, and a reader takes it for the gap between two words.
+          ops += `1 0 ${slant} 1 ${num(x)} ${num(height - line.baseline)} Tm ${kernedText(part.font, part.text, !!f.font.kern)}\n`;
+        }
       }
       ops += bold ? 'ET Q\n' : 'ET\n';
       const rule = (y: number) => (ops += `${rgb(f.props.color)} rg ${rect(f.x, y, f.width, Math.max(0.5, size * 0.05))} f\n`);
@@ -1052,6 +1122,16 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array<A
   });
 
   for (const font of fonts.values()) {
+    if (font.cjk) {
+      // Not in the file: the reader has it, and every character is as wide as the size, as in any font for Chinese.
+      const { name, ordering, supplement, encoding } = font.cjk;
+      const descriptor = out.add(`<< /Type /FontDescriptor /FontName /${name} /Flags 6 /FontBBox [-25 -254 1000 880] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 880 /StemV 93 >>`);
+      const cid = out.add(
+        `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /${name} /CIDSystemInfo << /Registry (Adobe) /Ordering (${ordering}) /Supplement ${supplement} >> /FontDescriptor ${descriptor} 0 R /DW 1000 >>`,
+      );
+      out.write(font.id, `<< /Type /Font /Subtype /Type0 /BaseFont /${name} /Encoding /${encoding} /DescendantFonts [${cid} 0 R] >>`);
+      continue;
+    }
     if (!font.file) {
       out.write(font.id, `<< /Type /Font /Subtype /Type1 /BaseFont /${font.standard} /Encoding /WinAnsiEncoding >>`);
       continue;
@@ -1108,7 +1188,6 @@ export function exportPdf(layout: Layout, resources: PdfResources): Uint8Array<A
     textString,
   );
   const headings = doc ? writeOutlines(out, doc, layout, pageIds) : 0;
-  const language = (resources.language ?? (doc && documentLanguage(doc)))?.replace(/[^A-Za-z0-9-]/g, '');
   const { title } = resources;
   // What a checker can tell of PDF/UA: a title, a language, every font in the file, every picture described.
   const universal = !!doc && !!title && !!language && !undescribed && [...fonts.values()].every((font) => font.file);

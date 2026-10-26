@@ -8,22 +8,18 @@
 
 import { type Op, apply, diff, digest, encode, ensureIds, mapAnchor, stampIds, transform } from '@rebodocs/collab';
 import { type Doc, type Paragraph, createDoc, setParagraphStyle } from '@rebodocs/core';
-import { type Editor, DocsProvider, DocsSurface, setLocale, useDocs } from '@rebodocs/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { type Editor, DocsProvider, DocsSurface, useDocs } from '@rebodocs/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePageEditorLocale } from '@/components/editorLocale';
+import { useLocale, useT } from '@/components/i18n';
 import { CAPTION } from '../styles';
-import { SCENARIOS } from './data';
-
-setLocale('en');
+import { SCENARIOS, WORDS, type Words } from './data';
 
 export const SCENARIO_EVENT = 'collab-scenario';
 
 const p = (text: string): Paragraph => ({ props: {}, runs: [{ text, props: {} }] });
-const START: Doc = setParagraphStyle(
-  createDoc([p('Reservation receipt'), p('Payment is due within 15 days of this receipt.'), p('Late payments add a fee.'), p('Either party may cancel in writing.'), p('Signed, Ana')]),
-  0,
-  0,
-  'Title',
-);
+/** The file the room starts from: the sample, its first line the title. */
+const startOf = (words: Words): Doc => setParagraphStyle(createDoc(words.lines.map(p)), 0, 0, 'Title');
 
 type Who = 'Ana' | 'Luis';
 const PEOPLE: { who: Who; color: string }[] = [
@@ -99,7 +95,8 @@ const placeOf = (doc: Doc, mark: Mark) => {
   return { para, offset: Math.max(0, Math.min(mark.offset, length)) };
 };
 
-function useRoom() {
+function useRoom(words: Words) {
+  const START = useMemo(() => startOf(words), [words]);
   const [, setTick] = useState(0);
   const redraw = useCallback(() => setTick((n) => n + 1), []);
   const clients = useRef<Client[]>(
@@ -313,8 +310,8 @@ function useRoom() {
     reset();
     setPaused(true);
     pausedRef.current = true;
-    scenario.ana(ana.editor);
-    scenario.luis(luis.editor);
+    scenario.ana(ana.editor, words);
+    scenario.luis(luis.editor, words);
     showPeers();
     redraw();
   };
@@ -337,7 +334,10 @@ function Side({ who, attach }: { who: Who; attach: (who: Who, editor: Editor) =>
 
 /** Two people in one room, with the network between them in your hands. */
 export default function Room() {
-  const r = useRoom();
+  const t = useT();
+  const words = WORDS[useLocale()];
+  usePageEditorLocale();
+  const r = useRoom(words);
   const [scenario, setScenario] = useState<string>();
   const box = useRef<HTMLDivElement>(null);
   const [ana, luis] = r.clients;
@@ -371,16 +371,16 @@ export default function Room() {
   return (
     <div ref={box} className="mt-7 scroll-mt-24 overflow-hidden rounded-[18px] border border-border">
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface px-5 py-3.5">
-        <span className={CAPTION}>Network</span>
+        <span className={CAPTION}>{t({ en: 'Network', es: 'Red', zh: '网络' })}</span>
         <button type="button" aria-pressed={!r.paused} disabled={!ready} onClick={() => r.resume()} className={choice(!r.paused)}>
-          Live
+          {t({ en: 'Live', es: 'En vivo', zh: '实时' })}
         </button>
         <button type="button" aria-pressed={r.paused} disabled={!ready} onClick={() => r.setPaused(true)} className={choice(r.paused)}>
-          Held
+          {t({ en: 'Held', es: 'Retenida', zh: '暂停' })}
         </button>
         <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
         <label htmlFor="collab-case" className={CAPTION}>
-          A case
+          {t({ en: 'A case', es: 'Un caso', zh: '案例' })}
         </label>
         <select
           id="collab-case"
@@ -392,10 +392,10 @@ export default function Room() {
           }}
           className="h-8.5 min-w-0 flex-[0_1_300px] rounded-lg border border-border-strong bg-white px-2 text-[13px] text-ink"
         >
-          <option value="">Type yourself…</option>
+          <option value="">{t({ en: 'Type yourself…', es: 'Escribe tú…', zh: '自己输入…' })}</option>
           {SCENARIOS.map((s) => (
             <option key={s.key} value={s.key}>
-              {s.title}
+              {t(s.title)}
             </option>
           ))}
         </select>
@@ -410,12 +410,16 @@ export default function Room() {
           }}
           className="ml-auto cursor-pointer border-0 bg-transparent text-[13px] text-muted underline disabled:opacity-40"
         >
-          Start again
+          {t({ en: 'Start again', es: 'Empezar de nuevo', zh: '重新开始' })}
         </button>
       </div>
       {current && (
         <p className="m-0 border-b border-border bg-pastel-yellow/50 px-5 py-2.5 text-[14px] leading-normal text-[#5c4a1e]">
-          <strong>{current.title}.</strong> {current.setup} Choose whose change the server gets first. <span className="text-[#7a6634]">Everybody should end with: {current.expect}</span>
+          <strong>{t(current.title)}.</strong> {t(current.setup)}{' '}
+          {t({ en: 'Choose whose change the server gets first.', es: 'Elige de quién es el cambio que recibe primero el servidor.', zh: '选择服务器先收到谁的更改。' })}{' '}
+          <span className="text-[#7a6634]">
+            {t({ en: 'Everybody should end with:', es: 'Todos deberían terminar con:', zh: '最终所有人应得到：' })} {t(current.expect)}
+          </span>
         </p>
       )}
       <div className="flex flex-wrap">
@@ -427,8 +431,12 @@ export default function Room() {
                 <span className="size-2.5 rounded-full" style={{ background: `#${color}` }} aria-hidden="true" />
                 <span className="text-sm font-semibold text-ink">{who}</span>
                 <span className="ml-auto text-xs text-muted">
-                  {c.outbox.length ? `${c.outbox.length} change on its way` : c.inflight ? 'waiting for its place' : 'up to date'}
-                  {c.buffer.length ? ' · typed meanwhile' : ''}
+                  {c.outbox.length
+                    ? t({ en: `${c.outbox.length} change on its way`, es: `${c.outbox.length} cambio en camino`, zh: `${c.outbox.length} 个更改发送中` })
+                    : c.inflight
+                      ? t({ en: 'waiting for its place', es: 'esperando su lugar', zh: '等待排序' })
+                      : t({ en: 'up to date', es: 'al día', zh: '已同步' })}
+                  {c.buffer.length ? t({ en: ' · typed meanwhile', es: ' · escrito entretanto', zh: ' · 期间有输入' }) : ''}
                 </span>
               </div>
               <div className="h-[300px] bg-[#e9eaee]">
@@ -444,40 +452,63 @@ export default function Room() {
       <div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-3">
         {r.paused && pending > 0 ? (
           <>
-            <span className="text-[13px] text-ink-soft">Let them through:</span>
+            <span className="text-[13px] text-ink-soft">{t({ en: 'Let them through:', es: 'Déjalos pasar:', zh: '放行：' })}</span>
             <button type="button" onClick={() => r.deliver(['Ana'])} className="h-8.5 cursor-pointer rounded-lg border-0 bg-brand px-3 text-[13px] font-semibold text-white hover:bg-brand-hover">
-              Ana’s first
+              {t({ en: 'Ana’s first', es: 'Primero el de Ana', zh: '先放 Ana 的' })}
             </button>
             <button type="button" onClick={() => r.deliver(['Luis'])} className="h-8.5 cursor-pointer rounded-lg border-0 bg-brand px-3 text-[13px] font-semibold text-white hover:bg-brand-hover">
-              Luis’s first
+              {t({ en: 'Luis’s first', es: 'Primero el de Luis', zh: '先放 Luis 的' })}
             </button>
           </>
         ) : (
           <span className="text-[13px] text-muted">
-            {r.paused ? 'Held: what either types waits here until you let it through.' : 'Type in either one. Hold the network to make changes at the same time.'}
+            {r.paused
+              ? t({
+                  en: 'Held: what either types waits here until you let it through.',
+                  es: 'Retenida: lo que escriba cualquiera espera aquí hasta que lo dejes pasar.',
+                  zh: '已暂停：任一方输入的内容都会在这里等待，直到你放行。',
+                })
+              : t({
+                  en: 'Type in either one. Hold the network to make changes at the same time.',
+                  es: 'Escribe en cualquiera. Retén la red para hacer cambios a la vez.',
+                  zh: '在任意一个编辑器中输入。暂停网络即可同时做出更改。',
+                })}
           </span>
         )}
         <span
           className={`ml-auto rounded-full px-2.5 py-1 text-xs font-semibold ${!ready ? 'bg-hover text-muted' : pending ? 'bg-pastel-yellow text-pastel-yellow-fg' : same ? 'bg-pastel-green text-pastel-green-fg' : 'bg-pastel-pink text-pastel-pink-fg'}`}
         >
-          {!ready ? 'Opening…' : pending ? `${pending} not sent yet` : same ? 'digest ✓ the same document for all three' : 'digests differ: the editor would load the room again'}
+          {!ready
+            ? t({ en: 'Opening…', es: 'Abriendo…', zh: '正在打开…' })
+            : pending
+              ? t({ en: `${pending} not sent yet`, es: `${pending} sin enviar todavía`, zh: `${pending} 个尚未发送` })
+              : same
+                ? t({ en: 'digest ✓ the same document for all three', es: 'digest ✓ el mismo documento para los tres', zh: 'digest ✓ 三方文档一致' })
+                : t({ en: 'digests differ: the editor would load the room again', es: 'los digest difieren: el editor volvería a cargar la sala', zh: 'digest 不一致：编辑器会重新加载房间' })}
         </span>
       </div>
       <div className="max-h-[220px] overflow-y-auto bg-[#2f2e2b] px-5 py-3.5 font-code text-[12.5px] leading-[1.7] text-[#edece8]" aria-live="polite">
-        <div className="text-[#a8a49a]">{'// the server’s log: one order for everybody'}</div>
+        <div className="text-[#a8a49a]">
+          {t({ en: '// the server’s log: one order for everybody', es: '// el registro del servidor: un mismo orden para todos', zh: '// 服务器日志：所有人遵循同一顺序' })}
+        </div>
         {r.room.log.length ? (
           r.room.log.map((entry, i) => (
             <div key={i}>
               <span className="text-[#a8a49a]">{i + 1}.</span> <span style={{ color: entry.by === 'Ana' ? '#f5a35c' : '#8fb8f5' }}>{entry.by}</span> {entry.ops.map(said).join('; ')}
               {entry.sent && (
                 <div className="pl-5 text-[#9ee0b0]">
-                  ↳ moved over {entry.over} it had not seen: it said “{entry.sent.map(said).join('; ')}”
+                  ↳{' '}
+                  {t({
+                    en: `moved over ${entry.over} it had not seen: it said “${entry.sent.map(said).join('; ')}”`,
+                    es: `movido sobre ${entry.over} que no había visto: decía “${entry.sent.map(said).join('; ')}”`,
+                    zh: `已针对它未看到的 ${entry.over} 个更改进行转换：原本是“${entry.sent.map(said).join('; ')}”`,
+                  })}
                 </div>
               )}
             </div>
           ))
         ) : (
-          <div className="text-[#a8a49a]">nothing yet</div>
+          <div className="text-[#a8a49a]">{t({ en: 'nothing yet', es: 'nada todavía', zh: '暂无' })}</div>
         )}
       </div>
     </div>

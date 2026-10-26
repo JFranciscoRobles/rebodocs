@@ -35,6 +35,7 @@ import {
   paragraphText,
   sameCell,
 } from './model';
+import { isCjk } from './cjk';
 import { normalizeRuns } from './ops';
 import { commonPairs } from './diffing';
 import { type StoryPart, storyOf, textParts, withStory } from './stories';
@@ -127,13 +128,17 @@ function itemsOf(paragraphs: Paragraph[], first = 0): { items: Item[]; at: [numb
 
 const keyOf = (item: Item) => (item.mark ? '\u0000¶' : item.props.object ? `${item.ch}${item.props.object}` : item.ch);
 
-/** The items in stretches matched as one: each letter, or with `words` each word, space and sign. */
+/**
+ * The items in stretches matched as one: each letter, or with `words` each
+ * word, space and sign. Chinese and Japanese have no spaces between words, so
+ * each of their characters is a word of its own, as compareDocs takes them.
+ */
 function unitsOf(items: Item[], words: boolean): number[] {
   const starts: number[] = [];
-  const kind = (item: Item) => (item.mark || item.props.object ? 'x' : /\s/.test(item.ch) ? 's' : /[\p{L}\p{N}_]/u.test(item.ch) ? 'w' : 'p');
+  const kind = (item: Item) => (item.mark || item.props.object ? 'x' : /\s/.test(item.ch) ? 's' : isCjk(item.ch) ? 'c' : /[\p{L}\p{N}_]/u.test(item.ch) ? 'w' : 'p');
   items.forEach((item, i) => {
     const k = kind(item);
-    if (!words || i === 0 || k === 'x' || k === 'p' || k !== kind(items[i - 1])) starts.push(i);
+    if (!words || i === 0 || k === 'x' || k === 'p' || k === 'c' || k !== kind(items[i - 1])) starts.push(i);
   });
   return starts;
 }

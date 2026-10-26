@@ -70,8 +70,24 @@ const FORMATS: Record<FormatId, FormatKind> = {
 
 const plain = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
+/** The Chinese names of each format, Simplified then Traditional, as a document written in Chinese says it. */
+const CHINESE: Record<FormatId, [string, string, ...string[]]> = {
+  upper: ['大写', '大寫'],
+  lower: ['小写', '小寫'],
+  capital: ['首字母大写', '字首大寫'],
+  bold: ['加粗', '粗體', '粗体'],
+  italic: ['倾斜', '斜體', '斜体'],
+  underline: ['下划线', '底線'],
+  date: ['日期', '日期', '短日期'],
+  dateLong: ['长日期', '長日期'],
+  dateFull: ['完整日期', '完整日期'],
+  number: ['数字', '數字'],
+  currency: ['货币', '貨幣', '金额', '金額'],
+  image: ['图片', '圖片'],
+};
+
 const BY_NAME = new Map<string, FormatId>();
-for (const [id, kind] of Object.entries(FORMATS) as [FormatId, FormatKind][]) for (const name of [id, kind.write, ...(kind.alias ?? [])]) BY_NAME.set(plain(name), id);
+for (const [id, kind] of Object.entries(FORMATS) as [FormatId, FormatKind][]) for (const name of [id, kind.write, ...(kind.alias ?? []), ...CHINESE[id]]) BY_NAME.set(plain(name), id);
 
 /** A format as it is written: what it is, and what comes after the colon, as in `fecha: d de MMMM`. */
 function parseFormat(format: string): { id?: FormatId; arg: string } {
@@ -98,11 +114,13 @@ const ENGLISH: Record<FormatId, string> = {
 
 /**
  * How a format is written in a document, in a language: `formatText('date',
- * 'dd/MM/yyyy')` is `date: dd/MM/yyyy`, and in Spanish `fecha: dd/MM/yyyy`.
- * English when no language is given; both names are read whichever is written.
+ * 'dd/MM/yyyy')` is `date: dd/MM/yyyy`, in Spanish `fecha: dd/MM/yyyy`, and in
+ * Chinese `日期: dd/MM/yyyy` (Traditional in Taiwan, Hong Kong and Macao).
+ * English when no language is given; every name is read whichever is written.
  */
 export function formatText(id: FormatId, arg = '', language = 'en'): string {
-  const name = language.toLowerCase().startsWith('es') ? FORMATS[id].write : ENGLISH[id];
+  const tag = language.toLowerCase();
+  const name = tag.startsWith('es') ? FORMATS[id].write : tag.startsWith('zh') ? CHINESE[id][/^zh-(hant|tw|hk|mo)\b/.test(tag) ? 1 : 0] : ENGLISH[id];
   return arg ? `${name}: ${arg}` : name;
 }
 
@@ -125,11 +143,12 @@ function monthFirst(locale: string): boolean {
   }
 }
 
-/** The day a value names: `2026-10-12`, `12/10/2026` (the day first, or the month for a language that puts it first), `hoy` or `today`. */
+/** The day a value names: `2026-10-12`, `2026年10月12日`, `12/10/2026` (the day first, or the month for a language that puts it first), `hoy`, `today` or `今天`. */
 function parseDay(value: string, today: Date, locale: string): Day | undefined {
   const text = value.trim();
-  if (plain(text) === 'hoy' || plain(text) === 'today') return { year: today.getFullYear(), month: today.getMonth() + 1, day: today.getDate() };
-  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ].*)?$/.exec(text);
+  if (plain(text) === 'hoy' || plain(text) === 'today' || text === '今天') return { year: today.getFullYear(), month: today.getMonth() + 1, day: today.getDate() };
+  // As ISO writes it, or as Chinese and Japanese do: 2026年10月12日.
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ].*)?$/.exec(text) ?? /^(\d{4})年(\d{1,2})月(\d{1,2})日$/.exec(text);
   const local = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(text);
   if (!iso && !local) return undefined;
   const swap = !iso && monthFirst(locale);

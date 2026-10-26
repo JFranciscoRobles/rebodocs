@@ -28,11 +28,13 @@ const packages = join(root, 'packages');
  *   exports: Record<string, string>,
  *   bin?: Record<string, string>,
  *   node?: boolean,
+ *   client?: string[],
  *   keywords: string[],
  *   homepage: string,
  * }} spec `entries`: the file each output is built from; `exports`: what each
  *   export of the package is, by the name of its output; `bin`: commands, by
- *   output; `node`: whether it runs in Node rather than anywhere.
+ *   output; `node`: whether it runs in Node rather than anywhere; `client`: the
+ *   outputs that draw in the browser, which Next.js has to be told in the file.
  */
 export async function buildPackage(name, spec) {
   const here = join(packages, name);
@@ -43,6 +45,9 @@ export async function buildPackage(name, spec) {
   // The packages of the repository it uses, at the version they are all published at.
   const ours = Object.keys({ ...deps, ...source.devDependencies }).filter((dep) => dep.startsWith('@rebodocs/'));
   const theirs = Object.keys(deps).filter((dep) => !dep.startsWith('@rebodocs/'));
+  // What the application brings, React: neither in the files nor installed by npm.
+  const peers = source.peerDependencies ?? {};
+  theirs.push(...Object.keys(peers));
   const external = [...ours, ...theirs].flatMap((dep) => [dep, new RegExp(`^${dep.replace('/', '\\/')}/`)]);
   const commands = new Set(Object.values(spec.bin ?? {}));
 
@@ -64,7 +69,7 @@ export async function buildPackage(name, spec) {
           format: 'es',
           entryFileNames: '[name].js',
           chunkFileNames: 'chunks/[name]-[hash].js',
-          banner: (chunk) => (commands.has(chunk.name) ? '#!/usr/bin/env node' : ''),
+          banner: (chunk) => (commands.has(chunk.name) ? '#!/usr/bin/env node' : spec.client?.includes(chunk.name) && chunk.isEntry ? "'use client';" : ''),
         },
       },
     },
@@ -129,7 +134,8 @@ export async function buildPackage(name, spec) {
           .map(([path, output]) => [path.slice(2), [typesOf(output).slice(2)]]),
       ),
     },
-    dependencies: Object.fromEntries([...ours.map((dep) => [dep, version]), ...theirs.map((dep) => [dep, deps[dep]])].sort(([a], [b]) => a.localeCompare(b))),
+    dependencies: Object.fromEntries([...ours.map((dep) => [dep, version]), ...theirs.filter((dep) => !(dep in peers)).map((dep) => [dep, deps[dep]])].sort(([a], [b]) => a.localeCompare(b))),
+    ...(source.peerDependencies ? { peerDependencies: peers, peerDependenciesMeta: source.peerDependenciesMeta } : {}),
     publishConfig: { access: 'public' },
   };
   writeFileSync(join(out, 'package.json'), `${JSON.stringify(published, null, 2)}\n`);

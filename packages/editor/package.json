@@ -6,7 +6,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./locales/zh-Hans": "./src/locales/zh-Hans.ts",
+    "./locales/zh-Hant": "./src/locales/zh-Hant.ts"
   },
   "dependencies": {
     "@rebodocs/core": "*"

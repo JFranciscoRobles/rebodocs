@@ -24,6 +24,8 @@ import {
   useDocsVariables,
 } from '@rebodocs/react';
 import { type ComponentType, useEffect, useState } from 'react';
+import { useEditorLocale } from '@/components/editorLocale';
+import { useT } from '@/components/i18n';
 import type { LiveValue } from './hooks';
 import { live, useEmit } from './live';
 import Docs from './examples/useDocs';
@@ -176,17 +178,19 @@ const loadSample = () => (sample ??= fetch('/sample.docx').then(async (response)
 export default function Stage({ name, onValues }: { name: string; onValues: Emit }) {
   const [file, setFile] = useState<Uint8Array>();
   const [narrow, setNarrow] = useState(false);
+  const t = useT();
+  const editorLocale = useEditorLocale();
   useEffect(() => {
     const was = getLocale();
-    setLocale('en');
+    setLocale(editorLocale);
     void loadSample().then(setFile);
     return () => setLocale(was);
-  }, []);
+  }, [editorLocale]);
   const Piece = PIECES[name];
   const beside = BESIDE.has(name);
   const responsive = name === 'useDocsResponsive';
 
-  if (!file) return <p className="m-0 grid h-[420px] place-items-center text-sm text-muted">Opening the agreement…</p>;
+  if (!file) return <p className="m-0 grid h-[420px] place-items-center text-sm text-muted">{t({ en: 'Opening the agreement…', es: 'Abriendo el contrato…', zh: '正在打开协议…' })}</p>;
   return (
     <DocsProvider docx={file} name="agreement.docx" author="Ana" bubble>
       <div className={beside ? 'grid gap-3 md:grid-cols-[240px_1fr]' : 'grid gap-3'}>
@@ -195,7 +199,7 @@ export default function Stage({ name, onValues }: { name: string; onValues: Emit
         </div>
         <div className="min-w-0">
           {responsive && (
-            <div className="mb-2 flex gap-1.5" role="group" aria-label="Width of the pages">
+            <div className="mb-2 flex gap-1.5" role="group" aria-label={t({ en: 'Width of the pages', es: 'Ancho de las páginas', zh: '页面宽度' })}>
               {[false, true].map((on) => (
                 <button
                   key={String(on)}
@@ -204,7 +208,7 @@ export default function Stage({ name, onValues }: { name: string; onValues: Emit
                   onClick={() => setNarrow(on)}
                   className={`cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${narrow === on ? 'border-ink bg-ink text-white' : 'border-border-strong bg-white text-ink-soft'}`}
                 >
-                  {on ? '360 px' : 'All the width'}
+                  {on ? '360 px' : t({ en: 'All the width', es: 'Todo el ancho', zh: '全宽' })}
                 </button>
               ))}
             </div>

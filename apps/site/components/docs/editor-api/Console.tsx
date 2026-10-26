@@ -4,70 +4,106 @@
 // the right are the Editor's methods, run on it as they are written, and the
 // values under them are read from it at each change.
 
-import { type Editor, type PageSetup, DocsProvider, DocsSurface, setLocale, useDocs } from '@rebodocs/react';
-import { useEffect, useRef, useState } from 'react';
+import { paragraphText } from '@rebodocs/core';
+import { type Editor, type PageSetup, DocsProvider, DocsSurface, useDocs } from '@rebodocs/react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { usePageEditorLocale } from '@/components/editorLocale';
+import { useLocale, useT } from '@/components/i18n';
+import type { L, Locale, T } from '@/lib/i18n';
+import { SAMPLE } from '@/lib/sample';
 import { Readout } from '../ui';
-
-setLocale('en');
 
 export const RUN_EVENT = 'editor-api-run';
 /** What the rest of the page sends: a call of CALLS by its key, or a page to set, from "Points". */
 export type RunDetail = string | { code: string; page: Partial<PageSetup> };
 
 interface Call {
-  label: string;
+  label: L;
   code: (e: Editor) => string;
   run: (e: Editor) => unknown;
 }
 
-const VALUES = { city: 'Lisbon', date: '20 October 2026', client: 'ana lópez' };
-
-/** The calls the editor on the page can run, by the key the reference uses. */
-export const CALLS: Record<string, Call> = {
-  select: { label: 'Select a word', code: () => 'editor.setSelection({ para: 0, offset: 0 }, { para: 0, offset: 11 })', run: (e) => e.setSelection({ para: 0, offset: 0 }, { para: 0, offset: 11 }) },
-  selectAll: { label: 'Select all', code: () => 'editor.selectAll()', run: (e) => e.selectAll() },
-  bold: { label: 'Bold', code: () => "editor.toggleMark('bold')", run: (e) => e.toggleMark('bold') },
-  red: { label: 'Red', code: () => "editor.setRunProps({ color: 'C0392B' })", run: (e) => e.setRunProps({ color: 'C0392B' }) },
-  center: { label: 'Centre', code: () => "editor.setParagraphProps({ align: 'center' })", run: (e) => e.setParagraphProps({ align: 'center' }) },
-  list: { label: 'Bullets', code: () => "editor.toggleList('bullet')", run: (e) => e.toggleList('bullet') },
-  insert: { label: 'Type', code: () => "editor.insertText('Hello ')", run: (e) => e.insertText('Hello ') },
-  undo: { label: 'Undo', code: () => 'editor.undo()', run: (e) => e.undo() },
-  table: { label: 'Table', code: () => 'editor.insertTable(2, 3)', run: (e) => e.insertTable(2, 3) },
-  note: { label: 'Comment', code: () => "editor.addNote('Check this before sending.')", run: (e) => e.addNote('Check this before sending.') },
-  track: { label: 'Track changes', code: (e) => `editor.setTrackChanges(${!e.trackChanges})`, run: (e) => e.setTrackChanges(!e.trackChanges) },
-  find: { label: 'Find', code: () => "editor.find('deposit')", run: (e) => e.find('deposit') },
-  next: { label: 'Next', code: () => 'editor.findStep(1)', run: (e) => e.findStep(1) },
-  replace: { label: 'Replace all', code: () => "editor.replaceAllFound('down payment')", run: (e) => e.replaceAllFound('down payment') },
-  variables: { label: 'Variables', code: () => 'editor.variables', run: (e) => e.variables },
-  fill: {
-    label: 'Fill',
-    code: () =>
-      `editor.fillVariables(${JSON.stringify(VALUES)
-        .replace(/"(\w+)":/g, '$1: ')
-        .replace(/,/g, ', ')
-        .replace(/"/g, "'")})`,
-    run: (e) => e.fillVariables(VALUES),
-  },
-  markdown: { label: 'Markdown', code: () => 'editor.exportMarkdown()', run: (e) => e.exportMarkdown() },
-  docx: { label: 'DOCX', code: () => 'editor.exportDocx()', run: (e) => e.exportDocx() },
-  zoom: { label: 'Zoom', code: (e) => (e.fit ? 'editor.setZoom(1.25)' : "editor.setFit('width')"), run: (e) => (e.fit ? e.setZoom(1.25) : e.setFit('width')) },
-  flow: { label: 'Flow view', code: (e) => `editor.setView('${e.view === 'flow' ? 'column' : 'flow'}')`, run: (e) => e.setView(e.view === 'flow' ? 'column' : 'flow') },
+/** The words of the sample document the calls use, in each language of the site: public/demo*.docx. */
+const WORDS: L<{ values: Record<string, string>; hello: string; note: string; find: string; replace: string }> = {
+  en: { values: { city: 'Lisbon', date: '20 October 2026', client: 'ana lópez' }, hello: 'Hello ', note: 'Check this before sending.', find: 'deposit', replace: 'down payment' },
+  es: { values: { ciudad: 'Guadalajara', fecha: '2026-10-20', cliente: 'ana lópez' }, hello: 'Hola ', note: 'Revisar esto antes de enviarlo.', find: 'anticipo', replace: 'enganche' },
+  zh: { values: { 城市: '上海', 日期: '2026-10-20', 客户: '李华' }, hello: '你好', note: '发送前请检查。', find: '定金', replace: '预付款' },
 };
 
-const SHELVES: [string, string[]][] = [
-  ['Selection', ['select', 'selectAll']],
-  ['Editing', ['bold', 'red', 'center', 'list', 'insert', 'undo']],
-  ['Objects', ['table', 'note', 'track']],
-  ['Finding', ['find', 'next', 'replace']],
-  ['Templates', ['variables', 'fill']],
-  ['Out', ['markdown', 'docx']],
-  ['View', ['zoom', 'flow']],
+/** Where the first word of the title ends: at its first space, or after two characters of a title in Chinese. */
+const firstWord = (e: Editor) => {
+  const text = paragraphText(e.doc.paragraphs[0]);
+  const space = text.search(/\s/);
+  return space > 0 ? space : Math.min(2, text.length);
+};
+
+const quote = (text: string) => `'${text.replace(/'/g, "\\'")}'`;
+
+/** The calls the editor on the page can run, by the key the reference uses. */
+export function callsOf(locale: Locale): Record<string, Call> {
+  const w = WORDS[locale];
+  return {
+    select: {
+      label: { en: 'Select a word', es: 'Selecciona una palabra', zh: '选择一个词' },
+      code: (e) => `editor.setSelection({ para: 0, offset: 0 }, { para: 0, offset: ${firstWord(e)} })`,
+      run: (e) => e.setSelection({ para: 0, offset: 0 }, { para: 0, offset: firstWord(e) }),
+    },
+    selectAll: { label: { en: 'Select all', es: 'Seleccionar todo', zh: '全选' }, code: () => 'editor.selectAll()', run: (e) => e.selectAll() },
+    bold: { label: { en: 'Bold', es: 'Negrita', zh: '加粗' }, code: () => "editor.toggleMark('bold')", run: (e) => e.toggleMark('bold') },
+    red: { label: { en: 'Red', es: 'Rojo', zh: '红色' }, code: () => "editor.setRunProps({ color: 'C0392B' })", run: (e) => e.setRunProps({ color: 'C0392B' }) },
+    center: { label: { en: 'Centre', es: 'Centrar', zh: '居中' }, code: () => "editor.setParagraphProps({ align: 'center' })", run: (e) => e.setParagraphProps({ align: 'center' }) },
+    list: { label: { en: 'Bullets', es: 'Viñetas', zh: '项目符号' }, code: () => "editor.toggleList('bullet')", run: (e) => e.toggleList('bullet') },
+    insert: { label: { en: 'Type', es: 'Escribir', zh: '输入' }, code: () => `editor.insertText(${quote(w.hello)})`, run: (e) => e.insertText(w.hello) },
+    undo: { label: { en: 'Undo', es: 'Deshacer', zh: '撤销' }, code: () => 'editor.undo()', run: (e) => e.undo() },
+    table: { label: { en: 'Table', es: 'Tabla', zh: '表格' }, code: () => 'editor.insertTable(2, 3)', run: (e) => e.insertTable(2, 3) },
+    note: { label: { en: 'Comment', es: 'Comentar', zh: '批注' }, code: () => `editor.addNote(${quote(w.note)})`, run: (e) => e.addNote(w.note) },
+    track: {
+      label: { en: 'Track changes', es: 'Controlar cambios', zh: '修订' },
+      code: (e) => `editor.setTrackChanges(${!e.trackChanges})`,
+      run: (e) => e.setTrackChanges(!e.trackChanges),
+    },
+    find: { label: { en: 'Find', es: 'Buscar', zh: '查找' }, code: () => `editor.find(${quote(w.find)})`, run: (e) => e.find(w.find) },
+    next: { label: { en: 'Next', es: 'Siguiente', zh: '下一个' }, code: () => 'editor.findStep(1)', run: (e) => e.findStep(1) },
+    replace: { label: { en: 'Replace all', es: 'Reemplazar todo', zh: '全部替换' }, code: () => `editor.replaceAllFound(${quote(w.replace)})`, run: (e) => e.replaceAllFound(w.replace) },
+    variables: { label: { en: 'Variables', es: 'Variables', zh: '变量' }, code: () => 'editor.variables', run: (e) => e.variables },
+    fill: {
+      label: { en: 'Fill', es: 'Llenar', zh: '填写' },
+      code: () =>
+        `editor.fillVariables(${JSON.stringify(w.values)
+          .replace(/"([^"]+)":/g, '$1: ')
+          .replace(/,/g, ', ')
+          .replace(/"/g, "'")})`,
+      run: (e) => e.fillVariables(w.values),
+    },
+    markdown: { label: { en: 'Markdown', es: 'Markdown', zh: 'Markdown' }, code: () => 'editor.exportMarkdown()', run: (e) => e.exportMarkdown() },
+    docx: { label: { en: 'DOCX', es: 'DOCX', zh: 'DOCX' }, code: () => 'editor.exportDocx()', run: (e) => e.exportDocx() },
+    zoom: {
+      label: { en: 'Zoom', es: 'Zoom', zh: '缩放' },
+      code: (e) => (e.fit ? 'editor.setZoom(1.25)' : "editor.setFit('width')"),
+      run: (e) => (e.fit ? e.setZoom(1.25) : e.setFit('width')),
+    },
+    flow: {
+      label: { en: 'Flow view', es: 'Vista continua', zh: '流式视图' },
+      code: (e) => `editor.setView('${e.view === 'flow' ? 'column' : 'flow'}')`,
+      run: (e) => e.setView(e.view === 'flow' ? 'column' : 'flow'),
+    },
+  };
+}
+
+const SHELVES: [L, string[]][] = [
+  [{ en: 'Selection', es: 'Selección', zh: '选区' }, ['select', 'selectAll']],
+  [{ en: 'Editing', es: 'Edición', zh: '编辑' }, ['bold', 'red', 'center', 'list', 'insert', 'undo']],
+  [{ en: 'Objects', es: 'Objetos', zh: '对象' }, ['table', 'note', 'track']],
+  [{ en: 'Finding', es: 'Buscar', zh: '查找' }, ['find', 'next', 'replace']],
+  [{ en: 'Templates', es: 'Plantillas', zh: '模板' }, ['variables', 'fill']],
+  [{ en: 'Out', es: 'Salida', zh: '导出' }, ['markdown', 'docx']],
+  [{ en: 'View', es: 'Vista', zh: '视图' }, ['zoom', 'flow']],
 ];
 
 /** A value as the console of a browser would show it, short. */
-function shown(value: unknown): [string, 'good' | 'warn' | 'dim'] {
+function shown(value: unknown, t: T): [string, 'good' | 'warn' | 'dim'] {
   if (value === undefined) return ['undefined', 'dim'];
-  if (value instanceof Uint8Array) return [`Uint8Array(${value.length.toLocaleString('en')} bytes)`, 'good'];
+  if (value instanceof Uint8Array) return [`Uint8Array(${value.length.toLocaleString('en')} ${t({ en: 'bytes', es: 'bytes', zh: '字节' })})`, 'good'];
   if (typeof value === 'string') return [JSON.stringify(value.length > 60 ? `${value.slice(0, 60)}…` : value), 'warn'];
   return [JSON.stringify(value), 'good'];
 }
@@ -77,6 +113,9 @@ const pos = (p: { para: number; offset: number }) => `{ para: ${p.para}, offset:
 type Result = [string, 'good' | 'warn' | 'dim'];
 
 function Panel() {
+  const t = useT();
+  const locale = useLocale();
+  const CALLS = useMemo(() => callsOf(locale), [locale]);
   const { editor } = useDocs();
   const [, setTick] = useState(0);
   const [last, setLast] = useState<{ code: string; result: Result }>();
@@ -105,12 +144,12 @@ function Panel() {
     try {
       const value = run(editor);
       if (value instanceof Promise) {
-        setLast({ code, result: ['Promise (pending)', 'dim'] });
+        setLast({ code, result: [t({ en: 'Promise (pending)', es: 'Promise (pendiente)', zh: 'Promise（等待中）' }), 'dim'] });
         value.then(
-          (done) => setLast({ code, result: shown(done) }),
+          (done) => setLast({ code, result: shown(done, t) }),
           (error) => setLast({ code, result: [String(error), 'warn'] }),
         );
-      } else setLast({ code, result: shown(value) });
+      } else setLast({ code, result: shown(value, t) });
     } catch (error) {
       setLast({ code, result: [String(error), 'warn'] });
     }
@@ -160,8 +199,8 @@ function Panel() {
     <div ref={box} className="flex min-w-0 flex-[1_1_340px] flex-col gap-4 px-6 py-5">
       <div className="flex flex-col gap-2.5">
         {SHELVES.map(([shelf, keys]) => (
-          <div key={shelf} className="flex flex-wrap items-center gap-1.5">
-            <span className="w-[72px] flex-none text-xs font-semibold uppercase tracking-[0.04em] text-muted">{shelf}</span>
+          <div key={shelf.en} className="flex flex-wrap items-center gap-1.5">
+            <span className="w-[72px] flex-none text-xs font-semibold uppercase tracking-[0.04em] text-muted">{t(shelf)}</span>
             {keys.map((key) => (
               <button
                 key={key}
@@ -171,7 +210,7 @@ function Panel() {
                 onClick={() => call(key)}
                 className="h-7.5 cursor-pointer rounded-[7px] border border-border-strong bg-white px-2.5 text-[13px] text-ink transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-40"
               >
-                {CALLS[key].label}
+                {t(CALLS[key].label)}
               </button>
             ))}
           </div>
@@ -210,22 +249,22 @@ function Panel() {
           disabled={!e || !typed.trim()}
           className="h-9 flex-none cursor-pointer border-0 bg-brand px-3 text-[13px] font-semibold text-white hover:bg-brand-hover disabled:cursor-default disabled:opacity-40"
         >
-          Run
+          {t({ en: 'Run', es: 'Ejecutar', zh: '运行' })}
         </button>
       </form>
       <Readout
-        label="You ran"
+        label={t({ en: 'You ran', es: 'Ejecutaste', zh: '你运行了' })}
         lines={
           last
             ? [
                 ['>', last.code, 'warn'],
-                ['returned', last.result[0], last.result[1]],
+                [t({ en: 'returned', es: 'devolvió', zh: '返回' }), last.result[0], last.result[1]],
               ]
-            : [['>', 'press a call above, or click in the page', 'dim']]
+            : [['>', t({ en: 'press a call above, or click in the page', es: 'pulsa una llamada de arriba, o haz clic en la página', zh: '点击上面的调用，或在页面中点击' }), 'dim']]
         }
       />
       <Readout
-        label="Read from the editor, at each change"
+        label={t({ en: 'Read from the editor, at each change', es: 'Leído del editor, en cada cambio', zh: '每次变化时从编辑器读取' })}
         live={false}
         lines={
           e
@@ -233,17 +272,21 @@ function Panel() {
                 ['selection.anchor', pos(e.selection.anchor), 'good'],
                 ['selection.focus', pos(e.selection.focus), 'good'],
                 ['collapsed', String(e.collapsed), 'good'],
-                ['selectedText', shown(e.selectedText)[0], 'warn'],
+                ['selectedText', shown(e.selectedText, t)[0], 'warn'],
                 ['activeRunProps().bold', String(e.activeRunProps().bold), 'good'],
                 ['activeParagraphProps().align', JSON.stringify(e.activeParagraphProps().align), 'warn'],
                 ['currentPage / pageCount', `${e.currentPage} / ${e.pageCount}`, 'good'],
                 ['canUndo', String(e.canUndo), 'good'],
                 ['findCount', String(e.findCount), 'good'],
                 ['area', JSON.stringify(e.area), 'warn'],
-                ['onChange calls: doc !== before / same doc', `${changes.doc} / ${changes.other}`, 'good'],
+                [
+                  t({ en: 'onChange calls: doc !== before / same doc', es: 'llamadas a onChange: doc !== before / mismo doc', zh: 'onChange 调用：doc !== before / 同一 doc' }),
+                  `${changes.doc} / ${changes.other}`,
+                  'good',
+                ],
                 ['zoom, fit', `${Math.round(e.zoom * 100) / 100}, ${JSON.stringify(e.fit)}`, 'good'],
               ]
-            : [['editor', 'opening…', 'dim']]
+            : [['editor', t({ en: 'opening…', es: 'abriendo…', zh: '正在打开…' }), 'dim']]
         }
       />
     </div>
@@ -252,30 +295,37 @@ function Panel() {
 
 /** The demo document, in a real editor, beside the calls. */
 export default function Console() {
+  const t = useT();
+  const sample = SAMPLE[useLocale()];
+  usePageEditorLocale();
   const [file, setFile] = useState<Uint8Array>();
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let gone = false;
-    fetch('/demo.docx')
+    fetch(sample.file)
       .then((answer) => (answer.ok ? answer.arrayBuffer() : Promise.reject(new Error(String(answer.status)))))
       .then((bytes) => !gone && setFile(new Uint8Array(bytes)))
       .catch(() => !gone && setFailed(true));
     return () => {
       gone = true;
     };
-  }, []);
+  }, [sample.file]);
 
   return (
     <div className="mt-7 flex flex-wrap overflow-hidden rounded-[18px] border border-border">
       {file ? (
-        <DocsProvider docx={file} name="receipt.docx">
+        <DocsProvider docx={file} name={sample.name}>
           <div className="h-[560px] min-w-0 flex-[1.4_1_420px] border-border bg-[#e9eaee]">
             <DocsSurface className="h-full" />
           </div>
           <Panel />
         </DocsProvider>
       ) : (
-        <p className="m-0 grid h-[560px] w-full place-items-center text-sm text-muted">{failed ? 'The sample document could not be loaded.' : 'Opening the document…'}</p>
+        <p className="m-0 grid h-[560px] w-full place-items-center text-sm text-muted">
+          {failed
+            ? t({ en: 'The sample document could not be loaded.', es: 'No se pudo cargar el documento de ejemplo.', zh: '无法加载示例文档。' })
+            : t({ en: 'Opening the document…', es: 'Abriendo el documento…', zh: '正在打开文档…' })}
+        </p>
       )}
     </div>
   );

@@ -1,9 +1,13 @@
+'use client';
+
 // The document of a comparison as the editor shows it: what was taken out
 // struck through in red, what was put in underlined in green (compareDocs).
 
 import { ADDED_COLOR, type Paragraph, REMOVED_COLOR } from '@rebodocs/core';
+import { useT } from '@/components/i18n';
 
 export function Compared({ paragraphs, className = '' }: { paragraphs: Paragraph[]; className?: string }) {
+  const t = useT();
   return (
     <div className={className}>
       {paragraphs.map((p, i) => (
@@ -14,7 +18,7 @@ export function Compared({ paragraphs, className = '' }: { paragraphs: Paragraph
             return (
               <span
                 key={k}
-                title={kind === 'removed' ? 'Taken out' : kind === 'added' ? 'Put in' : undefined}
+                title={kind === 'removed' ? t({ en: 'Taken out', es: 'Quitado', zh: '已删除' }) : kind === 'added' ? t({ en: 'Put in', es: 'Puesto', zh: '已插入' }) : undefined}
                 style={kind ? { color: `#${color}` } : undefined}
                 className={`${kind === 'removed' ? 'line-through' : kind === 'added' ? 'underline' : ''} ${bold ? 'font-bold' : ''}`}
               >

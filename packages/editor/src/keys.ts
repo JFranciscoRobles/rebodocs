@@ -45,7 +45,7 @@ import {
 } from '@rebodocs/core/internal';
 import { styleName, t } from './i18n';
 import { type Spoken, spokenChar, spokenText } from './a11y';
-import { clipFromHtml } from './paste';
+import { clipFromHtml, hasImages, readClipImages } from './paste';
 import { IS_MAC } from './platform';
 
 import type { Editor, Selection } from './editor';
@@ -538,6 +538,13 @@ export class Keys {
     const text = data?.getData('text/plain') ?? '';
     if (!plain && data) {
       const clip = parseClip(data.getData(CLIP_TYPE)) ?? (data.types.includes('text/html') ? clipFromHtml(data.getData('text/html')) : undefined);
+      // Its pictures are read first: fetched, or taken from the RTF Word puts beside the HTML.
+      if (clip && hasImages(clip)) {
+        const rtf = data.types.includes('text/rtf') ? data.getData('text/rtf') : undefined;
+        const files = [...(data.files ?? [])];
+        void readClipImages(clip, rtf, files).then((read) => this.editor.insertClip(read) || this.editor.insertText(text));
+        return;
+      }
       if (clip && this.editor.insertClip(clip)) return;
     }
     // A copied picture comes as a file; Word sends one of what was copied along with its text, which is what is wanted then.

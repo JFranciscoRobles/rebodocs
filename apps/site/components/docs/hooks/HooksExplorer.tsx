@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useT } from '@/components/i18n';
 import { roving, useHash } from '../keys';
 import { HookDetail, panelId } from './HookDetail';
-import { HOOKS, HOOK_CATEGORIES, type HookCategory, hookHash } from './hooks';
+import { CATEGORY_NAMES, HOOKS, HOOK_CATEGORIES, type HookCategory, hookHash } from './hooks';
 
 const pill = (on: boolean) =>
   `cursor-pointer rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${on ? 'border-ink bg-ink text-white' : 'border-border-strong bg-white text-ink-soft hover:bg-hover'}`;
@@ -15,6 +16,7 @@ const pill = (on: boolean) =>
 export function HooksExplorer({ html }: { html: Record<string, { code: string; example: string }> }) {
   const [category, setCategory] = useState<'All' | HookCategory>('All');
   const [selected, setSelected] = useState('useDocs');
+  const t = useT();
 
   useHash((hash) => {
     const hook = HOOKS.find((h) => hookHash(h.name) === hash);
@@ -30,10 +32,10 @@ export function HooksExplorer({ html }: { html: Record<string, { code: string; e
 
   return (
     <>
-      <div className="mt-7 flex flex-wrap gap-2" aria-label="Kinds of hook" role="group">
+      <div className="mt-7 flex flex-wrap gap-2" aria-label={t({ en: 'Kinds of hook', es: 'Tipos de hook', zh: 'Hook 类型' })} role="group">
         {(['All', ...HOOK_CATEGORIES] as const).map((name) => (
           <button key={name} type="button" aria-pressed={name === category} onClick={() => setCategory(name)} className={pill(name === category)}>
-            {name}
+            {t(CATEGORY_NAMES[name])}
           </button>
         ))}
       </div>
@@ -58,7 +60,7 @@ export function HooksExplorer({ html }: { html: Record<string, { code: string; e
               className={`lift flex-none cursor-pointer snap-start scroll-mt-24 rounded-[10px] border-[1.5px] px-3.5 py-2.5 text-left ${on ? 'border-brand bg-[#f5f9ff]' : 'border-border bg-white'}`}
             >
               <span className={`block font-code text-sm font-medium ${on ? 'text-brand' : 'text-ink'}`}>{h.name}</span>
-              <span className="mt-0.5 block text-[13px] text-muted">{h.short}</span>
+              <span className="mt-0.5 block text-[13px] text-muted">{t(h.short)}</span>
             </button>
           );
         })}

@@ -15,6 +15,7 @@ import {
   runPropsEqual,
   sameCell,
 } from './model';
+import { cjkWordAt, isCjk } from './cjk';
 import { type ListKind, type ListLevel, MAX_LIST_LEVEL, type NumFormat, addList, isSymbolFont, levelOf, listKind } from './numbering';
 
 function locate(p: Paragraph, offset: number): { index: number; inner: number } {
@@ -271,12 +272,35 @@ export function docText(doc: Doc): string {
 
 const WORD_CHAR = /[\p{L}\p{N}_]/u;
 
+/** Where the run of Chinese characters around `offset` starts and ends: none when the character there is not one. */
+function cjkRun(text: string, offset: number): { from: number; to: number } | undefined {
+  const ideograph = (i: number) => i >= 0 && i < text.length && isCjk(text[i]) && WORD_CHAR.test(text[i]);
+  if (!ideograph(offset)) return undefined;
+  let from = offset;
+  let to = offset;
+  while (ideograph(from - 1)) from--;
+  while (ideograph(to)) to++;
+  return { from, to };
+}
+
+/** Where the word at `offset` of a paragraph's text starts and ends; in Chinese, which has no spaces, the word the browser's dictionary finds there. */
+function wordAt(text: string, offset: number): { from: number; to: number } {
+  const run = cjkRun(text, offset) ?? (offset > 0 ? cjkRun(text, offset - 1) : undefined);
+  if (run) {
+    const at = offset < run.to ? offset : offset - 1;
+    const word = cjkWordAt(text.slice(run.from, run.to), at - run.from);
+    return { from: run.from + word.from, to: run.from + word.to };
+  }
+  let a = offset;
+  let b = offset;
+  while (a > 0 && WORD_CHAR.test(text[a - 1]) && !isCjk(text[a - 1])) a--;
+  while (b < text.length && WORD_CHAR.test(text[b]) && !isCjk(text[b])) b++;
+  return { from: a, to: b };
+}
+
 export function wordRangeAt(doc: Doc, pos: Position): Range {
   const text = paragraphText(doc.paragraphs[pos.para]);
-  let a = pos.offset;
-  let b = pos.offset;
-  while (a > 0 && WORD_CHAR.test(text[a - 1])) a--;
-  while (b < text.length && WORD_CHAR.test(text[b])) b++;
+  let { from: a, to: b } = wordAt(text, pos.offset);
   if (a === b && b < text.length) b++;
   return { from: { para: pos.para, offset: a }, to: { para: pos.para, offset: b } };
 }
@@ -305,11 +329,14 @@ export function moveWord(doc: Doc, pos: Position, dir: -1 | 1): Position {
   if (dir < 0) {
     if (o === 0) return moveChar(doc, pos, -1);
     while (o > 0 && !WORD_CHAR.test(text[o - 1])) o--;
-    while (o > 0 && WORD_CHAR.test(text[o - 1])) o--;
+    // In Chinese, to the start of the word before; elsewhere, past the letters.
+    if (o > 0 && isCjk(text[o - 1])) o = wordAt(text, o - 1).from;
+    else while (o > 0 && WORD_CHAR.test(text[o - 1]) && !isCjk(text[o - 1])) o--;
   } else {
     if (o === text.length) return moveChar(doc, pos, 1);
     while (o < text.length && !WORD_CHAR.test(text[o])) o++;
-    while (o < text.length && WORD_CHAR.test(text[o])) o++;
+    if (o < text.length && isCjk(text[o])) o = wordAt(text, o).to;
+    else while (o < text.length && WORD_CHAR.test(text[o]) && !isCjk(text[o])) o++;
   }
   return { para: pos.para, offset: o };
 }

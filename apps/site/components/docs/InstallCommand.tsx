@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useT } from '@/components/i18n';
 
 /** A command to install, as a button that copies it. */
 export function InstallCommand({ command }: { command: string }) {
   const [copied, setCopied] = useState(false);
+  const t = useT();
   useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), 1600);
@@ -30,7 +32,7 @@ export function InstallCommand({ command }: { command: string }) {
         aria-live="polite"
         className={`flex-none rounded-md border border-border px-2.25 py-0.75 font-text text-xs font-semibold ${copied ? 'bg-pastel-green text-pastel-green-fg' : 'bg-white text-ink'}`}
       >
-        {copied ? 'Copied' : 'Copy'}
+        {copied ? t({ en: 'Copied', es: 'Copiado', zh: '已复制' }) : t({ en: 'Copy', es: 'Copiar', zh: '复制' })}
       </span>
     </button>
   );

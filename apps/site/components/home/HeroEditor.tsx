@@ -2,34 +2,43 @@
 // of CSS alone, laid out as DocsEditor comes: two rows of tools, the page on
 // its canvas, the panel on the right and the zoom floating. It brings up the
 // bar beside the selection, rolls the template variable through three clients
-// and lets two notes float in.
+// and lets two notes float in. Its words are the editor's own in each language.
 
-const CLIENTS = ['{{client}}', 'Northwind S.A.', 'Studio Lumen', 'Casa Rivera', '{{client}}'];
+import type { L } from '@/lib/i18n';
+import { getT } from '@/lib/locale';
 
-/** The bar beside the selection, as the editor shows it over selected text: its words, in English. */
-const BAR: { label: string; css?: string; delay?: string }[] = [
-  { label: 'B', css: 'font-bold' },
-  { label: 'I', css: 'italic' },
-  { label: 'U', css: 'underline' },
-  { label: 'S', css: 'line-through' },
-  { label: 'Highlight', delay: '2.4s' },
-  { label: '{{ }} Variable', delay: '3.4s' },
-  { label: 'Note', delay: '4.4s' },
-  { label: 'Link' },
+const CLIENTS: L<string[]> = {
+  en: ['{{client}}', 'Northwind S.A.', 'Studio Lumen', 'Casa Rivera', '{{client}}'],
+  es: ['{{cliente}}', 'Northwind S.A.', 'Estudio Lumen', 'Casa Rivera', '{{cliente}}'],
+  zh: ['{{客户}}', '北风贸易有限公司', '光影工作室', '里维拉之家', '{{客户}}'],
+};
+
+const same = (label: string): L => ({ en: label, es: label, zh: label });
+
+/** The bar beside the selection, as the editor shows it over selected text. */
+const BAR: { label: L; css?: string; delay?: string }[] = [
+  { label: same('B'), css: 'font-bold' },
+  { label: same('I'), css: 'italic' },
+  { label: same('U'), css: 'underline' },
+  { label: same('S'), css: 'line-through' },
+  { label: { en: 'Highlight', es: 'Resaltar', zh: '突出显示' }, delay: '2.4s' },
+  { label: { en: '{{ }} Variable', es: '{{ }} Variable', zh: '{{ }} 变量' }, delay: '3.4s' },
+  { label: { en: 'Note', es: 'Nota', zh: '批注' }, delay: '4.4s' },
+  { label: { en: 'Link', es: 'Enlace', zh: '链接' } },
 ];
 
 /** The second row of tools; the ones further right give way first on a narrow screen. */
-const TOOLS: { label: string; css?: string; from?: string }[] = [
-  { label: 'Title ▾', from: 'sm' },
-  { label: 'Arial ▾' },
-  { label: '17 ▾' },
-  { label: 'B', css: 'font-bold' },
-  { label: 'I', css: 'italic font-serif' },
-  { label: 'U', css: 'underline' },
-  { label: 'S', css: 'line-through', from: 'sm' },
-  { label: '≡ ▾', from: 'sm' },
-  { label: '+ Insert ▾', from: 'md' },
-  { label: 'Review ▾', from: 'md' },
+const TOOLS: { label: L; css?: string; from?: string }[] = [
+  { label: { en: 'Title ▾', es: 'Título ▾', zh: '标题 ▾' }, from: 'sm' },
+  { label: same('Arial ▾') },
+  { label: same('17 ▾') },
+  { label: same('B'), css: 'font-bold' },
+  { label: same('I'), css: 'italic font-serif' },
+  { label: same('U'), css: 'underline' },
+  { label: same('S'), css: 'line-through', from: 'sm' },
+  { label: same('≡ ▾'), from: 'sm' },
+  { label: { en: '+ Insert ▾', es: '+ Insertar ▾', zh: '+ 插入 ▾' }, from: 'md' },
+  { label: { en: 'Review ▾', es: 'Revisar ▾', zh: '审阅 ▾' }, from: 'md' },
 ];
 const SHOWN_FROM: Record<string, string> = { sm: 'hidden sm:flex', md: 'hidden md:flex' };
 
@@ -38,10 +47,10 @@ const Avatar = ({ letter, tint, className = '' }: { letter: string; tint: string
 );
 
 /** The value the variable takes, rolling in step with the one on the page. */
-const Rolling = ({ className }: { className: string }) => (
+const Rolling = ({ className, clients }: { className: string; clients: string[] }) => (
   <span className={`inline-flex h-[1.5em] overflow-hidden rounded-md bg-pastel-yellow px-1.5 font-code ${className}`}>
     <span className="flex animate-roll flex-col">
-      {CLIENTS.map((client, i) => (
+      {clients.map((client, i) => (
         <span key={i} className="h-[1.5em] whitespace-nowrap font-medium leading-[1.5em] text-pastel-yellow-fg">
           {client}
         </span>
@@ -54,6 +63,8 @@ const island = 'rounded-[14px] border border-[#e6e3dc] bg-[#fbfaf8]';
 const tool = 'h-7 items-center rounded-lg px-2 text-[13px] text-[#2f2e2b]';
 
 export function HeroEditor() {
+  const t = getT();
+  const clients = t(CLIENTS);
   return (
     <div className="relative mx-auto mt-16 max-w-[980px] text-left" aria-hidden="true">
       <div className="flex flex-col gap-2 overflow-hidden rounded-[22px] border border-border bg-[#efede8] p-2 shadow-editor sm:gap-2.5 sm:p-2.5">
@@ -62,7 +73,7 @@ export function HeroEditor() {
           <div className="flex items-center gap-1 border-b border-[#e6e3dc] px-2 py-1.5 text-[13px] text-[#5f5d58]">
             <span className={`flex ${tool} text-[15px]`}>☰</span>
             <span className="mx-1 h-4 w-px bg-[#e6e3dc]" />
-            <span className="font-semibold text-[#2f2e2b]">receipt.docx</span>
+            <span className="font-semibold text-[#2f2e2b]">{t({ en: 'receipt.docx', es: 'recibo.docx', zh: '收据.docx' })}</span>
             <span className={`hidden sm:flex ${tool} text-[#5f5d58]`}>↶ ↷</span>
             <span className="ml-auto flex items-center pr-1">
               <Avatar letter="C" tint="bg-pastel-blue text-pastel-blue-fg" />
@@ -71,9 +82,9 @@ export function HeroEditor() {
           </div>
           <div className="flex items-center gap-0.5 px-2 py-1.5">
             {TOOLS.map((item, i) => (
-              <span key={item.label} className={`${item.from ? SHOWN_FROM[item.from] : 'flex'} items-center`}>
+              <span key={item.label.en} className={`${item.from ? SHOWN_FROM[item.from] : 'flex'} items-center`}>
                 {i === 3 || i === 7 || i === 8 ? <i className="mx-1 h-4 w-px bg-[#e6e3dc]" /> : null}
-                <span className={`flex whitespace-nowrap ${tool} ${item.css ?? ''}`}>{item.label}</span>
+                <span className={`flex whitespace-nowrap ${tool} ${item.css ?? ''}`}>{t(item.label)}</span>
               </span>
             ))}
           </div>
@@ -88,33 +99,39 @@ export function HeroEditor() {
                 <path d="M14 12h11l5 5v15H14z" fill="none" stroke="#B07A00" strokeWidth="2" strokeLinejoin="round" />
                 <path d="M18 22h8M18 26h6" stroke="#B07A00" strokeWidth="2" strokeLinecap="round" />
               </svg>
-              <div className="mt-3 font-display text-[30px] font-extrabold tracking-[-0.03em]">Receipt</div>
+              <div className="mt-3 font-display text-[30px] font-extrabold tracking-[-0.03em]">{t({ en: 'Receipt', es: 'Recibo', zh: '收据' })}</div>
               <div className="mt-2 text-ink-soft">
-                Billed to <Rolling className="align-[-0.38em] text-[14px]" /> — payment due in <span className="text-delete line-through">30</span>{' '}
-                <span className="rounded bg-pastel-blue px-[3px] text-brand">15</span> days.
+                {t({ en: 'Billed to ', es: 'Facturado a ', zh: '付款方：' })}
+                <Rolling className="align-[-0.38em] text-[14px]" clients={clients} />
+                {t({ en: ' — payment due in ', es: ' — pago a ', zh: '，付款期限 ' })}
+                <span className="text-delete line-through">30</span> <span className="rounded bg-pastel-blue px-[3px] text-brand">15</span>
+                {t({ en: ' days.', es: ' días.', zh: ' 天。' })}
               </div>
               <div className="relative mt-[70px] text-ink-soft">
                 {/* The bar beside the selection comes up over what is selected. */}
                 <div className="absolute -top-[54px] left-0 z-[2] flex origin-bottom-left animate-menu-in items-center gap-0.5 rounded-xl border border-border bg-white p-1 text-sm opacity-0 shadow-menu">
                   {BAR.map((item, i) => (
-                    <span key={item.label} className={`${i > 5 ? 'hidden sm:flex' : 'flex'} items-center`}>
+                    <span key={item.label.en} className={`${i > 5 ? 'hidden sm:flex' : 'flex'} items-center`}>
                       {i === 4 || i === 5 ? <i className="mx-1 h-5 w-px bg-border" /> : null}
                       <span
                         className={`animate-menu-hover whitespace-nowrap rounded-md px-2 py-1 text-ink ${item.css ?? ''}`}
                         style={item.delay ? { animationDelay: item.delay } : { animation: 'none' }}
                       >
-                        {item.label}
+                        {t(item.label)}
                       </span>
                     </span>
                   ))}
                 </div>
-                The <span className="rounded-sm bg-[#cfe0fb] text-ink">total amount</span> is paid on the day of the reservation
+                {t({ en: 'The ', es: 'El ', zh: '' })}
+                <span className="rounded-sm bg-[#cfe0fb] text-ink">{t({ en: 'total amount', es: 'importe total', zh: '全部款项' })}</span>
+                {t({ en: ' is paid on the day of the reservation', es: ' se paga el día de la reservación', zh: '于预订当日支付' })}
                 <span className="ml-px inline-block h-[1.1em] w-0.5 animate-blink bg-brand align-[-0.2em]" />
               </div>
             </div>
             <div className="absolute inset-x-2.5 bottom-2.5 flex items-center justify-between gap-2 text-[12px] text-[#5f5d58]">
               <span className="rounded-full border border-[#e6e3dc] bg-white px-3 py-1.5 shadow-[0_2px_8px_rgba(47,46,43,0.08)]">
-                Page 1 of 1<span className="hidden sm:inline"> · 42 words</span>
+                {t({ en: 'Page 1 of 1', es: 'Página 1 de 1', zh: '第 1 页，共 1 页' })}
+                <span className="hidden sm:inline"> · {t({ en: '42 words', es: '42 palabras', zh: '42 字' })}</span>
               </span>
               <span className="flex items-center gap-2 rounded-full border border-[#e6e3dc] bg-white px-3 py-1.5 shadow-[0_2px_8px_rgba(47,46,43,0.08)]">
                 −
@@ -129,16 +146,16 @@ export function HeroEditor() {
           {/* The panel on the right: the variables of the template. */}
           <div className="hidden w-[230px] shrink-0 flex-col gap-3 rounded-[14px] border border-[#e6e3dc] bg-white p-3 text-[13px] md:flex">
             <div className="flex rounded-lg bg-[#f3f1ec] p-0.5 text-[12px] font-semibold text-[#5f5d58]">
-              <span className="flex-1 rounded-md bg-white py-1 text-center text-[#2f2e2b] shadow-[0_1px_2px_rgba(47,46,43,0.12)]">Variables</span>
-              <span className="flex-1 py-1 text-center">Notes</span>
-              <span className="flex-1 py-1 text-center">Changes</span>
+              <span className="flex-1 rounded-md bg-white py-1 text-center text-[#2f2e2b] shadow-[0_1px_2px_rgba(47,46,43,0.12)]">{t({ en: 'Variables', es: 'Variables', zh: '变量' })}</span>
+              <span className="flex-1 py-1 text-center">{t({ en: 'Notes', es: 'Notas', zh: '批注' })}</span>
+              <span className="flex-1 py-1 text-center">{t({ en: 'Changes', es: 'Cambios', zh: '修订' })}</span>
             </div>
             {[
-              ['client', <Rolling key="r" className="text-[12px]" />],
+              [t({ en: 'client', es: 'cliente', zh: '客户' }), <Rolling key="r" className="text-[12px]" clients={clients} />],
               [
-                'amount',
+                t({ en: 'amount', es: 'importe', zh: '金额' }),
                 <span key="a" className="text-[#2f2e2b]">
-                  $2,500.00
+                  {t({ en: '$2,500.00', es: '$2,500.00', zh: '¥2,500.00' })}
                 </span>,
               ],
             ].map(([name, value]) => (
@@ -147,7 +164,9 @@ export function HeroEditor() {
                 <div className="mt-1">{value}</div>
               </div>
             ))}
-            <div className="mt-auto rounded-lg bg-[#e8f0fd] px-2.5 py-2 text-center text-[12px] font-semibold text-[#0b57d0]">Fill 2 variables in the document</div>
+            <div className="mt-auto rounded-lg bg-[#e8f0fd] px-2.5 py-2 text-center text-[12px] font-semibold text-[#0b57d0]">
+              {t({ en: 'Fill 2 variables in the document', es: 'Llenar 2 variables en el documento', zh: '填写文档中的 2 个变量' })}
+            </div>
           </div>
         </div>
       </div>
@@ -157,12 +176,14 @@ export function HeroEditor() {
         <div className="flex items-center gap-2">
           <span className="inline-flex size-[22px] items-center justify-center rounded-full bg-pastel-blue text-[11px] font-bold text-pastel-blue-fg">C</span>
           <span className="font-semibold">Claude</span>
-          <span className="text-muted">· via MCP</span>
+          <span className="text-muted">· {t({ en: 'via MCP', es: 'vía MCP', zh: '通过 MCP' })}</span>
         </div>
-        <div className="mt-1.5 text-ink-soft">Suggested 30 → 15 days, per the new terms.</div>
+        <div className="mt-1.5 text-ink-soft">
+          {t({ en: 'Suggested 30 → 15 days, per the new terms.', es: 'Sugirió 30 → 15 días, según los nuevos términos.', zh: '根据新条款，建议将 30 天改为 15 天。' })}
+        </div>
       </div>
       <div className="absolute -left-[30px] bottom-[84px] z-10 hidden animate-[pop-in_0.5s_cubic-bezier(0.2,0.8,0.2,1)_3.6s_forwards,float_8s_ease-in-out_4.1s_infinite] rounded-[14px] bg-pastel-pink px-4 py-2.5 opacity-0 md:block">
-        <span className="font-hand text-2xl font-semibold text-pastel-pink-fg">Ana is editing…</span>
+        <span className="font-hand text-2xl font-semibold text-pastel-pink-fg">{t({ en: 'Ana is editing…', es: 'Ana está editando…', zh: 'Ana 正在编辑…' })}</span>
       </div>
     </div>
   );

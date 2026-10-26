@@ -2,7 +2,7 @@
 // how the pages are shown. Like the toolbar, it only uses the public methods
 // of the editor.
 
-import { type Doc, docText } from '@rebodocs/core/internal';
+import { type Doc, countWords, docText } from '@rebodocs/core/internal';
 import { type Editor, type ViewMode, type ZoomFit, MAX_ZOOM, MIN_ZOOM } from './editor';
 import { getLocale, plural, t, withRegion } from './i18n';
 
@@ -27,6 +27,11 @@ export interface StatusBarOptions {
    * ('floating'), for an application that lays them over its canvas.
    */
   layout?: 'bar' | 'chips' | 'floating';
+  /**
+   * The page it says: the caret's ('caret', as it comes), or the one most in
+   * view ('view'), for pages only read, where there is no caret to follow.
+   */
+  page?: 'caret' | 'view';
   /**
    * Shown as an "AI" button when given: whether an assistant can reach the
    * document, and what switches that on and off. Connecting is the
@@ -144,7 +149,8 @@ const ICONS = {
 /** Its numbers are written as the language of the bar writes them, whatever the browser is set to. */
 const number = (n: number) => n.toLocaleString(getLocale(), { useGrouping: 'always' } as unknown as Intl.NumberFormatOptions);
 const count = (n: number, key: 'status.words' | 'status.chars') => `${number(n)} ${plural(key, n)}`;
-const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
+/** Each Chinese character a word, as Word counts them. */
+const words = (text: string) => countWords(text);
 /** Characters as a person counts them: spaces are, the ends of paragraphs and the marks of objects are not. */
 const characters = (text: string) => text.replace(/[\n\r\f￼]/g, '').length;
 
@@ -219,10 +225,24 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
     return counted;
   };
   const selected = () => (editor.collapsed ? undefined : editor.selectedText);
+  /** The page most of the window shows, counting from 1: the first of them, when several show as much. */
+  const pageInView = () => {
+    const shown = editor.element.getBoundingClientRect();
+    let best = 0;
+    let most = 0;
+    for (let i = 0; i < editor.pageCount; i++) {
+      const page = editor.pageBounds(i);
+      const seen = Math.max(0, Math.min(page.bottom, shown.bottom) - Math.max(page.top, shown.top));
+      if (seen > most) [best, most] = [i, seen];
+      else if (page.top > shown.bottom) break;
+    }
+    return best + 1;
+  };
 
   bar.append(
     // In the header or the footer, the page is the one whose header shows the caret.
     info('page', () => {
+      if (options.page === 'view') return t('status.page', { page: pageInView(), pages: editor.pageCount });
       const section = editor.sectionCount > 1 ? `${t('area.section', { n: editor.sectionIndex + 1 })} · ` : '';
       return `${section}${areaPrefix(editor.area)}${t('status.page', { page: editor.currentPage, pages: editor.pageCount })}`;
     }),
@@ -583,6 +603,16 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
     }
   }
   const unsubscribe = editor.onChange(refresh);
+  // The page in view changes as the pages scroll, with nothing changed in the editor.
+  let frame = 0;
+  const scrolled = () => {
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      refresh();
+    });
+  };
+  if (options.page === 'view') editor.element.addEventListener('scroll', scrolled, { passive: true });
   container.appendChild(bar);
   refresh();
   fit();
@@ -592,6 +622,8 @@ export function createStatusBar(container: HTMLElement, editor: Editor, options:
     showCollab: () => showCollab(),
     destroy() {
       unsubscribe();
+      editor.element.removeEventListener('scroll', scrolled);
+      cancelAnimationFrame(frame);
       resize.disconnect();
       closePop();
       bar.remove();

@@ -2,7 +2,7 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
-    "includes": ["**", "!**/dist", "!**/out", "!**/.next", "!**/src-tauri/target", "!**/src-tauri/gen", "!package-lock.json", "!**/spellcheck.worker.code.ts", "!test-documents"]
+    "includes": ["**", "!**/dist", "!**/out", "!**/.next", "!**/src-tauri/target", "!**/src-tauri/gen", "!package-lock.json", "!**/spellcheck.worker.code.ts", "!test-documents", "!**/test/fixtures"]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 200 },
   "javascript": {

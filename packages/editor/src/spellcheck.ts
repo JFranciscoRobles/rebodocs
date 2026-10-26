@@ -107,8 +107,9 @@ export function createSpellChecker(options: SpellCheckerOptions): SpellChecker &
 
 // --- The words of a paragraph ---------------------------------------------------------
 
-/** A word: letters, with the apostrophes inside it ("don't", "l'eau"). */
-const WORD = /[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*/gu;
+/** A word: letters, with the apostrophes inside it ("don't", "l'eau"). Not Chinese or Japanese, which have no dictionary to check them in: the latin words between them are words. */
+const LETTER = String.raw`(?:(?![\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}])[\p{L}\p{M}])`;
+const WORD = new RegExp(`${LETTER}+(?:['’]${LETTER}+)*`, 'gu');
 /** What is not words to check: variables and the marks of blocks, addresses and emails. */
 const NOT_WORDS = /\{\{[^}]*\}\}|\b(?:https?:\/\/|www\.)\S+|[\w.+-]+@[\w-]+\.[\w.-]+/gu;
 const DIGIT = /[\p{N}_]/u;

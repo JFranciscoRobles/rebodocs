@@ -1,12 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useT } from '@/components/i18n';
 import { INSTALL_ORDER, PACKAGES } from '@/lib/home';
 
 /** One package at a time: the command to install it, a button that copies it, and what it is. */
 export function InstallPicker() {
   const [name, setName] = useState(INSTALL_ORDER[0]);
   const [copied, setCopied] = useState(false);
+  const t = useT();
+  const what = PACKAGES.find((pkg) => pkg.name === name)?.what;
   const command = `npm install ${name}`;
   useEffect(() => {
     if (!copied) return;
@@ -23,7 +26,7 @@ export function InstallPicker() {
 
   return (
     <div className="mx-auto mt-7 max-w-[560px] rounded-2xl border border-border bg-surface p-2 text-left">
-      <div role="tablist" aria-label="Packages" className="flex flex-wrap gap-1">
+      <div role="tablist" aria-label={t({ en: 'Packages', es: 'Paquetes', zh: '软件包' })} className="flex flex-wrap gap-1">
         {INSTALL_ORDER.map((pkg) => {
           const on = pkg === name;
           return (
@@ -56,11 +59,11 @@ export function InstallPicker() {
           aria-live="polite"
           className={`flex-none rounded-md border border-border px-[9px] py-[3px] font-text text-xs font-semibold ${copied ? 'bg-pastel-green text-pastel-green-fg' : 'bg-white text-ink'}`}
         >
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? t({ en: 'Copied', es: 'Copiado', zh: '已复制' }) : t({ en: 'Copy', es: 'Copiar', zh: '复制' })}
         </span>
       </button>
       <p key={name} className="m-0 animate-pop-in px-2 pb-1 pt-2.5 text-sm leading-normal text-muted opacity-0">
-        {PACKAGES.find((pkg) => pkg.name === name)?.what}
+        {what && t(what)}
       </p>
     </div>
   );

@@ -1,9 +1,11 @@
-import Link from 'next/link';
+'use client';
+
+import { LanguageSwitcher, LocalLink as Link, useT } from '@/components/i18n';
 import { VERSION } from '@/lib/home';
+import { primary } from './buttons';
 import { NPM_ORG, REPO } from '@/lib/site';
 
 const ghost = 'rounded-lg px-3 py-2 text-ink transition-colors hover:bg-hover';
-export const primary = 'bg-brand font-semibold text-white transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_6px_16px_rgba(11,87,208,0.22)]';
 
 export function Logo({ size = 32 }: { size?: number }) {
   return (
@@ -17,22 +19,25 @@ export function Logo({ size = 32 }: { size?: number }) {
 
 /** The header of the landing page. Its links go down to a second line on a narrow screen. */
 export function SiteHeader() {
+  const t = useT();
   return (
     <header className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4.5">
       <Link href="/" className="flex items-center gap-2.5 text-ink">
         <Logo />
         <span className="font-display text-xl font-extrabold tracking-[-0.03em]">Rebodocs</span>
       </Link>
-      <span className="rounded-full bg-pastel-green px-2.5 py-1 text-xs font-medium text-pastel-green-fg">Open source · MIT · v{VERSION}</span>
-      <nav aria-label="Main" className="ml-auto flex flex-wrap items-center gap-0.5 text-[15px] font-medium">
+      <span className="rounded-full bg-pastel-green px-2.5 py-1 text-xs font-medium text-pastel-green-fg">
+        {t({ en: 'Open source', es: 'Código abierto', zh: '开源' })} · MIT · v{VERSION}
+      </span>
+      <nav aria-label={t({ en: 'Main', es: 'Principal', zh: '主导航' })} className="ml-auto flex flex-wrap items-center gap-0.5 text-[15px] font-medium">
         <Link href="/demo/" className={ghost}>
-          Demo
+          {t({ en: 'Demo', es: 'Demo', zh: '演示' })}
         </Link>
         <Link href="/docs/" className={ghost}>
-          Docs
+          {t({ en: 'Docs', es: 'Documentación', zh: '文档' })}
         </Link>
         <Link href="/docs/status/" className={ghost}>
-          Status
+          {t({ en: 'Status', es: 'Estado', zh: '现状' })}
         </Link>
         <a href={NPM_ORG} className={ghost}>
           npm
@@ -40,8 +45,9 @@ export function SiteHeader() {
         <a href={REPO} className={ghost}>
           GitHub
         </a>
+        <LanguageSwitcher />
         <Link href="/docs/getting-started/" className={`ml-2 rounded-[10px] px-4 py-2.5 ${primary}`}>
-          Get started
+          {t({ en: 'Get started', es: 'Empezar', zh: '开始使用' })}
         </Link>
       </nav>
     </header>
@@ -49,15 +55,16 @@ export function SiteHeader() {
 }
 
 export function SiteFooter() {
+  const t = useT();
   return (
     <footer className="border-t border-border">
       <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-6 gap-y-3 px-6 pb-10 pt-8 text-sm text-muted">
         <span className="font-display text-base font-extrabold tracking-[-0.03em] text-ink">Rebodocs</span>
         <Link href="/docs/" className="hover:text-ink">
-          Docs
+          {t({ en: 'Docs', es: 'Documentación', zh: '文档' })}
         </Link>
         <Link href="/docs/status/" className="hover:text-ink">
-          Status &amp; roadmap
+          {t({ en: 'Status & roadmap', es: 'Estado y hoja de ruta', zh: '现状与路线图' })}
         </Link>
         <a href={NPM_ORG} className="hover:text-ink">
           npm
@@ -65,7 +72,7 @@ export function SiteFooter() {
         <a href={REPO} className="hover:text-ink">
           GitHub
         </a>
-        <span className="sm:ml-auto">Open source under the MIT license.</span>
+        <span className="sm:ml-auto">{t({ en: 'Open source under the MIT license.', es: 'Código abierto con licencia MIT.', zh: '基于 MIT 许可证开源。' })}</span>
       </div>
     </footer>
   );

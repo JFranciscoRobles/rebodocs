@@ -63,26 +63,12 @@ const pdf = await editor.exportPdf('Contract');
 | `createResponsive` | Narrow windows and on-screen keyboards. |
 | `createSpellChecker` | Spell checking with Hunspell dictionaries you give, read in a worker: `editor.spellChecker = createSpellChecker({ dictionaries: { es: { aff, dic } } })`. |
 | `createVersionView` | Two versions compared, over the document. |
-| `createViewer` | A document only to read: one page under another, each whole on the screen, or all at once, with the status bar floating over them; `print()`. |
-| `pageThumbnail`, `pagePicture` | The first page of a document for a thumbnail: as the element the editor draws, or as a JPEG or PNG of a size, its pictures in it. |
 
 ### A document to read
 
-```ts
-import { importDocx } from '@rebodocs/core';
-import { createViewer, pagePicture, setLocale } from '@rebodocs/editor';
-
-setLocale('es');
-const viewer = createViewer(element, importDocx(bytes)); // element has a size
-viewer.setLayout('all'); // every page at once, as large as lets them fit; 'pages' for one under another
-viewer.print();
-viewer.destroy();
-
-const thumbnail = await pagePicture(importDocx(bytes), 480); // a JPEG, its longest side 480 pixels
-```
-
-The bar's own views do the same as `setLayout`; its notes, its flowing text
-and its language are left out, the document only being read.
+A document only to read, with its first page as a thumbnail, is
+[`@rebodocs/viewer`](https://www.npmjs.com/package/@rebodocs/viewer): these
+pages read only, with a bar to zoom and print.
 
 ## Theming
 
@@ -111,7 +97,20 @@ await addFonts([
 ]);
 ```
 
-The interface ships in English and Spanish. Fonts you add are listed in the
+The interface ships in English and Spanish; Simplified and Traditional
+Chinese come apart, for the applications that want them:
+
+```ts
+import zhHans from '@rebodocs/editor/locales/zh-Hans';
+import zhHant from '@rebodocs/editor/locales/zh-Hant';
+addLocale('zh-Hans', zhHans); // zh, zh-CN, zh-SG
+addLocale('zh-Hant', zhHant); // zh-TW, zh-HK, zh-Hant
+```
+
+A browser in Chinese then shows Chinese by itself, until the application
+sets a language with `setLocale`.
+
+Fonts you add are listed in the
 toolbar, embedded in PDFs, and carried in the DOCX when their licence allows
 (`editor.embedFonts = 'subset'` keeps only the characters used).
 

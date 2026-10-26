@@ -25,6 +25,8 @@ import {
   setLocale,
   t,
 } from '@rebodocs/editor';
+import zhHans from '@rebodocs/editor/locales/zh-Hans';
+import zhHant from '@rebodocs/editor/locales/zh-Hant';
 import { connectAssistant } from '@rebodocs/mcp/browser';
 import { sampleDoc } from './sample';
 
@@ -41,6 +43,9 @@ function storedLocale(): string | null {
     return null;
   }
 }
+// Chinese, Simplified and Traditional, besides the two the editor comes with.
+addLocale('zh-Hans', zhHans);
+addLocale('zh-Hant', zhHant);
 setLocale(storedLocale() ?? navigator.language);
 document.documentElement.lang = getLocale();
 

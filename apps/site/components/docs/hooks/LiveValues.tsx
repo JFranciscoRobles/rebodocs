@@ -1,3 +1,6 @@
+'use client';
+
+import { useT } from '@/components/i18n';
 import type { LiveValue } from './hooks';
 
 const COLOR: Record<LiveValue['kind'], string> = {
@@ -29,6 +32,7 @@ function Row({ value }: { value: LiveValue }) {
 export function LiveValues({ values }: { values: LiveValue[] }) {
   const given = values.filter((value) => !value.demo);
   const done = values.filter((value) => value.demo);
+  const t = useT();
   return (
     <div aria-live="polite" aria-atomic="false" className="mt-2.5 overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3.5 font-code text-[13px] leading-[1.75] text-[#edece8]">
       {given.map((value) => (
@@ -36,7 +40,7 @@ export function LiveValues({ values }: { values: LiveValue[] }) {
       ))}
       {done.length > 0 && (
         <div className="mt-2 border-t border-white/10 pt-2">
-          <div className="whitespace-nowrap text-[#a8a49a]">{'// in this demo, not from the hook'}</div>
+          <div className="whitespace-nowrap text-[#a8a49a]">{t({ en: '// in this demo, not from the hook', es: '// en esta demo, no del hook', zh: '// 来自本演示，而非 hook' })}</div>
           {done.map((value) => (
             <Row key={value.key} value={value} />
           ))}

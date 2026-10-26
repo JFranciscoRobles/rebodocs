@@ -26,6 +26,7 @@ import {
 import { insertText, listKindAt, propsAt, sliceRuns, splitParagraph } from './ops';
 import { paragraphStyles } from './styles';
 import { canMergeCells, insertTable, locateCell, mergeCells, setHeaderRow } from './tables';
+import { altText, docImage, imageExtension, imageTypeOf, insertImage, pictureSize, setAltText } from './images';
 
 /** A run of a clip: its formatting is what it has of its own, on top of the text it lands in. */
 export interface ClipRun {
@@ -33,6 +34,22 @@ export interface ClipRun {
   props: RunProps;
   /** Where it goes, when it is a link. */
   href?: string;
+  /** A picture in the line, in place of text: its `text` is empty. */
+  image?: ClipImage;
+}
+
+/**
+ * A picture of a clip. Only a `data:` address is put in by insertClip; one
+ * the clip got some other way (a web address, a file of the computer) is for
+ * whoever pastes it to read into one first, or it is left out.
+ */
+export interface ClipImage {
+  src: string;
+  /** Its size in the line, in points; 0 when where it came from did not say, and it is then the picture's own at 96 pixels an inch. */
+  width: number;
+  height: number;
+  /** What it shows, for whoever cannot see it. */
+  alt?: string;
 }
 
 export interface ClipParagraph {
@@ -88,7 +105,7 @@ function portableParagraph(props: ParagraphProps): ParagraphProps {
   return defined({ align, spacingBefore, spacingAfter, lineHeight, indentLeft, indentRight, indentFirstLine, keepNext, keepLines, tabs });
 }
 
-/** The text of `range`, with its formatting, apart from the document. Pictures and fields stay behind. */
+/** The text of `range`, with its formatting and its pictures, apart from the document. Fields, shapes and text boxes stay behind. */
 export function clipOf(doc: Doc, range: Range): Clip {
   const styles = paragraphStyles(doc);
   const paragraphs: ClipParagraph[] = [];
@@ -105,7 +122,12 @@ export function clipOf(doc: Doc, range: Range): Clip {
     const runs: ClipRun[] = [];
     for (const run of sliceRuns(p.runs, a, b)) {
       // Text taken out while changes were tracked is not there for the person.
-      if (run.props.object || run.props.revision === 'delete') continue;
+      if (run.props.revision === 'delete') continue;
+      if (run.props.object) {
+        const image = clipImage(doc, run.props);
+        if (image) runs.push({ text: '', props: {}, image });
+        continue;
+      }
       // The size and the font go even when they are the document's own, which elsewhere are not.
       const { fontSize, fontFamily } = resolveRun(run.props);
       runs.push(defined({ text: run.text, props: portableRun({ ...run.props, fontSize, fontFamily }), href: linkHref(run.props) }));
@@ -128,6 +150,33 @@ export function clipOf(doc: Doc, range: Range): Clip {
     tables[into] = tableOf(doc, index, firstRow, lastRow);
   }
   return tables.length ? { paragraphs, tables } : { paragraphs };
+}
+
+/** A picture of the document as a picture of a clip: its bytes as a data: address, its size and what it shows. Undefined for a shape or a text box. */
+function clipImage(doc: Doc, props: RunProps): ClipImage | undefined {
+  const media = props.object ? docImage(doc, props.object) : undefined;
+  if (!media || !imageExtension(media.type) || !props.objectWidth || !props.objectHeight) return undefined;
+  return defined({ src: dataAddress(media.bytes, media.type), width: props.objectWidth, height: props.objectHeight, alt: altText(props.object) });
+}
+
+/** Bytes as a data: address. */
+export function dataAddress(bytes: Uint8Array, type: string): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:${type};base64,${btoa(binary)}`;
+}
+
+/** The picture a data: address holds, by what its bytes are: programs are not always right about the kind they say (Word says image/png of a JPEG). */
+export function dataPicture(src: string): { bytes: Uint8Array; type: string } | undefined {
+  const found = /^data:image\/[\w.+-]+;base64,([A-Za-z0-9+/=\s]+)$/i.exec(src.trim());
+  if (!found) return undefined;
+  try {
+    const bytes = Uint8Array.from(atob(found[1].replace(/\s+/g, '')), (c) => c.charCodeAt(0));
+    const type = imageTypeOf(bytes);
+    return type && imageExtension(type) ? { bytes, type } : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Where a cell of the document is in the clip: its table, made when the clip first comes to it, and its place in the grid. */
@@ -208,6 +257,12 @@ export function clipText(clip: Clip): string {
 const pt = (n: number): string => `${Math.round(n * 100) / 100}pt`;
 
 function runHtml(run: ClipRun): string {
+  if (run.image) {
+    const { src, width, height, alt } = run.image;
+    // In pixels as an attribute, as a page lays it out, and in points as a style, as Word reads it.
+    const size = width && height ? ` width="${Math.round(width / 0.75)}" height="${Math.round(height / 0.75)}" style="width:${pt(width)};height:${pt(height)}"` : '';
+    return `<img src="${escapeXml(src)}"${size} alt="${escapeXml(alt ?? '')}">`;
+  }
   const { props } = run;
   const css: string[] = [];
   if (props.fontFamily) css.push(`font-family:'${props.fontFamily.replace(/'/g, '')}'`);
@@ -352,6 +407,10 @@ export function parseClip(data: string | undefined | null): Clip | undefined {
 function writeRuns(doc: Doc, pos: Position, runs: ClipRun[], base: RunProps): { doc: Doc; pos: Position } {
   let state = { doc, pos };
   for (const run of runs) {
+    if (run.image) {
+      state = writeImage(state.doc, state.pos, run.image);
+      continue;
+    }
     const text = run.text.replace(/\r/g, '');
     if (!text) continue;
     const props = defined({ ...base, ...portableRun(run.props) });
@@ -359,6 +418,24 @@ function writeRuns(doc: Doc, pos: Position, runs: ClipRun[], base: RunProps): { 
     state = insertText(state.doc, state.pos, text, href ? linkProps(props, href) : props);
   }
   return state;
+}
+
+/** A picture of a clip put in at `pos`, at its size, made smaller to fit the width of the text; nothing when it is not a picture that can be. */
+function writeImage(doc: Doc, pos: Position, image: ClipImage): { doc: Doc; pos: Position } {
+  const picture = dataPicture(image.src);
+  if (!picture) return { doc, pos };
+  const own = pictureSize(picture.bytes, picture.type);
+  let width = image.width > 0 ? image.width : (own?.width ?? 0) * 0.75;
+  let height = image.height > 0 ? image.height : (own?.height ?? 0) * 0.75;
+  if (!(width > 0 && height > 0)) return { doc, pos };
+  const room = doc.page.width - doc.page.marginLeft - doc.page.marginRight;
+  if (room > 0 && width > room) {
+    height = (height * room) / width;
+    width = room;
+  }
+  const placed = insertImage(doc, pos, { ...picture, width, height });
+  if (placed.doc === doc || !image.alt) return placed;
+  return { doc: setAltText(placed.doc, pos, image.alt), pos: placed.pos };
 }
 
 /**

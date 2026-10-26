@@ -6,8 +6,10 @@
 // another type, or let five minutes pass, and see what the bucket answers.
 
 import { createDoc, exportDocx, setParagraphStyle } from '@rebodocs/core';
-import { type DocsHandle, type Versions, DocsEditor, getLocale, setLocale } from '@rebodocs/react';
+import { type DocsHandle, type Versions, DocsEditor } from '@rebodocs/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEditorLocale } from '@/components/editorLocale';
+import { useT } from '@/components/i18n';
 import { PASTEL_CLASS } from '@/lib/home';
 import { CAPTION } from '../styles';
 import { DemoBox, Readout } from '../ui';
@@ -45,12 +47,8 @@ export default function RequestsDemo() {
   const [late, setLate] = useState(false);
   const [said, setSaid] = useState<{ text: string; bad?: boolean }>({ text: '' });
   const handle = useRef<DocsHandle | undefined>(undefined);
-
-  useEffect(() => {
-    const was = getLocale();
-    setLocale('en');
-    return () => setLocale(was);
-  }, []);
+  const t = useT();
+  const editorLocale = useEditorLocale();
 
   const refresh = () => setFiles([...storage.files.values()].map((file) => ({ key: file.key, size: file.bytes.length })).sort((a, b) => a.key.localeCompare(b.key)));
 
@@ -69,7 +67,16 @@ export default function RequestsDemo() {
   /** A PUT with an address of the backend, as src/api.ts makes it. */
   const put = (url: string, type: string, body: Uint8Array) => {
     const answer = send(url, { method: 'PUT', type: wrongType ? 'application/octet-stream' : type, body });
-    if (answer.status !== 200) throw new Error(answer.status === 0 ? 'The bucket did not let this page in: its rule of origins.' : `The bucket answered ${answer.status}.`);
+    if (answer.status !== 200)
+      throw new Error(
+        answer.status === 0
+          ? t({
+              en: 'The bucket did not let this page in: its rule of origins.',
+              es: 'El bucket no dejó entrar a esta página: su regla de orígenes.',
+              zh: '存储桶拒绝了本页面的访问：原因是它的来源规则。',
+            })
+          : t({ en: `The bucket answered ${answer.status}.`, es: `El bucket respondió ${answer.status}.`, zh: `存储桶返回了 ${answer.status}。` }),
+      );
   };
 
   // Opening: the list, an address to read it from, and the file from the bucket itself.
@@ -93,7 +100,12 @@ export default function RequestsDemo() {
       list: async () => storage.listVersions(KEY),
       load: async (id) => {
         const answer = send(storage.readUrl(id));
-        if (!answer.body) throw new Error(answer.status === 0 ? 'blocked by the browser' : `The bucket answered ${answer.status}.`);
+        if (!answer.body)
+          throw new Error(
+            answer.status === 0
+              ? t({ en: 'blocked by the browser', es: 'bloqueado por el navegador', zh: '被浏览器拦截' })
+              : t({ en: `The bucket answered ${answer.status}.`, es: `El bucket respondió ${answer.status}.`, zh: `存储桶返回了 ${answer.status}。` }),
+          );
         return answer.body;
       },
       save: async (file, meta) => {
@@ -113,7 +125,7 @@ export default function RequestsDemo() {
       put(url, type, file);
       const version = storage.versionUrl(KEY, { author: 'Ana' });
       put(version.url, version.type, file);
-      setSaid({ text: 'Saved to the bucket, and kept as a version.' });
+      setSaid({ text: t({ en: 'Saved to the bucket, and kept as a version.', es: 'Guardado en el bucket, y conservado como versión.', zh: '已保存到存储桶，并保留为一个版本。' }) });
     } catch (error) {
       setSaid({ text: (error as Error).message, bad: true });
       throw error;
@@ -135,11 +147,11 @@ export default function RequestsDemo() {
 
   return (
     <DemoBox
-      title="The requests of a save"
+      title={t({ en: 'The requests of a save', es: 'Las peticiones de un guardado', zh: '一次保存的请求' })}
       aside={
         <>
           <div>
-            <p className={CAPTION}>The bucket holds</p>
+            <p className={CAPTION}>{t({ en: 'The bucket holds', es: 'El bucket contiene', zh: '存储桶中的内容' })}</p>
             <ul className="m-0 mt-2 list-none p-0 font-code text-[12.5px] leading-[1.7] text-ink-soft">
               {files.map((file) => (
                 <li key={file.key} className="truncate">
@@ -149,16 +161,22 @@ export default function RequestsDemo() {
             </ul>
           </div>
           <div>
-            <p className={CAPTION}>Break it</p>
+            <p className={CAPTION}>{t({ en: 'Break it', es: 'Rómpelo', zh: '制造故障' })}</p>
             <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {toggle(cors, setCors, 'CORS rule', false)}
-              {toggle(wrongType, setWrongType, 'PUT another type', true)}
-              {toggle(late, setLate, '5 minutes later', true)}
+              {toggle(cors, setCors, t({ en: 'CORS rule', es: 'Regla CORS', zh: 'CORS 规则' }), false)}
+              {toggle(wrongType, setWrongType, t({ en: 'PUT another type', es: 'PUT de otro tipo', zh: '用其他类型 PUT' }), true)}
+              {toggle(late, setLate, t({ en: '5 minutes later', es: '5 minutos después', zh: '5 分钟后' }), true)}
             </div>
-            <p className="m-0 mt-1.5 text-[13px] leading-normal text-muted">Change the contract and save (⌘S), or keep a version from the Versions tab.</p>
+            <p className="m-0 mt-1.5 text-[13px] leading-normal text-muted">
+              {t({
+                en: 'Change the contract and save (⌘S), or keep a version from the Versions tab.',
+                es: 'Cambia el contrato y guarda (⌘S), o conserva una versión desde la pestaña Versiones.',
+                zh: '修改合同并保存（⌘S），或在“版本”标签页中保存一个版本。',
+              })}
+            </p>
           </div>
           <Readout
-            label="Requests, in order"
+            label={t({ en: 'Requests, in order', es: 'Peticiones, en orden', zh: '请求（按顺序）' })}
             live={false}
             lines={
               requests.length
@@ -167,7 +185,7 @@ export default function RequestsDemo() {
                     r.status ? `${r.status} ${r.note}` : r.note,
                     r.status === 200 ? 'good' : 'warn',
                   ])
-                : [['—', 'nothing yet', 'dim']]
+                : [['—', t({ en: 'nothing yet', es: 'nada todavía', zh: '暂无' }), 'dim']]
             }
           />
           {said.text && <p className={`m-0 text-[13px] leading-normal ${said.bad ? 'text-[#b3261e]' : 'text-muted'}`}>{said.text}</p>}
@@ -179,7 +197,7 @@ export default function RequestsDemo() {
           <DocsEditor
             docx={docx}
             name={KEY}
-            locale="en"
+            locale={editorLocale}
             author="Ana"
             versions={versions}
             onSave={onSave}
@@ -187,7 +205,7 @@ export default function RequestsDemo() {
             onError={(text) => setSaid({ text, bad: true })}
           />
         ) : (
-          <p className="m-0 grid h-full place-items-center text-sm text-muted">Reading the bucket…</p>
+          <p className="m-0 grid h-full place-items-center text-sm text-muted">{t({ en: 'Reading the bucket…', es: 'Leyendo el bucket…', zh: '正在读取存储桶…' })}</p>
         )}
       </div>
     </DemoBox>

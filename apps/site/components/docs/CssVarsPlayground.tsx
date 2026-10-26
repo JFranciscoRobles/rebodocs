@@ -1,6 +1,7 @@
 'use client';
 
 import type { CSSProperties } from 'react';
+import { useT } from '@/components/i18n';
 import { RULER_VARS, SURFACE_VARS, THEMES } from './reference';
 
 const smooth = 'transition-[background-color,box-shadow,color] duration-350';
@@ -13,11 +14,12 @@ const smooth = 'transition-[background-color,box-shadow,color] duration-350';
 export function CssVarsPlayground({ ruler, theme, setTheme }: { ruler: boolean; theme: number; setTheme: (theme: number) => void }) {
   const vars = THEMES[theme].vars;
   const listed = ruler ? RULER_VARS : SURFACE_VARS;
+  const tr = useT();
 
   return (
     <div className="mt-7 flex flex-wrap items-stretch gap-6">
       <div className="min-w-0 flex-[1_1_300px]">
-        <p className="m-0 text-xs font-semibold tracking-[0.04em] text-muted">STYLE IT WITH CSS VARIABLES</p>
+        <p className="m-0 text-xs font-semibold tracking-[0.04em] text-muted">{tr({ en: 'STYLE IT WITH CSS VARIABLES', es: 'DALE ESTILO CON VARIABLES CSS', zh: '用 CSS 变量设置样式' })}</p>
         <ul className="m-0 mt-2.5 list-none overflow-hidden rounded-xl border border-border p-0">
           {listed.map(([name, what], i) => (
             <li key={name} className={`flex items-center gap-3 px-4 py-3 text-sm ${i ? 'border-t border-[#f0eee9]' : ''}`}>
@@ -28,23 +30,23 @@ export function CssVarsPlayground({ ruler, theme, setTheme }: { ruler: boolean; 
               />
               <span className="min-w-0 flex-1">
                 <code className="block font-code text-ink">{name}</code>
-                <span className="block text-[13px] text-muted">{what}</span>
+                <span className="block text-[13px] text-muted">{tr(what)}</span>
               </span>
               <code className="max-w-[45%] text-right font-code text-xs text-muted [overflow-wrap:anywhere]">{vars[name]}</code>
             </li>
           ))}
         </ul>
-        <div className="mt-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Try a theme">
-          <span className="mr-1 text-sm text-muted">Try a theme</span>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5" role="group" aria-label={tr({ en: 'Try a theme', es: 'Prueba un tema', zh: '试试主题' })}>
+          <span className="mr-1 text-sm text-muted">{tr({ en: 'Try a theme', es: 'Prueba un tema', zh: '试试主题' })}</span>
           {THEMES.map((t, i) => (
             <button
-              key={t.label}
+              key={t.label.en}
               type="button"
               aria-pressed={i === theme}
               onClick={() => setTheme(i)}
               className={`cursor-pointer rounded-full border px-3.5 py-1.5 text-sm font-medium text-ink transition-colors ${i === theme ? 'border-ink bg-hover' : 'border-border-strong bg-white hover:bg-hover'}`}
             >
-              {t.label}
+              {tr(t.label)}
             </button>
           ))}
         </div>
@@ -60,12 +62,15 @@ export function CssVarsPlayground({ ruler, theme, setTheme }: { ruler: boolean; 
           </div>
         )}
         <div className={`min-h-[200px] flex-1 rounded-[3px] bg-white px-6 py-5.5 text-[13px] leading-[1.7] text-[#37352f] shadow-(--dx-page-shadow) ${smooth}`}>
-          <div className="text-base font-bold">Receipt</div>
+          <div className="text-base font-bold">{tr({ en: 'Receipt', es: 'Recibo', zh: '收据' })}</div>
           <div className="mt-1.5">
-            Payment is due within <span className={`bg-(--dx-selection) ${smooth}`}>15 days of this receipt</span>
+            {tr({ en: 'Payment is due within ', es: 'El pago vence dentro de ', zh: '付款期限为' })}
+            <span className={`bg-(--dx-selection) ${smooth}`}>{tr({ en: '15 days of this receipt', es: '15 días a partir de este recibo', zh: '本收据开具后 15 天内' })}</span>
             <span className="ml-px inline-block h-[1.1em] w-0.5 animate-blink bg-(--dx-caret) align-[-0.2em]" />
           </div>
-          <div className="mt-1.5 text-muted">The selection and the caret take the colours of your theme.</div>
+          <div className="mt-1.5 text-muted">
+            {tr({ en: 'The selection and the caret take the colours of your theme.', es: 'La selección y el cursor toman los colores de tu tema.', zh: '选区和光标会使用你的主题颜色。' })}
+          </div>
         </div>
       </div>
     </div>

@@ -18,6 +18,8 @@ const FILES = {
   '@rebodocs/core': 'core/src/index',
   '@rebodocs/core/internal': 'core/src/internal',
   '@rebodocs/editor': 'editor/src/index',
+  '@rebodocs/viewer': 'viewer/src/index',
+  '@rebodocs/viewer/react': 'viewer/src/react',
   '@rebodocs/collab': 'collab/src/changes',
   '@rebodocs/collab/browser': 'collab/src/session',
   '@rebodocs/mcp': 'mcp/src/tools',

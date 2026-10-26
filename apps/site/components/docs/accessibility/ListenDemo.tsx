@@ -5,8 +5,10 @@
 // then the hidden field the screen reader reads from is shown.
 
 import { exportDocx } from '@rebodocs/core';
-import { type DocsHandle, DocsEditor, getLocale, setLocale } from '@rebodocs/react';
+import { type DocsHandle, DocsEditor } from '@rebodocs/react';
 import { useEffect, useRef, useState } from 'react';
+import { useEditorLocale } from '@/components/editorLocale';
+import { useT } from '@/components/i18n';
 import { PASTEL_CLASS } from '@/lib/home';
 import { CAPTION } from '../styles';
 import { DemoBox, Readout } from '../ui';
@@ -26,12 +28,11 @@ export default function ListenDemo() {
   const [reader, setReader] = useState(false);
   const [field, setField] = useState({ value: '', start: 0, end: 0 });
   const count = useRef(0);
+  const t = useT();
+  const editorLocale = useEditorLocale();
 
   useEffect(() => {
-    const was = getLocale();
-    setLocale('en');
     void lease().then((doc) => setFile(exportDocx(doc)));
-    return () => setLocale(was);
   }, []);
 
   const ready = (docs: DocsHandle | undefined) => {
@@ -66,25 +67,37 @@ export default function ListenDemo() {
 
   return (
     <DemoBox
-      title="What a screen reader hears"
+      title={t({ en: 'What a screen reader hears', es: 'Lo que oye un lector de pantalla', zh: '屏幕阅读器听到什么' })}
       aside={
         <>
           <div>
-            <p className={CAPTION}>Try</p>
+            <p className={CAPTION}>{t({ en: 'Try', es: 'Prueba', zh: '试试' })}</p>
             <ul className="m-0 mt-2 grid list-disc gap-1 pl-5 text-[13.5px] leading-normal text-ink-soft">
-              <li>↓ and ↑ through the lines: the heading, the list, the table, the picture.</li>
-              <li>→ over “rules”: the note at the foot of the page, then the link.</li>
-              <li>⇧→ to select, ⌘B for bold, ⌘Z to undo.</li>
-              <li>F6 to go round the bars, Escape to come back.</li>
+              <li>
+                {t({
+                  en: '↓ and ↑ through the lines: the heading, the list, the table, the picture.',
+                  es: '↓ y ↑ por las líneas: el título, la lista, la tabla, la imagen.',
+                  zh: '用 ↓ 和 ↑ 逐行移动：标题、列表、表格、图片。',
+                })}
+              </li>
+              <li>
+                {t({
+                  en: '→ over “rules”: the note at the foot of the page, then the link.',
+                  es: '→ sobre “rules”: la nota al pie, luego el enlace.',
+                  zh: '在 “rules” 上按 →：先是脚注，然后是链接。',
+                })}
+              </li>
+              <li>{t({ en: '⇧→ to select, ⌘B for bold, ⌘Z to undo.', es: '⇧→ para seleccionar, ⌘B para negrita, ⌘Z para deshacer.', zh: '⇧→ 选择，⌘B 加粗，⌘Z 撤销。' })}</li>
+              <li>{t({ en: 'F6 to go round the bars, Escape to come back.', es: 'F6 para recorrer las barras, Escape para volver.', zh: 'F6 在各栏之间切换，Esc 返回。' })}</li>
             </ul>
           </div>
           <div className="flex flex-wrap gap-1.5">
             <button type="button" aria-pressed={reader} className={pill(reader)} onClick={() => handle.current && ((handle.current.editor.screenReader = !reader), handle.current.editor.focus())}>
-              Screen reader mode (⌘⌥Z)
+              {t({ en: 'Screen reader mode (⌘⌥Z)', es: 'Modo de lector de pantalla (⌘⌥Z)', zh: '屏幕阅读器模式（⌘⌥Z）' })}
             </button>
           </div>
           <Readout
-            label="The hidden field"
+            label={t({ en: 'The hidden field', es: 'El campo oculto', zh: '隐藏输入框' })}
             live={false}
             lines={
               reader
@@ -92,14 +105,14 @@ export default function ListenDemo() {
                     ['value', field.value ? `'${field.value.slice(0, 34)}${field.value.length > 34 ? '…' : ''}'` : "''"],
                     ['selection', `${field.start}–${field.end}`],
                   ]
-                : [['value', "'' — the editor says the text itself", 'dim']]
+                : [['value', t({ en: "'' — the editor says the text itself", es: "'' — el editor dice el texto él mismo", zh: "'' —— 由编辑器自己朗读文字" }), 'dim']]
             }
           />
           <div>
-            <p className={CAPTION}>What it says, newest first</p>
+            <p className={CAPTION}>{t({ en: 'What it says, newest first', es: 'Lo que dice, lo más nuevo primero', zh: '朗读内容（最新的在前）' })}</p>
             <ol
               tabIndex={0}
-              aria-label="What the editor said"
+              aria-label={t({ en: 'What the editor said', es: 'Lo que dijo el editor', zh: '编辑器朗读的内容' })}
               className="m-0 mt-2.5 grid max-h-[280px] list-none gap-1 overflow-auto rounded-xl bg-[#2f2e2b] p-3 font-code text-[12.5px] leading-[1.5] text-[#edece8]"
             >
               {said.length ? (
@@ -110,7 +123,9 @@ export default function ListenDemo() {
                   </li>
                 ))
               ) : (
-                <li className="text-[#a8a49a]">Click in the document and move with the arrows.</li>
+                <li className="text-[#a8a49a]">
+                  {t({ en: 'Click in the document and move with the arrows.', es: 'Haz clic en el documento y muévete con las flechas.', zh: '点击文档，然后用方向键移动。' })}
+                </li>
               )}
             </ol>
           </div>
@@ -119,9 +134,9 @@ export default function ListenDemo() {
     >
       <div ref={box} className="-m-5 h-[640px] overflow-hidden rounded-[14px]">
         {file ? (
-          <DocsEditor docx={file} name="lease.docx" locale="en" author="Ana" onReady={ready} features={{ panel: false }} />
+          <DocsEditor docx={file} name="lease.docx" locale={editorLocale} author="Ana" onReady={ready} features={{ panel: false }} />
         ) : (
-          <p className="m-0 grid h-full place-items-center text-sm text-muted">Drawing the plan…</p>
+          <p className="m-0 grid h-full place-items-center text-sm text-muted">{t({ en: 'Drawing the plan…', es: 'Dibujando el plano…', zh: '正在绘制平面图…' })}</p>
         )}
       </div>
     </DemoBox>

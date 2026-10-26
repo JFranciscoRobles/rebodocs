@@ -184,3 +184,23 @@ describe('PDF export', () => {
     expect(real).toMatch(/1 0 0\.2 1 /);
   });
 });
+
+describe('Chinese in a PDF', () => {
+  it('draws the Chinese characters its font has not in the font for Chinese every reader has, each where the layout put it', () => {
+    const doc = createDoc([{ props: {}, runs: [{ text: 'Hola 中文', props: {} }] }]);
+    const layout = layoutDocument(doc, measurer);
+    const pdf = exportPdf(layout, { measurer, language: 'zh-CN' });
+    const [content] = streams(pdf);
+    const y = 792 - layout.pages[0].lines[0].baseline;
+    // 中 is U+4E2D, 文 U+6587, each on its own: "Hola " is five characters of 5.5 points.
+    expect(content).toContain(`/F2 11 Tf\n1 0 0 1 99.5 ${y} Tm <4E2D> Tj`);
+    expect(content).toContain(`1 0 0 1 105 ${y} Tm <6587> Tj`);
+    expect(latin1(pdf)).toContain('/BaseFont /STSong-Light /Encoding /UniGB-UTF16-H');
+  });
+
+  it('takes the font for Traditional Chinese for a document of Taiwan', () => {
+    const doc = createDoc([{ props: {}, runs: [{ text: '中文', props: {} }] }]);
+    const pdf = exportPdf(layoutDocument(doc, measurer), { measurer, language: 'zh-TW' });
+    expect(latin1(pdf)).toContain('/BaseFont /MSung-Light /Encoding /UniCNS-UTF16-H');
+  });
+});

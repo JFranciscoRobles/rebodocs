@@ -7,6 +7,7 @@ export * from './pageNumbers';
 export * from './styles';
 export { exportMarkdown } from './markdown';
 export * from './find';
+export { breaksBetween, cjkWordAt, countWords, hasCjk, isCjk, isCjkFont } from './cjk';
 export * from './images';
 export * from './variables';
 export { type Block, type TemplateData, type TemplateValue, findBlockMarks, findBlocks, flattenValues, isPresent, valueAt } from './blocks';

@@ -2,21 +2,27 @@
 
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { useT } from '@/components/i18n';
+import type { L } from '@/lib/i18n';
 import type { SearchEntry } from './searchIndex';
 
 type Kind = SearchEntry['kind'];
 
 /** Each kind: its name over a group of results, its colours, and the path of a 16 × 16 icon drawn with a stroke. */
-const KIND: Record<Kind, { group: string; tint: string; icon: string }> = {
-  Page: { group: 'Pages', tint: 'bg-pastel-blue text-pastel-blue-fg', icon: 'M4 2h5.5L12 4.5V14H4zM9.5 2v2.5H12M6 8h4M6 11h3' },
-  Section: { group: 'Sections', tint: 'bg-hover text-muted', icon: 'M6.5 2.5l-1 11M10.5 2.5l-1 11M3 6h10.5M2.5 10H13' },
-  Component: { group: 'Components', tint: 'bg-pastel-purple text-pastel-purple-fg', icon: 'M5.5 4L2 8l3.5 4M10.5 4L14 8l-3.5 4' },
-  Hook: { group: 'Hooks', tint: 'bg-pastel-green text-pastel-green-fg', icon: 'M10.5 2v7.5a3 3 0 0 1-6 0V8' },
-  Prop: { group: 'Props', tint: 'bg-pastel-yellow text-pastel-yellow-fg', icon: 'M3 5h10M3 11h10M6 3v4M10 9v4' },
-  Function: { group: 'Functions', tint: 'bg-pastel-orange text-pastel-orange-fg', icon: 'M10.5 2.5C8.5 2.5 8 4 7.7 6l-1.2 7.5M5 7h5' },
-  Member: { group: 'Editor API', tint: 'bg-pastel-blue text-pastel-blue-fg', icon: 'M3 4.5h10M3 8h10M3 11.5h6' },
-  Package: { group: 'Packages', tint: 'bg-pastel-pink text-pastel-pink-fg', icon: 'M8 2l5.5 3v6L8 14l-5.5-3V5zM2.5 5L8 8l5.5-3M8 8v6' },
-  Tool: { group: 'Tools for an assistant', tint: 'bg-pastel-green text-pastel-green-fg', icon: 'M10.5 2.5a3 3 0 0 0-2.7 4.2L3 11.5 4.5 13l4.8-4.8a3 3 0 0 0 4-3.7l-1.8 1.8-1.7-.3-.3-1.7z' },
+const KIND: Record<Kind, { group: L; tint: string; icon: string }> = {
+  Page: { group: { en: 'Pages', es: 'Páginas', zh: '页面' }, tint: 'bg-pastel-blue text-pastel-blue-fg', icon: 'M4 2h5.5L12 4.5V14H4zM9.5 2v2.5H12M6 8h4M6 11h3' },
+  Section: { group: { en: 'Sections', es: 'Secciones', zh: '章节' }, tint: 'bg-hover text-muted', icon: 'M6.5 2.5l-1 11M10.5 2.5l-1 11M3 6h10.5M2.5 10H13' },
+  Component: { group: { en: 'Components', es: 'Componentes', zh: '组件' }, tint: 'bg-pastel-purple text-pastel-purple-fg', icon: 'M5.5 4L2 8l3.5 4M10.5 4L14 8l-3.5 4' },
+  Hook: { group: { en: 'Hooks', es: 'Hooks', zh: 'Hooks' }, tint: 'bg-pastel-green text-pastel-green-fg', icon: 'M10.5 2v7.5a3 3 0 0 1-6 0V8' },
+  Prop: { group: { en: 'Props', es: 'Props', zh: '属性' }, tint: 'bg-pastel-yellow text-pastel-yellow-fg', icon: 'M3 5h10M3 11h10M6 3v4M10 9v4' },
+  Function: { group: { en: 'Functions', es: 'Funciones', zh: '函数' }, tint: 'bg-pastel-orange text-pastel-orange-fg', icon: 'M10.5 2.5C8.5 2.5 8 4 7.7 6l-1.2 7.5M5 7h5' },
+  Member: { group: { en: 'Editor API', es: 'API del Editor', zh: 'Editor API' }, tint: 'bg-pastel-blue text-pastel-blue-fg', icon: 'M3 4.5h10M3 8h10M3 11.5h6' },
+  Package: { group: { en: 'Packages', es: 'Paquetes', zh: '软件包' }, tint: 'bg-pastel-pink text-pastel-pink-fg', icon: 'M8 2l5.5 3v6L8 14l-5.5-3V5zM2.5 5L8 8l5.5-3M8 8v6' },
+  Tool: {
+    group: { en: 'Tools for an assistant', es: 'Herramientas para un asistente', zh: '助手工具' },
+    tint: 'bg-pastel-green text-pastel-green-fg',
+    icon: 'M10.5 2.5a3 3 0 0 0-2.7 4.2L3 11.5 4.5 13l4.8-4.8a3 3 0 0 0 4-3.7l-1.8 1.8-1.7-.3-.3-1.7z',
+  },
 };
 /** The order of the groups when something is typed: what is looked for most, first. */
 const ORDER: Kind[] = ['Page', 'Component', 'Hook', 'Prop', 'Function', 'Member', 'Package', 'Tool', 'Section'];
@@ -83,6 +89,7 @@ export function SearchCommand({ index }: { index: SearchEntry[] }) {
   const [query, setQuery] = useState('');
   const [at, setAt] = useState(0);
   const [mac, setMac] = useState(true);
+  const t = useT();
 
   const words = useMemo(() => query.toLowerCase().split(/\s+/).filter(Boolean), [query]);
   // The groups shown, and every result in the order the arrows go through them.
@@ -99,13 +106,13 @@ export function SearchCommand({ index }: { index: SearchEntry[] }) {
         .filter((hit) => hit.score > 0)
         .sort((a, b) => b.score - a.score)
         .slice(0, 50);
-      groups = ORDER.map((kind) => ({ title: KIND[kind].group, entries: hits.filter((hit) => hit.entry.kind === kind).map((hit) => hit.entry) })).filter((group) => group.entries.length);
+      groups = ORDER.map((kind) => ({ title: t(KIND[kind].group), entries: hits.filter((hit) => hit.entry.kind === kind).map((hit) => hit.entry) })).filter((group) => group.entries.length);
       // The group with the best result goes first.
       const best = hits[0]?.entry.kind;
-      if (best) groups.sort((a, b) => Number(b.title === KIND[best].group) - Number(a.title === KIND[best].group));
+      if (best) groups.sort((a, b) => Number(b.title === t(KIND[best].group)) - Number(a.title === t(KIND[best].group)));
     }
     return { groups, flat: groups.flatMap((group) => group.entries) };
-  }, [index, words]);
+  }, [index, words, t]);
 
   const open = () => {
     setQuery('');
@@ -154,13 +161,13 @@ export function SearchCommand({ index }: { index: SearchEntry[] }) {
           <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.6" />
           <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
-        <span className="min-w-0 flex-1 truncate">Search docs, props, hooks…</span>
+        <span className="min-w-0 flex-1 truncate">{t({ en: 'Search docs, props, hooks…', es: 'Buscar en la documentación, props, hooks…', zh: '搜索文档、属性、hooks…' })}</span>
         <Key>{mac ? '⌘K' : 'Ctrl K'}</Key>
       </button>
 
       <dialog
         ref={dialog}
-        aria-label="Search the documentation"
+        aria-label={t({ en: 'Search the documentation', es: 'Buscar en la documentación', zh: '搜索文档' })}
         className="palette m-auto mt-[10vh] w-[min(680px,calc(100vw-24px))]"
         onClick={(event) => event.target === dialog.current && dialog.current.close()}
       >
@@ -176,9 +183,9 @@ export function SearchCommand({ index }: { index: SearchEntry[] }) {
               aria-expanded="true"
               aria-controls="search-results"
               aria-activedescendant={flat.length ? `search-${at}` : undefined}
-              aria-label="Search"
+              aria-label={t({ en: 'Search', es: 'Buscar', zh: '搜索' })}
               value={query}
-              placeholder="Search pages, props, hooks…"
+              placeholder={t({ en: 'Search pages, props, hooks…', es: 'Buscar páginas, props, hooks…', zh: '搜索页面、属性、hooks…' })}
               spellCheck={false}
               autoComplete="off"
               onChange={(event) => {
@@ -201,12 +208,12 @@ export function SearchCommand({ index }: { index: SearchEntry[] }) {
                 onClick={() => (setQuery(''), setAt(0), input.current?.focus())}
                 className="cursor-pointer rounded-md px-1.5 py-0.5 text-[13px] text-muted hover:bg-hover hover:text-ink"
               >
-                Clear
+                {t({ en: 'Clear', es: 'Borrar', zh: '清除' })}
               </button>
             )}
           </div>
 
-          <div id="search-results" role="listbox" aria-label="Results" className="max-h-[min(460px,62vh)] overflow-y-auto overscroll-contain px-2 pb-2">
+          <div id="search-results" role="listbox" aria-label={t({ en: 'Results', es: 'Resultados', zh: '结果' })} className="max-h-[min(460px,62vh)] overflow-y-auto overscroll-contain px-2 pb-2">
             {groups.map((group, g) => (
               <div key={group.title} role="group" aria-labelledby={`search-group-${g}`}>
                 <div
@@ -249,8 +256,14 @@ export function SearchCommand({ index }: { index: SearchEntry[] }) {
             ))}
             {!flat.length && (
               <div className="px-3 py-12 text-center">
-                <p className="m-0 text-[15px] text-ink">Nothing found for “{query}”.</p>
-                <p className="m-0 mt-1.5 text-[13px] text-muted">Try a hook, a prop or a word of a page: useDocs, docx, letterhead…</p>
+                <p className="m-0 text-[15px] text-ink">{t({ en: `Nothing found for “${query}”.`, es: `No se encontró nada para “${query}”.`, zh: `没有找到“${query}”的结果。` })}</p>
+                <p className="m-0 mt-1.5 text-[13px] text-muted">
+                  {t({
+                    en: 'Try a hook, a prop or a word of a page: useDocs, docx, letterhead…',
+                    es: 'Prueba con un hook, una prop o una palabra de una página: useDocs, docx, membrete…',
+                    zh: '试试某个 hook、属性或页面中的词：useDocs、docx、信头…',
+                  })}
+                </p>
               </div>
             )}
           </div>
@@ -258,15 +271,19 @@ export function SearchCommand({ index }: { index: SearchEntry[] }) {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border bg-surface px-5 py-2.5 text-[12.5px] text-muted">
             <span className="flex items-center gap-1.5">
               <Key>↑</Key>
-              <Key>↓</Key> to move
+              <Key>↓</Key> {t({ en: 'to move', es: 'para moverte', zh: '移动' })}
             </span>
             <span className="flex items-center gap-1.5">
-              <Key>↵</Key> to open
+              <Key>↵</Key> {t({ en: 'to open', es: 'para abrir', zh: '打开' })}
             </span>
             <span className="flex items-center gap-1.5">
-              <Key>Esc</Key> to close
+              <Key>Esc</Key> {t({ en: 'to close', es: 'para cerrar', zh: '关闭' })}
             </span>
-            <span className="ml-auto">{words.length ? `${flat.length} ${flat.length === 1 ? 'result' : 'results'}` : `${flat.length} pages`}</span>
+            <span className="ml-auto">
+              {words.length
+                ? t({ en: `${flat.length} ${flat.length === 1 ? 'result' : 'results'}`, es: `${flat.length} ${flat.length === 1 ? 'resultado' : 'resultados'}`, zh: `${flat.length} 个结果` })
+                : t({ en: `${flat.length} pages`, es: `${flat.length} páginas`, zh: `${flat.length} 个页面` })}
+            </span>
           </div>
         </div>
       </dialog>

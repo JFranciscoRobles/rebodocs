@@ -43,6 +43,7 @@ import { noteKey, noteMark, pruneNotes } from '../notes';
 import { editableMark } from '../editable';
 import { isFieldMark } from '../toc';
 import { isColumnBreak } from '../layout';
+import { isCjkFont } from '../cjk';
 import { type NoteKind, endnoteReferenceId, footnoteReferenceId, isEndnoteMark, isFootnoteMark, noteReferences } from '../footnotes';
 import { textBoxId, textBoxOf } from '../textboxes';
 import { CUSTOM_PROPERTIES_PATH, HIGHLIGHTS, NOTE_COLORS_PROPERTY, mergeTabs, parseRunProps, resolveStyle, val } from './import';
@@ -722,7 +723,9 @@ function writeStyles(doc: Doc, files: Record<string, Uint8Array>, mainPath: stri
  */
 function writeLanguage(files: Record<string, Uint8Array>, mainPath: string, language: string, replace = false): void {
   const path = `${mainPath.slice(0, mainPath.lastIndexOf('/') + 1)}styles.xml`;
-  const lang = `<w:lang w:val="${escapeXml(language)}"/>`;
+  // Chinese or Japanese is the language of the characters Word calls East Asian too, which it sets in a font for it.
+  const eastAsia = /^(zh|ja)\b/i.test(language) ? language : undefined;
+  const lang = `<w:lang w:val="${escapeXml(language)}"${eastAsia ? ` w:eastAsia="${escapeXml(eastAsia)}"` : ''}/>`;
   if (!files[path]) {
     addPart(
       files,
@@ -754,8 +757,9 @@ function writeLanguage(files: Record<string, Uint8Array>, mainPath: string, lang
   const had = child(rPr, 'w:lang');
   if (had && !replace) return;
   if (had) {
-    if (had.attrs['w:val'] === language) return;
+    if (had.attrs['w:val'] === language && (!eastAsia || had.attrs['w:eastAsia'] === eastAsia)) return;
     had.attrs['w:val'] = language;
+    if (eastAsia) had.attrs['w:eastAsia'] = eastAsia;
   } else insertOrdered(rPr, RPR_ORDER, parseElement(lang)!);
   files[path] = strToU8(XML_HEADER + serializeXml(styles));
 }
@@ -1074,13 +1078,18 @@ function revisionWriter(): { open(props: RunProps): string; close(): string } {
 
 // --- New documents ----------------------------------------------------------
 
+/** The font Word sets the Chinese characters of a run in: its own, or the font of the run when that is one for Chinese. */
+function eastAsiaFont(p: ResolvedRunProps): string | undefined {
+  return p.fontEastAsia || (isCjkFont(p.fontFamily) ? p.fontFamily : undefined);
+}
+
 function runPropsXml(props: RunProps): string {
   const p = resolveRun(props);
   const font = escapeXml(p.fontFamily);
   const size = Math.round(p.fontSize * 2);
   return (
     '<w:rPr>' +
-    `<w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/>` +
+    `<w:rFonts w:ascii="${font}" w:hAnsi="${font}"${eastAsiaFont(p) ? ` w:eastAsia="${escapeXml(eastAsiaFont(p)!)}"` : ''} w:cs="${font}"/>` +
     (p.bold ? '<w:b/>' : '') +
     (p.italic ? '<w:i/>' : '') +
     (p.strike ? '<w:strike/>' : '') +
@@ -1855,6 +1864,11 @@ function patchedRunProps(source: DocxSource, base: RunProps, props: RunProps, fo
   if (now.fontFamily !== before.fontFamily) {
     const font = now.fontFamily;
     patchChild(rPr, RPR_ORDER, 'w:rFonts', { 'w:ascii': font, 'w:hAnsi': font, 'w:cs': font }, ['w:asciiTheme', 'w:hAnsiTheme', 'w:cstheme']);
+  }
+  if (now.fontEastAsia !== before.fontEastAsia || (now.fontFamily !== before.fontFamily && isCjkFont(now.fontFamily))) {
+    const font = eastAsiaFont(now);
+    if (font) patchChild(rPr, RPR_ORDER, 'w:rFonts', { 'w:eastAsia': font }, ['w:eastAsiaTheme']);
+    else delete child(rPr, 'w:rFonts')?.attrs['w:eastAsia'];
   }
   // The change of formatting as the model has it now: kept, decided, or made here.
   rPr.children = rPr.children.filter((c) => c.name !== 'w:rPrChange');

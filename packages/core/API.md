@@ -4,7 +4,7 @@ Made by `node tools/api-report.mjs` from `src/index.ts`; do not change it by han
 package promises: a change to it is a change of its API, and goes in the changelog. What the engine keeps
 to itself is in `src/internal.ts`, for the packages of the repository, with no promise.
 
-245 names.
+246 names.
 
 ## model
 
@@ -16,6 +16,7 @@ export interface RunProps {
   strike?: boolean;
   fontSize?: number;
   fontFamily?: string;
+  fontEastAsia?: string;
   kern?: number;
   color?: string;
   highlight?: string;
@@ -324,6 +325,7 @@ export interface FontSpec {
   bold: boolean;
   italic: boolean;
   kern?: boolean;
+  eastAsia?: string;
 }
 export interface FontMetrics {
   ascent: number;
@@ -1045,6 +1047,13 @@ export interface ClipRun {
   text: string;
   props: RunProps;
   href?: string;
+  image?: ClipImage;
+}
+export interface ClipImage {
+  src: string;
+  width: number;
+  height: number;
+  alt?: string;
 }
 export interface ClipParagraph {
   runs: ClipRun[];

@@ -5,8 +5,10 @@
 // until something in it does.
 
 import { exportDocx } from '@rebodocs/core';
-import { getLocale, setLocale, useDocs } from '@rebodocs/react';
+import { useDocs } from '@rebodocs/react';
 import { useEffect, useRef, useState } from 'react';
+import { usePageEditorLocale } from '@/components/editorLocale';
+import { useT } from '@/components/i18n';
 import { CAPTION } from '../styles';
 import { lease } from '../accessibility/sample';
 import { Editor } from './Smallest';
@@ -18,6 +20,7 @@ function StateView() {
   const { state, ready } = useDocs();
   const before = useRef(state);
   const [seen, setSeen] = useState({ times: 0, changed: [] as string[] });
+  const t = useT();
   useEffect(() => {
     if (before.current === state) return;
     const changed = SHOWN.filter((key) => before.current[key] !== state[key]);
@@ -27,7 +30,12 @@ function StateView() {
   return (
     <div className="w-full flex-none overflow-auto border-t border-border bg-surface p-4 sm:w-[260px] sm:border-l sm:border-t-0">
       <p className={CAPTION}>useDocs().state</p>
-      <div tabIndex={0} role="group" aria-label="The state" className="mt-2.5 rounded-xl bg-[#2f2e2b] px-4 py-3 font-code text-[12.5px] leading-[1.7] text-[#edece8]">
+      <div
+        tabIndex={0}
+        role="group"
+        aria-label={t({ en: 'The state', es: 'El estado', zh: '状态' })}
+        className="mt-2.5 rounded-xl bg-[#2f2e2b] px-4 py-3 font-code text-[12.5px] leading-[1.7] text-[#edece8]"
+      >
         <div className="text-[#a8a49a]">ready: {String(ready)}</div>
         {SHOWN.map((key) => (
           <div key={key} className={seen.changed.includes(key) ? 'text-[#f5c443]' : ''}>
@@ -35,18 +43,23 @@ function StateView() {
           </div>
         ))}
       </div>
-      <p className="m-0 mt-3 text-[13px] leading-normal text-ink-soft">A new object {seen.times} times. Moving the caret in the same paragraph, with nothing else changing, makes none.</p>
+      <p className="m-0 mt-3 text-[13px] leading-normal text-ink-soft">
+        {t({
+          en: `A new object ${seen.times} times. Moving the caret in the same paragraph, with nothing else changing, makes none.`,
+          es: `Un objeto nuevo ${seen.times} veces. Mover el cursor en el mismo párrafo, sin que cambie nada más, no crea ninguno.`,
+          zh: `已生成 ${seen.times} 次新对象。在同一段落内移动光标且没有其他变化时，不会生成新对象。`,
+        })}
+      </p>
     </div>
   );
 }
 
 export default function StateDemo() {
   const [file, setFile] = useState<Uint8Array>();
+  const t = useT();
+  usePageEditorLocale();
   useEffect(() => {
-    const was = getLocale();
-    setLocale('en');
     void lease().then((doc) => setFile(exportDocx(doc)));
-    return () => setLocale(was);
   }, []);
   return (
     <div className="mt-7 overflow-hidden rounded-[18px] border border-border">
@@ -58,7 +71,7 @@ export default function StateDemo() {
           </Editor>
         </div>
       ) : (
-        <p className="m-0 grid h-[560px] place-items-center text-sm text-muted">Opening the editor…</p>
+        <p className="m-0 grid h-[560px] place-items-center text-sm text-muted">{t({ en: 'Opening the editor…', es: 'Abriendo el editor…', zh: '正在打开编辑器…' })}</p>
       )}
     </div>
   );

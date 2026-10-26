@@ -8,7 +8,7 @@
   --color-muted: #5b6272;
   --color-line: #e3e6ec;
   --color-soft: #f5f7fb;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* --- The landing page: warm neutrals and six pastel pairs ---------------- */
@@ -166,12 +166,13 @@
   }
 }
 
-/* The fonts of the landing page, loaded by next/font in `app/layout.tsx`. */
+/* The fonts of the landing page, loaded by next/font in `components/pages/RootDocument.tsx`. */
 @theme inline {
-  --font-display: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
-  --font-text: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-code: var(--font-jetbrains), ui-monospace, monospace;
-  --font-hand: var(--font-caveat), cursive;
+  --font-display: var(--font-jakarta), ui-sans-serif, system-ui, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-text: var(--font-inter), ui-sans-serif, system-ui, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-code: var(--font-jetbrains), ui-monospace, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", monospace;
+  /* Chinese by hand: the brush script of the system, Kaiti. */
+  --font-hand: var(--font-caveat), "Kaiti SC", STKaiti, KaiTi, cursive;
 }
 
 /* The landing page writes in warmer ink than the documentation. */

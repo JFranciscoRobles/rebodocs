@@ -20,14 +20,19 @@ const METRICS_SIZE = 2000;
  */
 const WIDTH_SIZE = 1000;
 
-/** CSS font-family list for a document font, with a generic fallback. */
-export function cssFontFamily(name: string): string {
+/**
+ * CSS font-family list for a document font, with a generic fallback. The font
+ * of its Chinese characters, when it has one, goes second: the browser takes
+ * from it what the first has not, which is how Word sets them.
+ */
+export function cssFontFamily(name: string, eastAsia?: string): string {
   const generic = /courier|consolas|mono/i.test(name) ? 'monospace' : /times|georgia|garamond|cambria|palatino|book|serif/i.test(name) && !/sans/i.test(name) ? 'serif' : 'sans-serif';
-  return `"${name.replace(/["\\]/g, '')}", ${generic}`;
+  const quoted = (family: string) => `"${family.replace(/["\\]/g, '')}"`;
+  return `${quoted(name)}, ${eastAsia ? `${quoted(eastAsia)}, ` : ''}${generic}`;
 }
 
 export function cssFont(font: FontSpec): string {
-  return `${font.italic ? 'italic ' : ''}${font.bold ? 'bold ' : ''}${font.size}pt ${cssFontFamily(font.family)}`;
+  return `${font.italic ? 'italic ' : ''}${font.bold ? 'bold ' : ''}${font.size}pt ${cssFontFamily(font.family, font.eastAsia)}`;
 }
 
 /** Measures text with a canvas, using the same fonts the renderer paints with. */

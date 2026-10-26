@@ -4,9 +4,12 @@
 // The document is put in it, and the PDF and the DOCX made of it say what they
 // carry: read from the bytes the editor writes (pdf.ts, docx/export.ts).
 
-import { type DocsHandle, type FontSource, DocsEditor, fontFamilies, getLocale, onFontsChange, setLocale } from '@rebodocs/react';
+import { type DocsHandle, type FontSource, DocsEditor, fontFamilies, onFontsChange } from '@rebodocs/react';
 import { useEffect, useRef, useState } from 'react';
+import { usePageEditorLocale } from '@/components/editorLocale';
+import { useLocale, useT } from '@/components/i18n';
 import { PASTEL_CLASS } from '@/lib/home';
+import { SAMPLE } from '@/lib/sample';
 import { CAPTION } from '../styles';
 import { DemoBox, Readout } from '../ui';
 import { FAMILY, FACES } from './data';
@@ -45,24 +48,24 @@ export default function FontsDemo() {
   const [embed, setEmbed] = useState<boolean | 'subset'>(true);
   const [made, setMade] = useState<Made>();
   const [busy, setBusy] = useState(false);
+  const t = useT();
+  const sample = SAMPLE[useLocale()];
+  const locale = usePageEditorLocale();
 
   useEffect(() => {
     let gone = false;
-    fetch('/demo.docx')
+    fetch(sample.file)
       .then((answer) => (answer.ok ? answer.arrayBuffer() : Promise.reject(new Error(String(answer.status)))))
       .then((bytes) => !gone && setFile(new Uint8Array(bytes)))
       .catch(() => !gone && setFailed(true));
-    const was = getLocale();
-    setLocale('en');
     // Given on another visit to this page, the font is there already: fonts stay with the page.
     setFamilies(fontFamilies());
     const stop = onFontsChange(() => setFamilies(fontFamilies()));
     return () => {
       gone = true;
       stop();
-      setLocale(was);
     };
-  }, []);
+  }, [sample.file]);
 
   useEffect(() => () => made && URL.revokeObjectURL(made.url), [made]);
 
@@ -85,7 +88,12 @@ export default function FontsDemo() {
     if (kind === 'PDF') {
       const bytes = await editor.exportPdf('Fonts');
       const { embedded, standard } = pdfFonts(bytes);
-      const says = [embedded && `${embedded} embedded, cut down`, standard.length && `standard: ${standard.join(', ')}`].filter(Boolean).join('; ');
+      const says = [
+        embedded && t({ en: `${embedded} embedded, cut down`, es: `${embedded} incrustadas, recortadas`, zh: `嵌入 ${embedded} 个，已精简` }),
+        standard.length && t({ en: `standard: ${standard.join(', ')}`, es: `estándar: ${standard.join(', ')}`, zh: `标准字体：${standard.join(', ')}` }),
+      ]
+        .filter(Boolean)
+        .join('; ');
       setMade({ kind, size: bytes.length, says, good: embedded > 0, url: URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })) });
     } else {
       const bytes = editor.exportDocx();
@@ -93,7 +101,19 @@ export default function FontsDemo() {
       setMade({
         kind,
         size: bytes.length,
-        says: faces ? `${faces} face${faces === 1 ? '' : 's'} of ${FAMILY} inside${embed === 'subset' ? ', cut down' : ', whole'}` : 'no font inside',
+        says: faces
+          ? embed === 'subset'
+            ? t({
+                en: `${faces} face${faces === 1 ? '' : 's'} of ${FAMILY} inside, cut down`,
+                es: `${faces} variante${faces === 1 ? '' : 's'} de ${FAMILY} dentro, recortadas`,
+                zh: `内含 ${FAMILY} 的 ${faces} 种字形，已精简`,
+              })
+            : t({
+                en: `${faces} face${faces === 1 ? '' : 's'} of ${FAMILY} inside, whole`,
+                es: `${faces} variante${faces === 1 ? '' : 's'} de ${FAMILY} dentro, enteras`,
+                zh: `内含 ${FAMILY} 的 ${faces} 种完整字形`,
+              })
+          : t({ en: 'no font inside', es: 'ninguna fuente dentro', zh: '未嵌入字体' }),
         good: faces > 0,
         url: URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })),
       });
@@ -112,20 +132,26 @@ export default function FontsDemo() {
 
   return (
     <DemoBox
-      title="Give it a font"
+      title={t({ en: 'Give it a font', es: 'Dale una fuente', zh: '添加字体' })}
       aside={
         <>
           <div className="flex flex-col gap-2.5">
-            {step(1, `Give the page ${FAMILY}`, has)}
+            {step(1, t({ en: `Give the page ${FAMILY}`, es: `Dale ${FAMILY} a la página`, zh: `为页面添加 ${FAMILY}` }), has)}
             <button type="button" disabled={!file || !!fonts || has} onClick={give} className={`${button} self-start bg-ink text-white`}>
               fonts={'{[…3 faces]}'}
             </button>
-            {step(2, 'Put the document in it', inIt)}
+            {step(2, t({ en: 'Put the document in it', es: 'Pon el documento en ella', zh: '把文档设为该字体' }), inIt)}
             <button type="button" disabled={!has || inIt} onClick={putInIt} className={`${button} self-start bg-ink text-white`}>
-              Select all, font {FAMILY}
+              {t({ en: `Select all, font ${FAMILY}`, es: `Seleccionar todo, fuente ${FAMILY}`, zh: `全选，字体设为 ${FAMILY}` })}
             </button>
-            <p className="m-0 text-[13px] leading-normal text-muted">Or choose it in the toolbar&apos;s font box (under ⋯ here), where it comes first.</p>
-            {step(3, 'Make the files', !!made)}
+            <p className="m-0 text-[13px] leading-normal text-muted">
+              {t({
+                en: 'Or choose it in the toolbar’s font box (under ⋯ here), where it comes first.',
+                es: 'O elígela en el cuadro de fuentes de la barra (bajo ⋯ aquí), donde aparece primero.',
+                zh: '也可以在工具栏的字体框中选择它（这里在 ⋯ 下），它排在最前面。',
+              })}
+            </p>
+            {step(3, t({ en: 'Make the files', es: 'Genera los archivos', zh: '生成文件' }), !!made)}
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" disabled={!file || busy} onClick={() => make('PDF')} className={`${button} ${PASTEL_CLASS.blue}`}>
                 PDF
@@ -148,28 +174,46 @@ export default function FontsDemo() {
             </div>
           </div>
           <Readout
-            label="What the editor says"
+            label={t({ en: 'What the editor says', es: 'Lo que dice el editor', zh: '编辑器的状态' })}
             lines={[
               ['fontFamilies()', families.length ? `[${families.map((f) => `'${f}'`).join(', ')}]` : '[]', has ? 'good' : 'dim'],
-              ['fonts', fonts ? `${fonts.length} faces of ${FAMILY}` : 'not given', fonts ? 'good' : 'dim'],
+              [
+                'fonts',
+                fonts
+                  ? t({ en: `${fonts.length} faces of ${FAMILY}`, es: `${fonts.length} variantes de ${FAMILY}`, zh: `${FAMILY} 的 ${fonts.length} 种字形` })
+                  : t({ en: 'not given', es: 'sin dar', zh: '未添加' }),
+                fonts ? 'good' : 'dim',
+              ],
               ['embedFonts', embed === 'subset' ? "'subset'" : String(embed)],
-              made ? [made.kind, `${kb(made.size)}, ${made.says}`, made.good ? 'good' : 'warn'] : ['file', 'not made yet', 'dim'],
+              made
+                ? [made.kind, `${kb(made.size)}, ${made.says}`, made.good ? 'good' : 'warn']
+                : [t({ en: 'file', es: 'archivo', zh: '文件' }), t({ en: 'not made yet', es: 'todavía sin generar', zh: '尚未生成' }), 'dim'],
             ]}
           />
           {made && (
             <a href={made.url} download={made.kind === 'PDF' ? 'fonts.pdf' : 'fonts.docx'} className="text-sm font-medium text-brand hover:text-brand-hover">
-              Open the {made.kind} it made
+              {t({ en: `Open the ${made.kind} it made`, es: `Abrir el ${made.kind} generado`, zh: `打开生成的 ${made.kind}` })}
             </a>
           )}
-          <p className={`${CAPTION} normal-case tracking-normal`}>The font stays with the page once given, until it is reloaded: going to another page of the site and back finds it there.</p>
+          <p className={`${CAPTION} normal-case tracking-normal`}>
+            {t({
+              en: 'The font stays with the page once given, until it is reloaded: going to another page of the site and back finds it there.',
+              es: 'La fuente se queda con la página una vez dada, hasta que se recarga: ir a otra página del sitio y volver la encuentra ahí.',
+              zh: '字体添加后会一直留在页面中，直到页面重新加载：切换到本站其他页面再回来，它仍然在。',
+            })}
+          </p>
         </>
       }
     >
       <div className="-m-5 h-[520px] overflow-hidden rounded-[14px]">
         {file ? (
-          <DocsEditor docx={file} name="receipt.docx" locale="en" fonts={fonts} embedFonts={embed} onReady={(docs) => (handle.current = docs)} />
+          <DocsEditor docx={file} name={sample.name} locale={locale} fonts={fonts} embedFonts={embed} onReady={(docs) => (handle.current = docs)} />
         ) : (
-          <p className="grid h-full place-items-center text-sm text-muted">{failed ? 'The sample document could not be loaded.' : 'Opening the document…'}</p>
+          <p className="grid h-full place-items-center text-sm text-muted">
+            {failed
+              ? t({ en: 'The sample document could not be loaded.', es: 'No se pudo cargar el documento de ejemplo.', zh: '无法加载示例文档。' })
+              : t({ en: 'Opening the document…', es: 'Abriendo el documento…', zh: '正在打开文档…' })}
+          </p>
         )}
       </div>
     </DemoBox>

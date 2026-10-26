@@ -1,9 +1,10 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { Loading } from '@/components/docs/Loading';
 
 /** The editor comes when the page is in the browser. */
 export const LazyHistoryDemo = dynamic(() => import('./HistoryDemo'), {
   ssr: false,
-  loading: () => <p className="m-0 mt-7 grid h-[580px] place-items-center rounded-[18px] border border-border text-sm text-muted">Opening the editor…</p>,
+  loading: () => <Loading className="m-0 mt-7 grid h-[580px] place-items-center rounded-[18px] border border-border text-sm text-muted" />,
 });

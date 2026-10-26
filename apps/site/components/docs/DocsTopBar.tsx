@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useRef } from 'react';
+import { LanguageSwitcher, LocalLink as Link, useT } from '@/components/i18n';
 import { Logo } from '@/components/home/SiteChrome';
 import { VERSION } from '@/lib/home';
 import { NPM_ORG } from '@/lib/site';
@@ -15,13 +15,15 @@ const ghost = 'rounded-lg px-2.75 py-1.75 text-ink transition-colors hover:bg-ho
 export function DocsTopBar({ index }: { index: SearchEntry[] }) {
   const sheet = useRef<HTMLDialogElement>(null);
   const close = () => sheet.current?.close();
+  const t = useT();
+  const pages = t({ en: 'Pages of the documentation', es: 'Páginas de la documentación', zh: '文档页面' });
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-white/92 backdrop-blur-[8px]">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-5 gap-y-3 px-6 py-3">
         <button
           type="button"
-          aria-label="Pages of the documentation"
+          aria-label={pages}
           onClick={() => sheet.current?.showModal()}
           className="-ml-2 flex size-9 cursor-pointer items-center justify-center rounded-lg text-ink transition-colors hover:bg-hover lg:hidden"
         >
@@ -32,12 +34,12 @@ export function DocsTopBar({ index }: { index: SearchEntry[] }) {
         <Link href="/" className="flex items-center gap-2.5 text-ink">
           <Logo size={28} />
           <span className="font-display text-lg font-extrabold tracking-[-0.03em]">Rebodocs</span>
-          <span className="rounded-md bg-hover px-2 py-0.75 text-[13px] font-semibold text-muted">Docs</span>
+          <span className="rounded-md bg-hover px-2 py-0.75 text-[13px] font-semibold text-muted">{t({ en: 'Docs', es: 'Docs', zh: '文档' })}</span>
         </Link>
         <SearchCommand index={index} />
-        <nav aria-label="Top" className="ml-auto flex flex-wrap items-center gap-0.5 text-sm font-medium">
+        <nav aria-label={t({ en: 'Top', es: 'Arriba', zh: '顶部导航' })} className="ml-auto flex flex-wrap items-center gap-0.5 text-sm font-medium">
           <Link href="/" className={ghost}>
-            Home
+            {t({ en: 'Home', es: 'Inicio', zh: '首页' })}
           </Link>
           <Link href="/docs/editor-api/" className={ghost}>
             API
@@ -45,16 +47,17 @@ export function DocsTopBar({ index }: { index: SearchEntry[] }) {
           <a href={NPM_ORG} className={ghost}>
             npm
           </a>
+          <LanguageSwitcher />
           <span className="ml-1 rounded-full bg-pastel-green px-2.5 py-1.25 text-xs font-medium text-pastel-green-fg">v{VERSION}</span>
         </nav>
       </div>
 
-      <dialog ref={sheet} aria-label="Pages of the documentation" className="sheet m-0 h-dvh w-[min(320px,86vw)]" onClick={(event) => event.target === sheet.current && close()}>
+      <dialog ref={sheet} aria-label={pages} className="sheet m-0 h-dvh w-[min(320px,86vw)]" onClick={(event) => event.target === sheet.current && close()}>
         <div className="flex h-full flex-col overflow-y-auto bg-white px-4 py-5 shadow-menu">
           <div className="mb-5 flex items-center justify-between px-2.5">
-            <span className="font-display text-lg font-extrabold tracking-[-0.03em]">Docs</span>
+            <span className="font-display text-lg font-extrabold tracking-[-0.03em]">{t({ en: 'Docs', es: 'Documentación', zh: '文档' })}</span>
             <button type="button" onClick={close} className="cursor-pointer rounded-lg px-2.5 py-1.5 text-sm text-muted hover:bg-hover">
-              Close
+              {t({ en: 'Close', es: 'Cerrar', zh: '关闭' })}
             </button>
           </div>
           <SidebarNav onGo={close} />

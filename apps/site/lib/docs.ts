@@ -6,6 +6,7 @@ import path from 'node:path';
 import MarkdownIt from 'markdown-it';
 import anchor from 'markdown-it-anchor';
 import { type Highlighter, createHighlighter } from 'shiki';
+import { DEFAULT_LOCALE, type Locale } from './i18n';
 
 const THEME = 'github-dark-dimmed';
 /** The landing page shows its code on white. */
@@ -45,21 +46,43 @@ const slugify = (text: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 
-const sourceOf = (slug: string) => readFileSync(path.join(process.cwd(), 'content/docs', `${slug}.md`), 'utf8');
-const headingsOf = (body: string) => [...body.matchAll(/^## (.+)$/gm)].map((match) => ({ id: slugify(match[1]), text: match[1].replace(/`/g, '') }));
+/**
+ * The Markdown of a page or a part in a language: English in `content/<dir>`, the others in
+ * `content/<dir>/<locale>`. A heading written `## Título {#title}` keeps the id it has in
+ * English, so a link to a section works in every language.
+ */
+function sourceOf(dir: 'docs' | 'parts', name: string, locale: Locale = DEFAULT_LOCALE): string {
+  const folder = locale === DEFAULT_LOCALE ? `content/${dir}` : `content/${dir}/${locale}`;
+  return readFileSync(path.join(process.cwd(), folder, `${name}.md`), 'utf8');
+}
+/** The ids a translation gives its headings, by their text, and the text without them. */
+function fixedIds(source: string): { body: string; ids: Map<string, string> } {
+  const ids = new Map<string, string>();
+  const body = source.replace(/^(#{2,3} )(.+?) \{#([\w-]+)\}$/gm, (_, hashes: string, text: string, id: string) => {
+    ids.set(text.replace(/`/g, ''), id);
+    return hashes + text;
+  });
+  return { body, ids };
+}
+const headingsOf = (body: string, ids: Map<string, string>) =>
+  [...body.matchAll(/^## (.+)$/gm)].map((match) => {
+    const text = match[1].replace(/`/g, '');
+    return { id: ids.get(text) ?? slugify(match[1]), text };
+  });
 
 /** The sections of a page, without making its HTML: what the search box finds. */
-export function outlineOf(slug: string): { id: string; text: string }[] {
-  return headingsOf(sourceOf(slug));
+export function outlineOf(slug: string, locale: Locale = DEFAULT_LOCALE): { id: string; text: string }[] {
+  const { body, ids } = fixedIds(sourceOf('docs', slug, locale));
+  return headingsOf(body, ids);
 }
 
-async function renderer(theme = THEME): Promise<InstanceType<typeof MarkdownIt>> {
+async function renderer(theme = THEME, ids = new Map<string, string>()): Promise<InstanceType<typeof MarkdownIt>> {
   const lit = await shiki();
   const md = new MarkdownIt({
     html: true,
     linkify: true,
     highlight: (code, lang) => tagged(readable(lit.codeToHtml(code.replace(/\n$/, ''), { lang: LANGS.includes(lang) ? lang : 'text', theme }), theme), lang),
-  }).use(anchor, { slugify, level: [2, 3], permalink: anchor.permalink.headerLink() });
+  }).use(anchor, { slugify: (text) => ids.get(text) ?? slugify(text), level: [2, 3], permalink: anchor.permalink.headerLink() });
   // A table wider than a phone scrolls by itself, and not the page with it.
   md.renderer.rules.table_open = () => '<div class="table"><table>';
   md.renderer.rules.table_close = () => '</table></div>';
@@ -71,14 +94,15 @@ async function renderer(theme = THEME): Promise<InstanceType<typeof MarkdownIt>>
  * reference, tables — from `content/parts/<name>.md`, as HTML in the styles
  * of the Markdown pages, its code on white as the React pages have it.
  */
-export async function loadPart(name: string): Promise<string> {
-  const md = await renderer(LIGHT_THEME);
-  return md.render(readFileSync(path.join(process.cwd(), 'content/parts', `${name}.md`), 'utf8'));
+export async function loadPart(name: string, locale: Locale = DEFAULT_LOCALE): Promise<string> {
+  const { body, ids } = fixedIds(sourceOf('parts', name, locale));
+  const md = await renderer(LIGHT_THEME, ids);
+  return md.render(body);
 }
 
-export async function loadDoc(slug: string): Promise<DocPage> {
-  const source = sourceOf(slug);
-  const md = await renderer();
+export async function loadDoc(slug: string, locale: Locale = DEFAULT_LOCALE): Promise<DocPage> {
+  const { body: source, ids } = fixedIds(sourceOf('docs', slug, locale));
+  const md = await renderer(THEME, ids);
 
   const title = /^# (.+)$/m.exec(source)?.[1] ?? slug;
   const body = source.replace(/^# .+\n+/, '');
@@ -88,5 +112,5 @@ export async function loadDoc(slug: string): Promise<DocPage> {
     .replace(/[`*_]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  return { title, description, html: md.render(body), headings: headingsOf(body) };
+  return { title, description, html: md.render(body), headings: headingsOf(body, ids) };
 }

@@ -93,14 +93,15 @@ interface Token {
 /** The words of a text, the spaces between them, and each picture or mark on its own. */
 function tokens(text: string): Token[] {
   const out: Token[] = [];
-  const word = /[\uFFFC\u2060]|\s+|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]/gu;
+  // Chinese, without spaces, a character at a time: what changed in a sentence of it is the characters that did.
+  const word = /[\uFFFC\u2060]|\s+|\p{Script=Han}|(?:(?!\p{Script=Han})[\p{L}\p{N}_])+|[^\s\p{L}\p{N}_]/gu;
   for (let found = word.exec(text); found; found = word.exec(text)) out.push({ text: found[0], from: found.index });
   return out;
 }
 
 /** How much two texts have of the same words, from 0 to 1: the words alone, without the marks beside them. */
 function likeness(a: string, b: string): number {
-  const words = (text: string) => text.match(/[\p{L}\p{N}_]+/gu) ?? [];
+  const words = (text: string) => text.match(/\p{Script=Han}|(?:(?!\p{Script=Han})[\p{L}\p{N}_])+/gu) ?? [];
   const wa = words(a);
   const wb = words(b);
   if (!wa.length && !wb.length) return 1;

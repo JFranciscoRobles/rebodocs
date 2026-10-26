@@ -70,3 +70,10 @@ describe('inkOn', () => {
     expect(inkOn('000000')).toBe('#fff');
   });
 });
+
+describe('Chinese in a paragraph to check', () => {
+  it('leaves out the Chinese, which has no dictionary, and checks the latin words beside it', () => {
+    expect(words('我们用Wrod写文件')).toEqual(['Wrod']);
+    expect(words('我们今天去公园')).toEqual([]);
+  });
+});

@@ -10,6 +10,8 @@ export interface RunProps {
   strike?: boolean;
   fontSize?: number;
   fontFamily?: string;
+  /** The font of its Chinese and Japanese characters (`w:eastAsia`), when it is not the one of the rest: '' for the same. */
+  fontEastAsia?: string;
   /**
    * Kerning: the pairs of letters the font sets closer, such as "AV", are set
    * so from this size up, in points (`w:kern`); 0 for none. Word kerns from
@@ -591,6 +593,7 @@ export const DEFAULT_RUN: ResolvedRunProps = {
   strike: false,
   fontSize: 11,
   fontFamily: 'Arial',
+  fontEastAsia: '',
   kern: 1,
   color: '000000',
   highlight: '',

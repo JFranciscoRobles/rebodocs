@@ -6,6 +6,7 @@
 
 import { type Doc, docText, documentLanguage, exportDocx, fillVariables, importDocx, variableNames } from '@rebodocs/core';
 import { useEffect, useMemo, useState } from 'react';
+import { useT } from '@/components/i18n';
 import { PASTEL_CLASS } from '@/lib/home';
 import { CAPTION } from '../styles';
 import { Readout } from '../ui';
@@ -20,6 +21,7 @@ export default function EngineDemo() {
   const [template, setTemplate] = useState<Doc>();
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(FIELDS));
   const [locale, setLocale] = useState<string>();
+  const t = useT();
 
   useEffect(() => {
     void fetch('/sample.docx')
@@ -69,7 +71,7 @@ export default function EngineDemo() {
           </p>
           <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby="gs-locale">
             <button type="button" aria-pressed={!locale} className={pill(!locale)} onClick={() => setLocale(undefined)}>
-              left out
+              {t({ en: 'left out', es: 'sin pasarlo', zh: '不传入' })}
             </button>
             <button type="button" aria-pressed={locale === 'es-MX'} className={pill(locale === 'es-MX')} onClick={() => setLocale('es-MX')}>
               es-MX
@@ -79,7 +81,7 @@ export default function EngineDemo() {
       </div>
       <div className="grid gap-5 border-t border-border px-6 py-5" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,320px),1fr))' }}>
         <div className="min-w-0">
-          <p className={CAPTION}>What it wrote</p>
+          <p className={CAPTION}>{t({ en: 'What it wrote', es: 'Lo que escribió', zh: '写出的内容' })}</p>
           <div className="mt-2.5 rounded-xl border border-border bg-white px-4 py-3 text-[14px] leading-[1.6] text-ink-soft">
             {filled
               ? filled.lines.map((line, i) => (
@@ -87,19 +89,27 @@ export default function EngineDemo() {
                     {line}
                   </p>
                 ))
-              : 'Reading the template…'}
+              : t({ en: 'Reading the template…', es: 'Leyendo la plantilla…', zh: '正在读取模板…' })}
           </div>
-          <pre tabIndex={0} aria-label="The call" className="m-0 mt-3 overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3 font-code text-[12.5px] leading-[1.65] text-[#edece8]">
+          <pre
+            tabIndex={0}
+            aria-label={t({ en: 'The call', es: 'La llamada', zh: '调用' })}
+            className="m-0 mt-3 overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3 font-code text-[12.5px] leading-[1.65] text-[#edece8]"
+          >
             {code}
           </pre>
         </div>
         <div className="flex min-w-0 flex-col gap-3">
           <Readout
-            label="What the engine says"
+            label={t({ en: 'What the engine says', es: 'Lo que dice el motor', zh: '引擎的输出' })}
             lines={[
               ['documentLanguage(doc)', template ? `'${documentLanguage(template) ?? '—'}'` : '—'],
-              ['variables in the template', template ? String(variableNames(template).length) : '—'],
-              ['left as they are', filled ? filled.left.join(', ') || 'none' : '—', filled?.left.length ? 'warn' : 'good'],
+              [t({ en: 'variables in the template', es: 'variables en la plantilla', zh: '模板中的变量' }), template ? String(variableNames(template).length) : '—'],
+              [
+                t({ en: 'left as they are', es: 'sin llenar', zh: '保持原样的' }),
+                filled ? filled.left.join(', ') || t({ en: 'none', es: 'ninguna', zh: '无' }) : '—',
+                filled?.left.length ? 'warn' : 'good',
+              ],
             ]}
           />
           <button
@@ -108,7 +118,7 @@ export default function EngineDemo() {
             onClick={download}
             className="cursor-pointer self-start rounded-lg border border-border bg-white px-3 py-1.5 text-[13px] font-semibold text-ink-soft hover:bg-hover disabled:opacity-50"
           >
-            Download out.docx
+            {t({ en: 'Download out.docx', es: 'Descargar out.docx', zh: '下载 out.docx' })}
           </button>
         </div>
       </div>

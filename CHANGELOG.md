@@ -8,17 +8,74 @@ minor version (0.x.0) may change the API; such changes are listed under
 
 ### Added
 
-- **A viewer: a document only to read.** `createViewer(element, doc)` in
-  `@rebodocs/editor`, `<DocsViewer docx>` in `@rebodocs/react`: the editor
-  read only, with no caret, one page under another and each whole on the
-  screen, or all of them at once as large as lets them fit (down to the
-  least zoom for a long one); the status bar floats over the pages, without
-  the notes, the flowing text and the language, its views setting the pages
-  out the same way; `print()` and `setLayout()`.
-- **The first page for a thumbnail.** `pageThumbnail(doc)` gives it as the
+- **Pictures are pasted.** Copied in this editor, a picture goes with its
+  text, its size and what it shows, and to other programs as an `<img>` they
+  read. Pasted from Word for Mac, the pictures come from its HTML at the
+  size its VML says, in points; from Word on Windows, whose HTML only names
+  them on the computer, from the RTF it puts beside it (`\shppict`, PNG or
+  JPEG); from a web page, fetched when its server lets the page read them;
+  and a picture copied alone, from the file the browser was given with it.
+  What cannot be read is left out, and the text around it stays. In core,
+  `ClipRun.image` (`ClipImage`: a `data:` address, its size in points and
+  what it shows), written by `clipOf` and put in by `insertClip`.
+- **Tests of the toolbar, the side panel and the status bar in Chrome**,
+  driven as a person drives them, and of pictures pasted from what Word for
+  Mac really put on the clipboard (`test/fixtures`).
+- **`@rebodocs/viewer`, a package for a document only to read.** For an
+  application that shows documents and does not edit them: `createViewer(element,
+  docx)` takes the bytes of a .docx (or a `Doc`), and `<DocsViewer docx>` is in
+  `@rebodocs/viewer/react`, React being an optional peer. The editor read
+  only, with no caret, one page under another and each whole on the screen,
+  or all of them at once as large as lets them fit (down to the least zoom
+  for a long one); the status bar floats over the pages, saying the page in
+  view as they scroll, without the notes, the flowing text and the language,
+  its views setting the pages out the same way; `print()` and `setLayout()`.
+  About 160 KB with gzip in an application, against about 260 KB for the
+  whole editor. `@rebodocs/react` has `DocsViewer` too.
+- **The first page for a thumbnail.** `pageThumbnail(docx)` gives it as the
   editor draws it, its pictures as data, out of sight and one at a time;
-  `pagePicture(doc, size, { type, quality })` as a JPEG or a PNG, drawn
+  `pagePicture(docx, size, { type, quality })` as a JPEG or a PNG, drawn
   through an SVG onto a canvas, its pictures in it.
+- **`page: 'view'` for the status bar**: it says the page most in view
+  rather than the caret's, for pages only read.
+- **`apps/viewer`**: a shelf of documents with their thumbnails, each opened
+  in the viewer (`npm run viewer`), and its page on the site, "A document
+  only to read".
+- **Chinese.** A line of Chinese (and Japanese) breaks between any two
+  characters, as in Word, never before a closing mark such as "。", "，" or
+  "」" nor after an opening one such as "「" or "（"; a justified line of it
+  stretches between its characters. The font of the Chinese characters of a
+  run (`w:eastAsia`) is read, kept and written as `fontEastAsia`, and a font
+  for Chinese chosen in the toolbar is written as that too; the line is as
+  tall as that font makes it. A double click selects a word of it and
+  Ctrl/⌥ + arrow moves a word at a time, as the browser's dictionary for
+  Chinese finds its words; each character counts as a word, as in Word;
+  spelling leaves it alone and checks the latin words beside it; versions
+  compare it, and `trackEdit` with `words` tracks it, a character at a time,
+  not a sentence at once; "Whole words only" finds a word beside
+  it. In a PDF, a Chinese character the font has not is drawn in the font
+  for Chinese the document carries, or else in the one every reader has
+  (STSong-Light, MSung-Light for Taiwan and Hong Kong), where the layout put
+  it. Date variables take 2026年10月12日 and 今天.
+- **The interface in Simplified and Traditional Chinese**, in
+  `@rebodocs/editor/locales/zh-Hans` and `/zh-Hant`, for an application to
+  give with `addLocale` (not in the editor's own bundle): `zh-TW`, `zh-HK`
+  and `zh-Hant` find the Traditional one, any other Chinese tag the
+  Simplified. With either, the toolbar offers the fonts Word has for it.
+
+### Changed
+
+- **`addLocale` takes the browser's language** while the application has
+  not set one: a browser in Chinese shows Chinese once `zh-Hans` is added,
+  without `locale`. After `setLocale`, or with the `locale` prop, nothing
+  changes. An application that adds a language and wants English anyway
+  says so with `setLocale('en')`.
+
+### Fixed
+
+- Escape in a menu of the toolbar opened from the keyboard gives the
+  keyboard back to the button of the menu, as it says, and not to the
+  document: the page's own Escape ran first.
 
 ## 0.11.0
 

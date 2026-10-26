@@ -12,7 +12,6 @@ export { type FindBar, createFindBar } from './findbar';
 export { type Panel, type PanelOptions, type PanelTab, createPanel } from './panel';
 export { type VersionInfo, type VersionView, type VersionViewOptions, type Versions, createVersionView, loadVersion, restoreVersionOf, sortVersions, versionDate, versionName } from './versions';
 export { type Sidebar, type SidebarOptions, createSidebar } from './sidebar';
-export { type PagePictureOptions, type Viewer, type ViewerLayout, type ViewerOptions, createViewer, pagePicture, pageThumbnail, pageWidthToFit } from './viewer';
 export { type Bubble, type BubbleOptions, createBubble } from './bubble';
 export { type SlashCommand, type SlashCommandId, type SlashMenu, type SlashMenuOptions, type SlashMenuSettings, createSlashMenu } from './slash';
 export { type VariableInfo, type VariableSuggest, type VariableSuggestSettings, createVariableSuggest } from './variablesuggest';

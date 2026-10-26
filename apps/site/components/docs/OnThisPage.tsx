@@ -1,10 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useT } from '@/components/i18n';
 
 /** The sections of the page, the one being read in blue. Hidden on a narrow screen. */
 export function OnThisPage({ headings }: { headings: { id: string; text: string }[] }) {
   const [here, setHere] = useState(headings[0]?.id);
+  const t = useT();
+  const title = t({ en: 'On this page', es: 'En esta página', zh: '本页内容' });
 
   useEffect(() => {
     const sections = headings.map((heading) => document.getElementById(heading.id)).filter((el): el is HTMLElement => !!el);
@@ -22,9 +25,9 @@ export function OnThisPage({ headings }: { headings: { id: string; text: string 
   }, [headings]);
 
   return (
-    <aside aria-label="On this page" className="hidden w-[200px] flex-none py-10 min-[1200px]:block">
+    <aside aria-label={title} className="hidden w-[200px] flex-none py-10 min-[1200px]:block">
       <div className="sticky top-[90px]">
-        <p className="m-0 mb-2.5 text-xs font-semibold uppercase tracking-[0.04em] text-muted">On this page</p>
+        <p className="m-0 mb-2.5 text-xs font-semibold uppercase tracking-[0.04em] text-muted">{title}</p>
         {headings.length > 1 && (
           <ul className="m-0 list-none p-0">
             {headings.map((heading) => {
@@ -43,7 +46,9 @@ export function OnThisPage({ headings }: { headings: { id: string; text: string 
             })}
           </ul>
         )}
-        <p className="m-0 mt-5.5 font-hand text-[22px] leading-[1.1] text-pastel-pink-fg">tip: press ⌘K to jump to any prop</p>
+        <p className="m-0 mt-5.5 font-hand text-[22px] leading-[1.1] text-pastel-pink-fg">
+          {t({ en: 'tip: press ⌘K to jump to any prop', es: 'tip: pulsa ⌘K para saltar a cualquier prop', zh: '提示：按 ⌘K 跳到任意属性' })}
+        </p>
       </div>
     </aside>
   );

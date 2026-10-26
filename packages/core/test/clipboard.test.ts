@@ -2,16 +2,20 @@ import { describe, expect, it } from 'vitest';
 import {
   type Clip,
   type Paragraph,
+  altText,
   clipHtml,
   clipOf,
   clipText,
   createDoc,
+  dataPicture,
   insertClip,
+  insertImage,
   linkHref,
   listKindAt,
   paragraphText,
   parseClip,
   serializeClip,
+  setAltText,
   setParagraphStyle,
   toggleList,
 } from '../src/internal';
@@ -114,5 +118,59 @@ describe('copying and pasting with the formatting', () => {
     expect(pasted.paragraphs[0].props.styleId).toBe('Heading1');
     expect(listKindAt(pasted, 1)).toBe('number');
     expect(pasted.paragraphs[2].runs[0].props).toMatchObject({ italic: true, fontSize: 13 });
+  });
+});
+
+describe('pictures in a clip', () => {
+  // A PNG of one pixel.
+  const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
+  const withPicture = () => {
+    const doc = insertImage(createDoc([p('Logo  here')]), pos(0, 5), { bytes: PNG, type: 'image/png', width: 60, height: 30 }).doc;
+    return setAltText(doc, pos(0, 5), 'The logo');
+  };
+
+  it('copies a picture with the text around it, its size and what it shows, and writes it as an img', () => {
+    const clip = clipOf(withPicture(), { from: pos(0, 0), to: pos(0, 11) });
+    const runs = clip.paragraphs[0].runs;
+    expect(runs.map((r) => r.text)).toEqual(['Logo ', '', ' here']);
+    expect(runs[1].image).toMatchObject({ width: 60, height: 30, alt: 'The logo' });
+    expect(runs[1].image!.src.startsWith('data:image/png;base64,')).toBe(true);
+    expect(clipText(clip)).toBe('Logo  here');
+    expect(clipHtml(clip)).toContain('<img src="data:image/png;base64,');
+    expect(clipHtml(clip)).toContain('width="80" height="40" style="width:60pt;height:30pt" alt="The logo"');
+  });
+
+  it('pastes it back as a picture of the document, at its size, with what it shows', () => {
+    const clip = parseClip(serializeClip(clipOf(withPicture(), { from: pos(0, 0), to: pos(0, 11) })))!;
+    const { doc } = insertClip(createDoc([p('')]), pos(0, 0), clip);
+    const run = doc.paragraphs[0].runs.find((r) => r.props.object)!;
+    expect(paragraphText(doc.paragraphs[0])).toBe('Logo \uFFFC here');
+    expect([run.props.objectWidth, run.props.objectHeight]).toEqual([60, 30]);
+    expect(altText(run.props.object)).toBe('The logo');
+    expect(Object.values(doc.media ?? {})[0].bytes).toEqual(PNG);
+  });
+
+  it('takes the kind of a picture from its bytes, makes it fit the text, and leaves out what it cannot read', () => {
+    const src = `data:image/jpeg;base64,${btoa(String.fromCharCode(...PNG))}`;
+    expect(dataPicture(src)?.type).toBe('image/png');
+    const clip: Clip = {
+      paragraphs: [
+        {
+          props: {},
+          runs: [
+            { text: 'A', props: {}, image: { src, width: 2000, height: 1000 } },
+            { text: 'B', props: {}, image: { src: 'file:///C:/clip_image001.png', width: 10, height: 10 } },
+            { text: '', props: {}, image: { src, width: 0, height: 0 } },
+          ],
+        },
+      ],
+    };
+    const { doc } = insertClip(createDoc([p('')]), pos(0, 0), clip);
+    const sizes = doc.paragraphs[0].runs.filter((r) => r.props.object).map((r) => [r.props.objectWidth, r.props.objectHeight]);
+    // 468 points is the width of the text of a Letter page with margins of an inch; a picture with no size is its own at 96 pixels an inch.
+    expect(sizes).toEqual([
+      [468, 234],
+      [0.75, 0.75],
+    ]);
   });
 });

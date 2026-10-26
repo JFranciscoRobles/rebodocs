@@ -1,19 +1,25 @@
 'use client';
 
 import { useState } from 'react';
+import { useT } from '@/components/i18n';
 import { roving } from '../keys';
 import { CAPTION, CODE } from '../ui';
 import { STAGES, STEPS } from './data';
 
 /** One letter, typed, followed from the key to the screens of everyone on the document. */
 export function KeystrokeSteps({ code }: { code: string[] }) {
+  const t = useT();
   const [at, setAt] = useState(0);
   const step = STEPS[at];
   const reached = STAGES.findIndex(([stage]) => stage === step.stage);
 
   return (
     <div className="mt-7 overflow-hidden rounded-[18px] border border-border">
-      <ol aria-label="The path of a keystroke" className="m-0 flex list-none flex-wrap items-center gap-y-2 bg-surface px-7 py-5" role="list">
+      <ol
+        aria-label={t({ en: 'The path of a keystroke', es: 'El camino de una pulsación', zh: '一次按键的路径' })}
+        className="m-0 flex list-none flex-wrap items-center gap-y-2 bg-surface px-7 py-5"
+        role="list"
+      >
         {STAGES.map(([stage, label], i) => (
           <li key={stage} className="flex items-center">
             <span
@@ -21,7 +27,7 @@ export function KeystrokeSteps({ code }: { code: string[] }) {
                 i === reached ? 'border-brand bg-pastel-blue text-brand' : i < reached ? 'border-[#bfd3f7] bg-white text-brand' : 'border-border bg-white text-muted'
               }`}
             >
-              {label}
+              {t(label)}
             </span>
             {i < STAGES.length - 1 && (
               <span aria-hidden="true" className={`mx-1.5 transition-colors duration-300 ${i < reached ? 'text-brand' : 'text-[#c9c6be]'}`}>
@@ -33,12 +39,12 @@ export function KeystrokeSteps({ code }: { code: string[] }) {
       </ol>
 
       <div className="flex flex-wrap border-t border-[#f0eee9]">
-        <div role="radiogroup" aria-label="Steps" className="flex min-w-0 flex-[1_1_260px] flex-col gap-1 px-5 py-5" onKeyDown={(event) => roving(event, setAt)}>
+        <div role="radiogroup" aria-label={t({ en: 'Steps', es: 'Pasos', zh: '步骤' })} className="flex min-w-0 flex-[1_1_260px] flex-col gap-1 px-5 py-5" onKeyDown={(event) => roving(event, setAt)}>
           {STEPS.map((s, i) => {
             const on = i === at;
             return (
               <button
-                key={s.title}
+                key={s.title.en}
                 type="button"
                 role="radio"
                 aria-checked={on}
@@ -51,18 +57,16 @@ export function KeystrokeSteps({ code }: { code: string[] }) {
                 >
                   {i + 1}
                 </span>
-                <span className={`pt-0.5 text-[15px] ${on ? 'font-semibold text-brand' : 'text-ink'}`}>{s.title}</span>
+                <span className={`pt-0.5 text-[15px] ${on ? 'font-semibold text-brand' : 'text-ink'}`}>{t(s.title)}</span>
               </button>
             );
           })}
         </div>
 
         <div key={at} className="flex min-w-0 flex-[1.5_1_380px] animate-enter flex-col gap-4 border-[#f0eee9] px-7 py-6 lg:border-l">
-          <p className={CAPTION}>
-            Step {at + 1} of {STEPS.length}
-          </p>
-          <p className="m-0 font-display text-xl font-bold tracking-[-0.01em]">{step.title}</p>
-          <p className="m-0 text-base leading-[1.6] text-ink-soft">{step.text}</p>
+          <p className={CAPTION}>{t({ en: `Step ${at + 1} of ${STEPS.length}`, es: `Paso ${at + 1} de ${STEPS.length}`, zh: `第 ${at + 1} 步，共 ${STEPS.length} 步` })}</p>
+          <p className="m-0 font-display text-xl font-bold tracking-[-0.01em]">{t(step.title)}</p>
+          <p className="m-0 text-base leading-[1.6] text-ink-soft">{t(step.text)}</p>
           <div className={CODE} dangerouslySetInnerHTML={{ __html: code[at] }} />
           <div className="mt-auto flex flex-wrap items-center gap-3 pt-1">
             <button
@@ -71,7 +75,7 @@ export function KeystrokeSteps({ code }: { code: string[] }) {
               onClick={() => setAt(at - 1)}
               className="h-9 cursor-pointer rounded-lg border border-border-strong bg-white px-3 text-sm text-ink hover:bg-hover disabled:cursor-default disabled:opacity-40"
             >
-              ← Back
+              {t({ en: '← Back', es: '← Atrás', zh: '← 上一步' })}
             </button>
             <button
               type="button"
@@ -79,10 +83,10 @@ export function KeystrokeSteps({ code }: { code: string[] }) {
               onClick={() => setAt(at + 1)}
               className="h-9 cursor-pointer rounded-lg border-0 bg-brand px-3.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:cursor-default disabled:opacity-40"
             >
-              Next step →
+              {t({ en: 'Next step →', es: 'Siguiente paso →', zh: '下一步 →' })}
             </button>
             <a href={`#${step.more[1]}`} className="ml-auto text-sm font-semibold text-brand hover:text-brand-hover">
-              More in “{step.more[0]}” ↓
+              {t({ en: `More in “${t(step.more[0])}” ↓`, es: `Más en “${t(step.more[0])}” ↓`, zh: `详见“${t(step.more[0])}” ↓` })}
             </a>
           </div>
         </div>

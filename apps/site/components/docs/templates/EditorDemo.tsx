@@ -5,8 +5,10 @@
 // with the values of a form, with changes tracked or not.
 
 import { exportDocx } from '@rebodocs/core';
-import { type DocsHandle, type Editor, DocsEditor, getLocale, setLocale } from '@rebodocs/react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type DocsHandle, type Editor, DocsEditor } from '@rebodocs/react';
+import { useMemo, useRef, useState } from 'react';
+import { useEditorLocale } from '@/components/editorLocale';
+import { useT } from '@/components/i18n';
 import { PASTEL_CLASS } from '@/lib/home';
 import { DemoBox, Readout } from '../ui';
 import { SAMPLE, receipt } from './template';
@@ -32,12 +34,8 @@ export default function EditorDemo() {
   const handle = useRef<DocsHandle | undefined>(undefined);
   const [seen, setSeen] = useState<Seen>();
   const [round, setRound] = useState(0);
-
-  useEffect(() => {
-    const was = getLocale();
-    setLocale('en');
-    return () => setLocale(was);
-  }, []);
+  const t = useT();
+  const editorLocale = useEditorLocale();
 
   const ready = (docs: DocsHandle | undefined) => {
     handle.current = docs;
@@ -58,7 +56,7 @@ export default function EditorDemo() {
   const button = 'cursor-pointer rounded-lg border border-border bg-white px-2.5 py-1 font-code text-[12.5px] text-ink-soft hover:bg-hover disabled:cursor-default disabled:opacity-50';
 
   return (
-    <DemoBox title="A template in the editor">
+    <DemoBox title={t({ en: 'A template in the editor', es: 'Una plantilla en el editor', zh: '编辑器中的模板' })}>
       <div className="flex flex-wrap items-center gap-1.5">
         <button type="button" className={button} disabled={!seen?.names.length} onClick={() => run((e) => e.fillVariables(SAMPLE))}>
           editor.fillVariables(form)
@@ -75,19 +73,23 @@ export default function EditorDemo() {
           editor.undo()
         </button>
         <button type="button" className={button} onClick={() => setRound(round + 1)}>
-          Start over
+          {t({ en: 'Start over', es: 'Empezar de nuevo', zh: '重新开始' })}
         </button>
       </div>
       <div className="-mx-5 mt-4 h-[600px] overflow-hidden border-y border-border">
-        <DocsEditor key={round} docx={file} name="receipt.docx" locale="en" language="en-US" author="Ana" onReady={ready} />
+        <DocsEditor key={round} docx={file} name="receipt.docx" locale={editorLocale} language="en-US" author="Ana" onReady={ready} />
       </div>
       <div className="mt-4 grid gap-3">
         <Readout
-          label="What the editor says"
+          label={t({ en: 'What the editor says', es: 'Lo que dice el editor', zh: '编辑器的输出' })}
           lines={[
             [
               'editor.variables',
-              seen ? (seen.names.length ? `${seen.names.length}: ${seen.names.slice(0, 4).join(', ')}${seen.names.length > 4 ? ', …' : ''}` : '[] — all filled') : '…',
+              seen
+                ? seen.names.length
+                  ? `${seen.names.length}: ${seen.names.slice(0, 4).join(', ')}${seen.names.length > 4 ? ', …' : ''}`
+                  : t({ en: '[] — all filled', es: '[] — todas llenas', zh: '[] —— 已全部填写' })
+                : '…',
               seen?.names.length ? undefined : 'good',
             ],
             ['editor.activeVariable', seen?.active ? `'${seen.active}'` : 'undefined', seen?.active ? undefined : 'dim'],
@@ -95,9 +97,28 @@ export default function EditorDemo() {
           ]}
         />
         <p className="m-0 max-w-[760px] text-[13.5px] leading-normal text-muted">
-          The values of the form are the page’s: <code className="font-code text-[12.5px]">clientName</code> is “ana pérez”, written “Ana Pérez” by{' '}
-          <code className="font-code text-[12.5px]">capital</code> and in capitals in the signature. The header and the note at the foot of the page are filled too. Track changes first, and the
-          filling is a change to accept or reject.
+          {t({
+            en: (
+              <>
+                The values of the form are the page’s: <code className="font-code text-[12.5px]">clientName</code> is “ana pérez”, written “Ana Pérez” by{' '}
+                <code className="font-code text-[12.5px]">capital</code> and in capitals in the signature. The header and the note at the foot of the page are filled too. Track changes first, and the
+                filling is a change to accept or reject.
+              </>
+            ),
+            es: (
+              <>
+                Los valores del formulario son de la página: <code className="font-code text-[12.5px]">clientName</code> es “ana pérez”, escrito “Ana Pérez” por{' '}
+                <code className="font-code text-[12.5px]">capital</code> y en mayúsculas en la firma. El encabezado y la nota al pie también se llenan. Activa primero el control de cambios, y el
+                llenado es un cambio para aceptar o rechazar.
+              </>
+            ),
+            zh: (
+              <>
+                表单的值由页面提供：<code className="font-code text-[12.5px]">clientName</code> 为 “ana pérez”，经 <code className="font-code text-[12.5px]">capital</code> 格式写成 “Ana
+                Pérez”，在签名处则为大写。页眉和脚注中的变量也会被填写。先开启修订，填写操作就会成为可接受或拒绝的修订。
+              </>
+            ),
+          })}
         </p>
       </div>
     </DemoBox>

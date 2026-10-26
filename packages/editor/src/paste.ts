@@ -1,8 +1,25 @@
 // What is pasted from other programs as HTML (a web page, Word, Google Docs,
 // a mail), read into a clip with the formatting it shows: bold, italics,
-// underlines, colours, sizes and fonts, links, lists, headings, alignment.
+// underlines, colours, sizes and fonts, links, lists, headings, alignment,
+// and the pictures in the lines, which `readClipImages` then fetches.
 
-import { type Border, type CellLines, type Clip, type ClipCell, type ClipParagraph, type ClipRun, type ClipTable, type RunProps, HIGHLIGHT_COLORS, defined, parseClip } from '@rebodocs/core/internal';
+import {
+  type Border,
+  type CellLines,
+  type Clip,
+  type ClipCell,
+  type ClipImage,
+  type ClipParagraph,
+  type ClipRun,
+  type ClipTable,
+  type RunProps,
+  HIGHLIGHT_COLORS,
+  dataAddress,
+  dataPicture,
+  defined,
+  imageTypeOf,
+  parseClip,
+} from '@rebodocs/core/internal';
 
 const BLOCKS = new Set([
   'P',
@@ -36,7 +53,7 @@ const BLOCKS = new Set([
   'HR',
   'CENTER',
 ]);
-const SKIPPED = new Set(['SCRIPT', 'STYLE', 'HEAD', 'TITLE', 'META', 'LINK', 'TEMPLATE', 'NOSCRIPT', 'SVG', 'CANVAS', 'IFRAME', 'OBJECT', 'BUTTON', 'SELECT', 'INPUT', 'TEXTAREA', 'IMG']);
+const SKIPPED = new Set(['SCRIPT', 'STYLE', 'HEAD', 'TITLE', 'META', 'LINK', 'TEMPLATE', 'NOSCRIPT', 'SVG', 'CANVAS', 'IFRAME', 'OBJECT', 'BUTTON', 'SELECT', 'INPUT', 'TEXTAREA']);
 const GENERIC_FONTS = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-\w+|-apple-system|blinkmacsystemfont|inherit|initial)$/i;
 
 interface Inherited {
@@ -319,7 +336,7 @@ export function clipFromHtml(html: string): Clip | undefined {
     if (!p.runs.length) Object.assign(p, defined({ props: { ...blockProps }, list: blockList, style: blockStyle }));
     const last = p.runs[p.runs.length - 1];
     const props = defined({ ...at.props });
-    if (last && last.href === at.href && JSON.stringify(last.props) === JSON.stringify(props)) last.text += t;
+    if (last && !last.image && last.href === at.href && JSON.stringify(last.props) === JSON.stringify(props)) last.text += t;
     else p.runs.push(defined<ClipRun>({ text: t, props, href: at.href }));
   };
 
@@ -332,6 +349,14 @@ export function clipFromHtml(html: string): Clip | undefined {
     const el = node as HTMLElement;
     const tag = el.tagName.toUpperCase();
     if (SKIPPED.has(tag) || el.hidden || el.style.display === 'none') return;
+    if (tag === 'IMG') {
+      const image = imageOf(el);
+      if (!image) return;
+      const p = paragraph();
+      if (!p.runs.length) Object.assign(p, defined({ props: { ...blockProps }, list: blockList, style: blockStyle }));
+      p.runs.push({ text: '', props: {}, image });
+      return;
+    }
     // Word writes the label of a list item as text, marked to be left out.
     if (/mso-list:\s*ignore/i.test(el.getAttribute('style') ?? '')) {
       const label = el.textContent?.trim() ?? '';
@@ -486,7 +511,7 @@ export function clipFromHtml(html: string): Clip | undefined {
   end();
 
   // Blank lines around what was copied are where it was cut from, not part of it; an empty cell is part of its table.
-  const blank = (p: ClipParagraph) => !p.cell && !p.runs.some((r) => r.text.trim());
+  const blank = (p: ClipParagraph) => !p.cell && !p.runs.some((r) => r.text.trim() || r.image);
   while (paragraphs.length && blank(paragraphs[0])) paragraphs.shift();
   while (paragraphs.length && blank(paragraphs[paragraphs.length - 1])) paragraphs.pop();
   for (const p of paragraphs) {
@@ -496,6 +521,154 @@ export function clipFromHtml(html: string): Clip | undefined {
   // A table nothing of which was read is not kept; the others keep their numbers.
   if (!paragraphs.length) return undefined;
   return tables.length ? { paragraphs, tables } : { paragraphs };
+}
+
+/**
+ * A picture of the HTML, at the size it is shown: Word says it in points in
+ * the VML it writes just before (on a Mac, the width of the img is in points
+ * too, not pixels); otherwise its style or its attributes, in pixels.
+ * Undefined for one with no address, or a speck put there to count visits.
+ */
+function imageOf(img: HTMLElement): ClipImage | undefined {
+  const src = img.getAttribute('src')?.trim();
+  if (!src) return undefined;
+  const vml = vmlSize(img);
+  const said = declarations(img);
+  const attr = (name: string) => (Number(img.getAttribute(name)) > 0 ? Number(img.getAttribute(name)) * 0.75 : undefined);
+  const width = vml?.width ?? cssLength(said.get('width') ?? '') ?? attr('width') ?? 0;
+  const height = vml?.height ?? cssLength(said.get('height') ?? '') ?? attr('height') ?? 0;
+  if ((width > 0 && width < 3) || (height > 0 && height < 3)) return undefined;
+  return defined({ src, width, height, alt: img.getAttribute('alt')?.trim() || undefined });
+}
+
+/**
+ * The size Word's VML says, in points, of the picture an img stands in for:
+ * the comment before it, past the `[if !vml]` a browser makes a comment of.
+ */
+function vmlSize(img: HTMLElement): { width: number; height: number } | undefined {
+  let node: Node | null = img.previousSibling;
+  while (node && ((node.nodeType === Node.TEXT_NODE && !node.textContent?.trim()) || (node.nodeType === Node.COMMENT_NODE && !node.textContent?.includes('<v:shape')))) node = node.previousSibling;
+  if (node?.nodeType !== Node.COMMENT_NODE) return undefined;
+  const style = /<v:shape\b[^>]*\bstyle=['"]([^'"]*)['"]/i.exec(node.textContent ?? '')?.[1];
+  if (!style) return undefined;
+  const width = cssLength(/(?:^|;)\s*width:\s*([^;]+)/i.exec(style)?.[1] ?? '');
+  const height = cssLength(/(?:^|;)\s*height:\s*([^;]+)/i.exec(style)?.[1] ?? '');
+  return width && height ? { width, height } : undefined;
+}
+
+/** Whether a clip has pictures in it. */
+export const hasImages = (clip: Clip): boolean => clip.paragraphs.some((p) => p.runs.some((r) => r.image));
+
+/**
+ * The pictures of a clip read into data: addresses, as insertClip takes
+ * them: one at a web address is fetched (when its server lets this page
+ * read it), and those the HTML only names on the computer (Word on Windows:
+ * file:///…) are taken, in order, from the RTF that came with it. When
+ * what was copied is pictures alone, the picture files the browser was given
+ * with it serve too (a page's picture its server does not let be read);
+ * with text, they are not used: Word gives a picture of the whole copy.
+ * A picture that cannot be read is left out, and the text around it stays.
+ */
+export async function readClipImages(clip: Clip, rtf?: string, files: Blob[] = []): Promise<Clip> {
+  const fromRtf = rtf ? rtfPictures(rtf) : [];
+  let nextRtf = 0;
+  const alone = !clip.paragraphs.some((p) => p.runs.some((r) => r.text.trim()));
+  const pictures = alone ? files.filter((file) => /^image\/(png|jpeg|gif)$/.test(file.type)) : [];
+  const fromFile = async (image: ClipImage): Promise<ClipImage | undefined> => {
+    const file = pictures.shift();
+    if (!file) return undefined;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const type = imageTypeOf(bytes);
+    return type ? { ...image, src: dataAddress(bytes, type) } : undefined;
+  };
+  const read = async (image: ClipImage): Promise<ClipImage | undefined> => {
+    if (dataPicture(image.src)) return image;
+    if (/^(https?:|blob:)/i.test(image.src)) {
+      try {
+        const answer = await fetch(image.src);
+        const bytes = new Uint8Array(await answer.arrayBuffer());
+        const type = answer.ok ? imageTypeOf(bytes) : undefined;
+        if (type) return { ...image, src: dataAddress(bytes, type) };
+      } catch {
+        // A server that does not let the page read it: the picture stays behind, unless it came as a file too.
+      }
+      return fromFile(image);
+    }
+    const picture = fromRtf[nextRtf++];
+    return picture ? { ...image, src: picture.src, width: image.width || picture.width, height: image.height || picture.height } : fromFile(image);
+  };
+  const paragraphs = await Promise.all(
+    clip.paragraphs.map(async (p) => {
+      if (!p.runs.some((r) => r.image)) return p;
+      const runs: ClipRun[] = [];
+      for (const run of p.runs) {
+        if (!run.image) runs.push(run);
+        else {
+          const image = await read(run.image);
+          if (image) runs.push({ ...run, image });
+        }
+      }
+      return { ...p, runs };
+    }),
+  );
+  return { ...clip, paragraphs };
+}
+
+/**
+ * The pictures of RTF, in order, as data: addresses with their size in
+ * points: those Word writes in \shppict with a PNG or a JPEG in them. The
+ * \nonshppict copy it writes beside each, for programs that read older RTF,
+ * is left out, so each picture comes once.
+ */
+export function rtfPictures(rtf: string): { src: string; width: number; height: number }[] {
+  const out: { src: string; width: number; height: number }[] = [];
+  let at = 0;
+  while ((at = rtf.indexOf('{\\*\\shppict', at)) >= 0) {
+    const end = groupEnd(rtf, at);
+    const group = rtf.slice(at, end);
+    at = end;
+    const kind = /\\pngblip/.test(group) ? 'image/png' : /\\jpegblip/.test(group) ? 'image/jpeg' : undefined;
+    if (!kind) continue;
+    const word = (name: string) => Number(new RegExp(`\\\\${name}(-?\\d+)`).exec(group)?.[1] ?? 0);
+    // The hex of the picture: what is left of the \pict group once its groups and words are taken away.
+    const pict = group.slice(group.indexOf('{\\pict'));
+    const hex = stripGroups(pict.slice(1, groupEnd(pict, 0) - 1))
+      .replace(/\\[a-z]+-?\d* ?/gi, '')
+      .replace(/[^0-9a-f]/gi, '');
+    if (hex.length < 16 || hex.length % 2) continue;
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    const type = imageTypeOf(bytes) ?? kind;
+    const scale = (name: string) => (word(name) || 100) / 100;
+    out.push({ src: dataAddress(bytes, type), width: (word('picwgoal') / 20) * scale('picscalex'), height: (word('pichgoal') / 20) * scale('picscaley') });
+  }
+  return out;
+}
+
+/** Where the group that opens at `start` closes, past its closing brace; escaped braces are text. */
+function groupEnd(rtf: string, start: number): number {
+  let depth = 0;
+  for (let i = start; i < rtf.length; i++) {
+    const c = rtf[i];
+    if (c === '\\') i++;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return i + 1;
+  }
+  return rtf.length;
+}
+
+/** RTF without the groups inside it, each left as a space: what comes after one is not part of the word before it. */
+function stripGroups(rtf: string): string {
+  let out = '';
+  for (let i = 0; i < rtf.length; i++) {
+    if (rtf[i] === '{') {
+      i = groupEnd(rtf, i) - 1;
+      out += ' ';
+      continue;
+    }
+    out += rtf[i];
+  }
+  return out;
 }
 
 /**

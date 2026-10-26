@@ -124,6 +124,7 @@ export function parseRunProps(rPr: XmlNode | undefined): RunProps {
     kern: child(rPr, 'w:kern') ? Math.max(0, Number(val(child(rPr, 'w:kern'))) || 0) / 2 : undefined,
     color: color === undefined ? undefined : /^[0-9a-fA-F]{6}$/.test(color) ? color.toUpperCase() : '000000',
     fontFamily: fonts?.attrs['w:ascii'] ?? fonts?.attrs['w:hAnsi'],
+    fontEastAsia: fonts?.attrs['w:eastAsia'],
   });
 }
 

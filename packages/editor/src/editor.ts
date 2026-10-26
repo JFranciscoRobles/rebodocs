@@ -213,7 +213,7 @@ import {
 import { getLocale, onLocaleChange, speaks, t, withRegion } from './i18n';
 import { dropParagraphDialog } from './paragraphdialog';
 import { type Announcer, VISUALLY_HIDDEN, createAnnouncer, injectA11yStyle, installRegionKeys, markRegion, spokenChar, spokenText } from './a11y';
-import { clipFromHtml } from './paste';
+import { clipFromHtml, hasImages, readClipImages } from './paste';
 import { fontFaces, onFontsChange } from './fonts';
 import { documentPdf } from './pdfexport';
 import { IS_MAC } from './platform';
@@ -3118,7 +3118,8 @@ export class Editor {
         for (const item of await navigator.clipboard.read()) {
           if (!item.types.includes('text/html')) continue;
           const clip = clipFromHtml(await (await item.getType('text/html')).text());
-          if (clip) return this.insertClip(clip);
+          const rtf = item.types.includes('text/rtf') ? await (await item.getType('text/rtf')).text() : undefined;
+          if (clip) return this.insertClip(hasImages(clip) ? await readClipImages(clip, rtf) : clip);
         }
       }
       const text = await navigator.clipboard.readText();
@@ -3137,7 +3138,7 @@ export class Editor {
       clip = clipWithoutTables(clip);
       clip = { paragraphs: clip.paragraphs.map((p) => ({ ...p, runs: p.runs.map((r) => ({ ...r, text: r.text.replace(/\f/g, '') })) })) };
     }
-    if (!clipText(clip)) return false;
+    if (!clipText(clip) && !hasImages(clip)) return false;
     const range = this.range;
     const doc = this.collapsed ? this.text : deleteRange(this.text, range);
     const result = insertClip(doc, outsideField(doc, range.from), clip);

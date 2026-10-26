@@ -1,0 +1,133 @@
+:root {
+  font:
+    15px / 1.4 system-ui,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  color: #1f2328;
+  background: #f3f4f6;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  padding-top: max(10px, env(safe-area-inset-top));
+  background: #fff;
+  border-bottom: 1px solid #e3e5e8;
+}
+.top strong {
+  flex: 1;
+  min-width: 0;
+}
+.title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #d0d4d9;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.button:disabled {
+  opacity: 0.5;
+}
+
+.shelf {
+  min-height: 100%;
+}
+.empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: #5b6168;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 16px;
+  list-style: none;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 8.5 / 11;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e3e5e8;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+}
+.card:hover .thumb,
+.card:focus-visible .thumb {
+  border-color: #0b57d0;
+}
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.wait {
+  color: #8a9097;
+  font-size: 13px;
+}
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.reader {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+/* The viewer takes the height it is given: the rest of the screen. */
+.pages {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 560px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 12px;
+  }
+  .wide-only {
+    display: none;
+  }
+}

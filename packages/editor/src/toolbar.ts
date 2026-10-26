@@ -73,6 +73,11 @@ export interface Toolbar {
 }
 
 const FONTS = ['Arial', 'Calibri', 'Cambria', 'Courier New', 'Georgia', 'Helvetica', 'Times New Roman', 'Verdana'];
+/** The fonts Word offers for Chinese, after the others when the interface is in it: Simplified, or Traditional. */
+const CHINESE_FONTS: Record<string, string[]> = {
+  'zh-Hans': ['DengXian', 'SimSun', 'SimHei', 'Microsoft YaHei', 'KaiTi', 'FangSong'],
+  'zh-Hant': ['PMingLiU', 'MingLiU', 'Microsoft JhengHei', 'DFKai-SB'],
+};
 const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48];
 const SPACINGS = [1, 1.15, 1.5, 2];
 const TEXT_COLORS = ['000000', '434343', '666666', '999999', 'C00000', 'FF0000', 'FFC000', 'FFFF00', '92D050', '00B050', '00B0F0', '0070C0', '002060', '7030A0', 'C55A11', 'FFFFFF'];
@@ -604,7 +609,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     select(
       'font',
       t('toolbar.font'),
-      [...new Set([...fontFamilies(), ...(options.fonts ?? FONTS)])],
+      [...new Set([...fontFamilies(), ...(options.fonts ?? [...FONTS, ...(CHINESE_FONTS[getLocale()] ?? [])])])],
       (fontFamily) => editor.setRunProps({ fontFamily }),
       () => editor.activeRunProps().fontFamily,
     ),
@@ -1460,6 +1465,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
     refresh();
     if (from) from.focus();
     else editor.focus();
+    e.preventDefault();
     e.stopPropagation();
   };
 
@@ -1549,7 +1555,8 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
   installRegionKeys();
   bar.addEventListener('mousedown', keepFocus);
   document.addEventListener('mousedown', closeOutside);
-  document.addEventListener('keydown', closeOnEscape);
+  // Before the page's own Escape, which would send the keyboard to the document first.
+  document.addEventListener('keydown', closeOnEscape, true);
 
   const refresh = () => {
     for (const update of updates) update();
@@ -1567,7 +1574,7 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
       unsubscribe();
       resize.disconnect();
       document.removeEventListener('mousedown', closeOutside);
-      document.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('keydown', closeOnEscape, true);
       bar.remove();
     },
   };

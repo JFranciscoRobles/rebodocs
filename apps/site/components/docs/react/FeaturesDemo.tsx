@@ -6,6 +6,8 @@
 
 import { type DocsFeatures, type DocsHandle, DocsEditor, getLocale, setLocale } from '@rebodocs/react';
 import { useEffect, useRef, useState } from 'react';
+import { useEditorLocale } from '@/components/editorLocale';
+import { useT } from '@/components/i18n';
 import { PASTEL_CLASS } from '@/lib/home';
 import { CAPTION } from '../styles';
 import { Readout } from '../ui';
@@ -32,7 +34,7 @@ const FEATURES: [Feature, boolean][] = [
 const kb = (bytes: number) => `${(bytes / 1024).toFixed(1)} KB`;
 
 /** The JSX of what is shown: only the features that are not as they would be. */
-function codeFor(features: DocsFeatures): string {
+function codeFor(features: DocsFeatures, locale: string): string {
   const given = FEATURES.filter(([name, on]) => !!features[name] !== on).map(([name]) => `${name}: ${features[name] ? 'true' : 'false'}`);
   return [
     'const docs = useRef<DocsHandle>(undefined);',
@@ -41,7 +43,7 @@ function codeFor(features: DocsFeatures): string {
     '  ref={docs}',
     '  docx={file}',
     '  name="agreement.docx"',
-    '  locale="en"',
+    `  locale="${locale}"`,
     '  onSave={(docx, name) => upload(docx, name)}',
     ...(given.length ? [`  features={{ ${given.join(', ')} }}`] : []),
     '/>',
@@ -56,6 +58,8 @@ export default function FeaturesDemo() {
   const [changes, setChanges] = useState(0);
   const [said, setSaid] = useState<[string, string, 'good' | 'warn' | 'dim' | undefined]>(['—', '', 'dim']);
   const [mounts, setMounts] = useState(0);
+  const t = useT();
+  const editorLocale = useEditorLocale();
 
   useEffect(() => {
     const was = getLocale();
@@ -77,7 +81,7 @@ export default function FeaturesDemo() {
     if (result instanceof Uint8Array) setSaid([what, kb(result.byteLength), 'good']);
     else if (typeof result === 'boolean') setSaid([what, String(result), result ? 'good' : 'warn']);
     else if (result instanceof Promise) void result.then(() => setDirty(handle.dirty));
-    else setSaid([what, 'done', undefined]);
+    else setSaid([what, t({ en: 'done', es: 'hecho', zh: '完成' }), undefined]);
   };
 
   return (
@@ -122,7 +126,7 @@ export default function FeaturesDemo() {
             ref={docs}
             docx={file}
             name="agreement.docx"
-            locale="en"
+            locale={editorLocale}
             features={features}
             onReady={(handle) => {
               if (!handle) return;
@@ -136,21 +140,25 @@ export default function FeaturesDemo() {
             onSave={(docx, name) => setSaid([`onSave(docx, '${name}')`, kb(docx.byteLength), 'good'])}
           />
         ) : (
-          <p className="m-0 grid h-full place-items-center text-sm text-muted">Opening the agreement…</p>
+          <p className="m-0 grid h-full place-items-center text-sm text-muted">{t({ en: 'Opening the agreement…', es: 'Abriendo el contrato…', zh: '正在打开协议…' })}</p>
         )}
       </div>
       <div className="grid gap-5 border-t border-border bg-surface px-6 py-5" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,320px),1fr))' }}>
         <div className="min-w-0">
-          <p className={CAPTION}>The code of what is shown</p>
-          <pre tabIndex={0} aria-label="The code of what is shown" className="m-0 mt-2.5 overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3.5 font-code text-[12.5px] leading-[1.65] text-[#edece8]">
-            {codeFor(features)}
+          <p className={CAPTION}>{t({ en: 'The code of what is shown', es: 'El código de lo que se ve', zh: '当前效果的代码' })}</p>
+          <pre
+            tabIndex={0}
+            aria-label={t({ en: 'The code of what is shown', es: 'El código de lo que se ve', zh: '当前效果的代码' })}
+            className="m-0 mt-2.5 overflow-x-auto rounded-xl bg-[#2f2e2b] px-4 py-3.5 font-code text-[12.5px] leading-[1.65] text-[#edece8]"
+          >
+            {codeFor(features, editorLocale)}
           </pre>
         </div>
         <Readout
-          label="What it says"
+          label={t({ en: 'What it says', es: 'Lo que dice', zh: '输出' })}
           lines={[
-            ['made', `${mounts} ${mounts === 1 ? 'time' : 'times'}`],
-            ['onChange', `${changes} ${changes === 1 ? 'call' : 'calls'}`, changes ? undefined : 'dim'],
+            [t({ en: 'made', es: 'creado', zh: '创建' }), t({ en: `${mounts} ${mounts === 1 ? 'time' : 'times'}`, es: `${mounts} ${mounts === 1 ? 'vez' : 'veces'}`, zh: `${mounts} 次` })],
+            ['onChange', t({ en: `${changes} ${changes === 1 ? 'call' : 'calls'}`, es: `${changes} ${changes === 1 ? 'llamada' : 'llamadas'}`, zh: `${changes} 次调用` }), changes ? undefined : 'dim'],
             ['dirty', String(dirty), dirty ? 'warn' : 'dim'],
             [said[0], said[1], said[2]],
           ]}

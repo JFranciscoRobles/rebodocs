@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@rebodocs/react"><img src="https://img.shields.io/npm/v/@rebodocs/react?label=npm&color=0b57d0" alt="npm version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2e6b3c" alt="MIT license"></a>
-  <img src="https://img.shields.io/badge/tests-642%20passing-2e6b3c" alt="642 tests passing">
+  <img src="https://img.shields.io/badge/tests-737%20passing-2e6b3c" alt="737 tests passing">
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6" alt="TypeScript">
 </p>
 
@@ -82,14 +82,15 @@ and [Headless](https://rebodocs.com/docs/headless/).
 | --- | --- | --- |
 | [`@rebodocs/react`](packages/react) | The editor as a React component, and headless hooks. Everything below is bundled in. | Browser (SSR-safe) |
 | [`@rebodocs/editor`](packages/editor) | The editor and its interface pieces, without a framework. | Browser |
+| [`@rebodocs/viewer`](packages/viewer) | A document only to read, with or without React, and the first page as a thumbnail. | Browser (SSR-safe) |
 | [`@rebodocs/core`](packages/core) | The engine: document model, DOCX, layout, PDF, templates. No DOM. | Browser, Node, Deno, Bun, Workers |
 | [`@rebodocs/collab`](packages/collab) | The collaboration server and its browser client. | Node, browser |
 | [`@rebodocs/mcp`](packages/mcp) | An MCP server for AI assistants, and the route that takes a chat to the Claude API. | Node |
 
 ```
-@rebodocs/core ◄── @rebodocs/editor ◄── @rebodocs/react
-      ▲                  ▲                    │
-      ├─ @rebodocs/collab ┴────────────────────┘
+@rebodocs/core ◄── @rebodocs/editor ◄── @rebodocs/viewer ◄── @rebodocs/react
+      ▲                                                            │
+      ├─ @rebodocs/collab ◄────────────────────────────────────────┘
       └─ @rebodocs/mcp
 ```
 
@@ -124,6 +125,7 @@ Each is a small application that uses the packages the way yours would. Run them
 | [`apps/storage`](apps/storage) | `npm run storage` | Documents in S3, R2 or MinIO through signed addresses; a PDF made on the server. |
 | [`apps/realtime`](apps/realtime) | `npm run realtime` | Several people on one document, a backend with signed tickets, a version per session. |
 | [`apps/assistant`](apps/assistant) | `npm run assistant` | Claude beside a shared document; the API key stays on the server. |
+| [`apps/viewer`](apps/viewer) | `npm run viewer` | Documents only to read: a shelf with their thumbnails, each opened in the viewer. |
 | [`apps/crm`](apps/crm) | `npm run crm` | The editor inside a CRM: contracts from templates, autosave, review, the assistant. |
 | [`apps/desktop`](apps/desktop) | `npm run desktop` | A Tauri desktop application for `.docx` files on disk. |
 | [`apps/playground`](apps/playground) | `npm run dev` | Every piece wired together without a framework, on a 100-page document. |
@@ -154,17 +156,17 @@ npm run typecheck
 
 ## Status
 
-**0.10: ready to try in production, not yet stable.** The API may still
+**0.11: ready to try in production, not yet stable.** The API may still
 change before 1.0; every change is listed in the [changelog](CHANGELOG.md).
 
 What is checked, and how, is on the [status page](https://rebodocs.com/docs/status/):
-642 automated tests, 30 of them driving the editor in Chrome
+737 automated tests, 76 of them driving the editor and the viewer in Chrome
 (`npm run test:browser`), layout measured line by line against Word with the
 documents of `test-documents/` (`npm run word-check`), a round trip of real
 documents, collaboration across networks, and the rest of the interface
 driven in a browser by hand. The main limits today:
 
-- Pasting from Word or the web keeps text formatting, links, lists and tables, but not pictures; a table inside a cell comes as lines.
+- Pasting from Word or the web keeps text formatting, links, lists, tables and pictures, except pictures a web server does not let the page read; a table inside a cell comes as lines.
 - One collaboration server process holds a room.
 - Screen readers have been tested by reading what is announced, not yet with VoiceOver, NVDA or JAWS.
 - No right-to-left text or hyphenation.

@@ -16,9 +16,10 @@ dist
 apps/site/.next
 apps/site/out
 apps/site/next-env.d.ts
-apps/site/public/demo.docx
+apps/site/public/demo*.docx
 apps/site/public/sample.docx
 apps/demo/public/sample.docx
+apps/viewer/public/samples
 *.tsbuildinfo
 
 # La aplicación de escritorio: lo que compilan Rust y Tauri.

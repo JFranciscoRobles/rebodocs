@@ -5,9 +5,12 @@
 // the document shown as it would be with all of them accepted, or with none.
 
 import { exportDocx, revisionColor } from '@rebodocs/core';
-import { type DocsHandle, type Editor, DocsEditor, getLocale, setLocale } from '@rebodocs/react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type DocsHandle, type Editor, DocsEditor } from '@rebodocs/react';
+import { useMemo, useRef, useState } from 'react';
+import { usePageEditorLocale } from '@/components/editorLocale';
+import { useLocale, useT } from '@/components/i18n';
 import { PASTEL_CLASS } from '@/lib/home';
+import type { L, T } from '@/lib/i18n';
 import { CAPTION } from '../styles';
 import { DemoBox, Readout } from '../ui';
 import { PEOPLE, REVIEWED } from './data';
@@ -22,7 +25,7 @@ interface Seen {
   active: string;
 }
 
-const look = (editor: Editor): Seen => {
+const look = (editor: Editor, t: T): Seen => {
   const active = editor.activeRevision;
   const list = editor.revisions;
   return {
@@ -30,33 +33,30 @@ const look = (editor: Editor): Seen => {
     count: list.length,
     authors: [...new Set(list.map((r) => r.author))].sort(),
     view: editor.changesView,
-    active: active ? `${active.type} by ${active.author}: «${active.text.slice(0, 30)}»` : 'none at the caret',
+    active: active ? t({ en: `${active.type} by ${active.author}`, es: `${active.type} de ${active.author}`, zh: `${active.author} 的 ${active.type}` }) + `: «${active.text.slice(0, 30)}»` : '',
   };
 };
 
-const VIEWS: [View, string][] = [
-  ['all', 'changes'],
-  ['accepted', 'all accepted'],
-  ['original', 'original'],
+const VIEWS: [View, L][] = [
+  ['all', { en: 'changes', es: 'cambios', zh: '修订' }],
+  ['accepted', { en: 'all accepted', es: 'todos aceptados', zh: '全部接受' }],
+  ['original', { en: 'original', es: 'original', zh: '原始' }],
 ];
 
 export default function ReviewDemo() {
-  const file = useMemo(() => exportDocx(REVIEWED), []);
+  const t = useT();
+  const page = useLocale();
+  const locale = usePageEditorLocale();
+  const file = useMemo(() => exportDocx(REVIEWED[page]), [page]);
   const handle = useRef<DocsHandle | undefined>(undefined);
   const [author, setAuthor] = useState<(typeof PEOPLE)[number]>('Ana');
   const [seen, setSeen] = useState<Seen>();
   const [whose, setWhose] = useState('');
 
-  useEffect(() => {
-    const was = getLocale();
-    setLocale('en');
-    return () => setLocale(was);
-  }, []);
-
   const ready = (docs: DocsHandle | undefined) => {
     handle.current = docs;
     if (!docs) return;
-    const update = () => setSeen(look(docs.editor));
+    const update = () => setSeen(look(docs.editor, t));
     update();
     docs.editor.onChange(update);
   };
@@ -72,12 +72,12 @@ export default function ReviewDemo() {
 
   return (
     <DemoBox
-      title="Review it"
+      title={t({ en: 'Review it', es: 'Revísalo', zh: '审阅' })}
       aside={
         <>
           <div>
             <p className={CAPTION} id="rev-who">
-              You are
+              {t({ en: 'You are', es: 'Eres', zh: '你是' })}
             </p>
             <div role="group" aria-labelledby="rev-who" className="mt-2.5 flex gap-2">
               {PEOPLE.map((name) => (
@@ -95,44 +95,55 @@ export default function ReviewDemo() {
                 </button>
               ))}
             </div>
-            <p className="m-0 mt-1.5 text-[13px] leading-normal text-muted">The author prop: what you type is signed with it, in its colour.</p>
+            <p className="m-0 mt-1.5 text-[13px] leading-normal text-muted">
+              {t({
+                en: 'The author prop: what you type is signed with it, in its colour.',
+                es: 'La prop author: lo que escribes se firma con ella, en su color.',
+                zh: 'author 属性：你输入的内容以它署名，并使用它的颜色。',
+              })}
+            </p>
           </div>
           <div>
-            <p className={CAPTION}>Decide</p>
+            <p className={CAPTION}>{t({ en: 'Decide', es: 'Decidir', zh: '处理' })}</p>
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               <button type="button" className={button} disabled={!seen?.count} onClick={() => run((e) => e.goToRevision(-1))}>
-                ← Previous
+                {t({ en: '← Previous', es: '← Anterior', zh: '← 上一处' })}
               </button>
               <button type="button" className={button} disabled={!seen?.count} onClick={() => run((e) => e.goToRevision(1))}>
-                Next →
+                {t({ en: 'Next →', es: 'Siguiente →', zh: '下一处 →' })}
               </button>
               <button type="button" className={button} disabled={!seen?.count} onClick={() => run((e) => e.acceptRevision())}>
-                Accept
+                {t({ en: 'Accept', es: 'Aceptar', zh: '接受' })}
               </button>
               <button type="button" className={button} disabled={!seen?.count} onClick={() => run((e) => e.rejectRevision())}>
-                Reject
+                {t({ en: 'Reject', es: 'Rechazar', zh: '拒绝' })}
               </button>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <select aria-label="Whose changes" value={whose} onChange={(e) => setWhose(e.target.value)} className="rounded-lg border border-border bg-white px-2 py-1 text-[13px] text-ink">
-                <option value="">everyone&apos;s</option>
+              <select
+                aria-label={t({ en: 'Whose changes', es: 'De quién', zh: '谁的修订' })}
+                value={whose}
+                onChange={(e) => setWhose(e.target.value)}
+                className="rounded-lg border border-border bg-white px-2 py-1 text-[13px] text-ink"
+              >
+                <option value="">{t({ en: 'everyone’s', es: 'de todos', zh: '所有人的' })}</option>
                 {seen?.authors.map((name) => (
                   <option key={name} value={name}>
-                    {name}&apos;s
+                    {t({ en: `${name}’s`, es: `de ${name}`, zh: `${name} 的` })}
                   </option>
                 ))}
               </select>
               <button type="button" className={button} disabled={!seen?.count} onClick={() => run((e) => e.acceptAllRevisions(whose || undefined))}>
-                Accept all
+                {t({ en: 'Accept all', es: 'Aceptar todos', zh: '全部接受' })}
               </button>
               <button type="button" className={button} disabled={!seen?.count} onClick={() => run((e) => e.rejectAllRevisions(whose || undefined))}>
-                Reject all
+                {t({ en: 'Reject all', es: 'Rechazar todos', zh: '全部拒绝' })}
               </button>
             </div>
           </div>
           <div>
             <p className={CAPTION} id="rev-view">
-              Show
+              {t({ en: 'Show', es: 'Mostrar', zh: '显示' })}
             </p>
             <div role="group" aria-labelledby="rev-view" className="mt-2.5 flex flex-wrap gap-1.5">
               {VIEWS.map(([view, label]) => (
@@ -143,19 +154,25 @@ export default function ReviewDemo() {
                   onClick={() => run((e) => e.setChangesView(view))}
                   className={`cursor-pointer rounded-full border px-3 py-1 text-[13px] font-semibold ${seen?.view === view ? `border-transparent ${PASTEL_CLASS.green}` : 'border-border bg-white text-ink-soft hover:bg-hover'}`}
                 >
-                  {label}
+                  {t(label)}
                 </button>
               ))}
             </div>
-            <p className="m-0 mt-1.5 text-[13px] leading-normal text-muted">Shown without its changes, the document is only to be looked at; they are still in it.</p>
+            <p className="m-0 mt-1.5 text-[13px] leading-normal text-muted">
+              {t({
+                en: 'Shown without its changes, the document is only to be looked at; they are still in it.',
+                es: 'Mostrado sin sus cambios, el documento es solo para mirar; siguen en él.',
+                zh: '不显示修订时，文档只能查看；修订仍然在文档中。',
+              })}
+            </p>
           </div>
           <Readout
-            label="What the editor says"
+            label={t({ en: 'What the editor says', es: 'Lo que dice el editor', zh: '编辑器的状态' })}
             live={false}
             lines={[
               ['trackChanges', String(seen?.track ?? '—'), seen?.track ? 'good' : 'warn'],
               ['revisions.length', String(seen?.count ?? '—')],
-              ['activeRevision', seen?.active ?? '—', seen?.active.startsWith('none') ? 'dim' : undefined],
+              ['activeRevision', seen ? seen.active || t({ en: 'none at the caret', es: 'ninguno en el cursor', zh: '光标处没有' }) : '—', seen?.active ? undefined : 'dim'],
               ['changesView', `'${seen?.view ?? 'all'}'`, seen?.view === 'all' ? 'dim' : 'good'],
             ]}
           />
@@ -163,7 +180,7 @@ export default function ReviewDemo() {
       }
     >
       <div className="-m-5 h-[520px] overflow-hidden rounded-[14px]">
-        <DocsEditor docx={file} name="receipt.docx" locale="en" author={author} onReady={ready} />
+        <DocsEditor docx={file} name={t({ en: 'receipt.docx', es: 'recibo.docx', zh: '收据.docx' })} locale={locale} author={author} onReady={ready} />
       </div>
     </DemoBox>
   );

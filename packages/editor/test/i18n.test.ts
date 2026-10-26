@@ -138,3 +138,56 @@ describe('withRegion', () => {
     expect(withRegion('en')).toMatch(/^en-[A-Z]{2}$/);
   });
 });
+
+describe('the interface in Chinese', () => {
+  it('speaks Simplified or Traditional by the region of the tag, each with every text', async () => {
+    const { default: zhHans } = await import('../src/locales/zh-Hans');
+    const { default: zhHant } = await import('../src/locales/zh-Hant');
+    const english = messages('en');
+    expect(Object.keys(zhHans).sort()).toEqual(Object.keys(english).sort());
+    expect(Object.keys(zhHant).sort()).toEqual(Object.keys(english).sort());
+    addLocale('zh-Hans', zhHans);
+    addLocale('zh-Hant', zhHant);
+    const before = getLocale();
+    for (const [tag, script] of [
+      ['zh', 'zh-Hans'],
+      ['zh-CN', 'zh-Hans'],
+      ['zh-TW', 'zh-Hant'],
+      ['zh-HK', 'zh-Hant'],
+      ['zh-Hant-TW', 'zh-Hant'],
+    ]) {
+      setLocale(tag);
+      expect(getLocale()).toBe(script);
+    }
+    setLocale('zh-TW');
+    expect(t('table.rows', { n: 3 })).toBe('3 列');
+    setLocale('zh-CN');
+    expect(t('table.rows', { n: 3 })).toBe('3 行');
+    expect(plural('status.words', 1)).toBe('字');
+    setLocale(before);
+  });
+});
+
+describe('the language of the browser', () => {
+  it('is taken when a language it asks for is added, until one is set', async () => {
+    vi.resetModules();
+    vi.stubGlobal('navigator', { languages: ['zh-TW', 'en-US'], language: 'zh-TW' });
+    try {
+      const i18n = await import('../src/i18n');
+      expect(i18n.getLocale()).toBe('en');
+      const changed = vi.fn();
+      i18n.onLocaleChange(changed);
+      i18n.addLocale('zh-Hant', { 'locale.name': '繁體中文', 'menu.save': '儲存' });
+      expect(i18n.getLocale()).toBe('zh-Hant');
+      expect(i18n.t('menu.save')).toBe('儲存');
+      expect(changed).toHaveBeenCalledTimes(1);
+      // Once the application sets one, a language added later does not take its place.
+      i18n.setLocale('es');
+      i18n.addLocale('zh-Hans', { 'menu.save': '保存' });
+      expect(i18n.getLocale()).toBe('es');
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+});

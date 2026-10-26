@@ -6,12 +6,32 @@ import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 // is asked how wide a word is, and the rest — where lines break, where each
 // word goes — is worked out here. The engine does far more (tab stops, Word's
 // rule for shrinking spaces, hyphens, pages); this is enough to see the idea.
+// Chinese and Japanese, which have no spaces, break between any two
+// characters, never before a closing mark: the engine's rule, made small.
 
 export interface Placed {
   text: string;
   x: number;
   width: number;
+  /** Whether a space follows it in the text. */
+  space: boolean;
 }
+
+const HAN = '\\u2e80-\\u9fff\\uf900-\\ufaff\\u3000-\\u303f\\uff00-\\uffef';
+/** A word, or one character of Chinese or Japanese. */
+const TOKEN = new RegExp(`[${HAN}]|[^\\s${HAN}]+`, 'g');
+/** What never starts a line: the closing marks. */
+const NO_START = /^[，。、；：？！）」』】》〉…—·．,.;:?!)]/;
+
+/** Where each word of `text` starts and ends, in the order the line breaker places them. */
+export const tokensOf = (text: string) => [...text.matchAll(TOKEN)].map((m) => ({ text: m[0], start: m.index, end: m.index + m[0].length, space: /\s/.test(text[m.index + m[0].length] ?? '') }));
+
+/** The text of a line, its words joined as they were. */
+export const lineText = (line: Line) =>
+  line.words
+    .map((word) => word.text + (word.space ? ' ' : ''))
+    .join('')
+    .trimEnd();
 export interface Line {
   y: number;
   words: Placed[];
@@ -80,11 +100,11 @@ export function useLines(text: string, font: string | undefined, width: number, 
       line = [];
       x = 0;
     };
-    for (const word of text.split(/\s+/).filter(Boolean)) {
-      const w = measure(word);
-      if (line.length && x + w > width) close(false);
-      line.push({ text: word, x, width: w });
-      x += w + space;
+    for (const token of tokensOf(text)) {
+      const w = measure(token.text);
+      if (line.length && x + w > width && !NO_START.test(token.text)) close(false);
+      line.push({ text: token.text, x, width: w, space: token.space });
+      x += w + (token.space ? space : 0);
     }
     if (line.length) close(true);
     return { lines: out, asked, known };
