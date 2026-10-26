@@ -17,6 +17,7 @@ function Loading() {
 const loading = () => <Loading />;
 const FullEditor = dynamic(() => import('../../demo/src/FullEditor').then((m) => m.FullEditor), { ssr: false, loading });
 const HeadlessEditor = dynamic(() => import('../../demo/src/HeadlessEditor').then((m) => m.HeadlessEditor), { ssr: false, loading });
+const DemoViewer = dynamic(() => import('./DemoViewer').then((m) => m.DemoViewer), { ssr: false, loading });
 
 const TABS = [
   {
@@ -51,6 +52,17 @@ const TABS = [
       zh: "features={{ toolbar: 'tabs', panel: 'rail', statusBar: 'chips', menu: 'card' }}",
     },
     dot: 'bg-pastel-pink-fg',
+  },
+  {
+    id: 'viewer',
+    label: { en: 'Only to read', es: 'Solo lectura', zh: '只读' },
+    short: { en: 'Viewer', es: 'Visor', zh: '查看器' },
+    note: {
+      en: 'DocsViewer of @rebodocs/viewer: the pages and their bar, nothing to edit.',
+      es: 'DocsViewer de @rebodocs/viewer: las páginas y su barra, nada que editar.',
+      zh: '@rebodocs/viewer 的 DocsViewer：只有页面和它的工具栏，不能编辑。',
+    },
+    dot: 'bg-pastel-green-fg',
   },
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
@@ -107,7 +119,7 @@ export function DemoApp() {
           <span className="rounded-md bg-hover px-1.5 py-0.5 font-text text-xs font-semibold text-ink-soft">{t({ en: 'Demo', es: 'Demo', zh: '演示' })}</span>
         </Link>
 
-        {/* Two tabs, as a segmented control: the arrows move between them. */}
+        {/* The tabs, as a segmented control: the arrows move between them. */}
         <div
           role="tablist"
           aria-label={t({ en: 'Which editor', es: 'Qué editor', zh: '选择编辑器' })}
@@ -165,6 +177,8 @@ export function DemoApp() {
         {docx ? (
           tab === 'headless' ? (
             <HeadlessEditor docx={docx} name={name} />
+          ) : tab === 'viewer' ? (
+            <DemoViewer docx={docx} locale={editorLocale} />
           ) : (
             <FullEditor key={tab} docx={docx} name={name} layout={tab === 'screen' ? 'another' : 'included'} />
           )
