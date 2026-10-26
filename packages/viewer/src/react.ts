@@ -3,7 +3,7 @@
 // another file, and taken away with the component. On the server it draws
 // the empty element and nothing else.
 
-import { type CSSProperties, createElement, useEffect, useRef } from 'react';
+import { type CSSProperties, type ReactNode, createElement, useEffect, useRef } from 'react';
 import { setLocale } from '@rebodocs/editor';
 import { type Viewer, type ViewerLayout, type ViewerSource, createViewer } from './viewer';
 
@@ -23,7 +23,7 @@ export interface DocsViewerProps {
   onReady?: (viewer: Viewer | undefined) => void;
 }
 
-export function DocsViewer({ docx, layout, bar, locale, className, style, onReady }: DocsViewerProps) {
+export function DocsViewer({ docx, layout, bar, locale, className, style, onReady }: DocsViewerProps): ReactNode {
   const element = useRef<HTMLDivElement>(null);
   const viewer = useRef<Viewer | undefined>(undefined);
   const ready = useRef(onReady);
