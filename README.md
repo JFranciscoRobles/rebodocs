@@ -156,7 +156,7 @@ npm run typecheck
 
 ## Status
 
-**0.11: ready to try in production, not yet stable.** The API may still
+**0.12: ready to try in production, not yet stable.** The API may still
 change before 1.0; every change is listed in the [changelog](CHANGELOG.md).
 
 What is checked, and how, is on the [status page](https://rebodocs.com/docs/status/):
