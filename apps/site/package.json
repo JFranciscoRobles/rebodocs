@@ -1,6 +1,6 @@
 {
   "name": "@rebodocs/site",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "rebodocs.com: the landing page and the developer documentation.",
   "license": "MIT",
   "private": true,
@@ -15,7 +15,7 @@
     "start": "npx serve out -l 5174"
   },
   "dependencies": {
-    "@rebodocs/react": "^0.12.0",
+    "@rebodocs/react": "^0.13.0",
     "markdown-it": "^15.0.2",
     "markdown-it-anchor": "^10.0.0",
     "next": "^16.4.3",
@@ -24,11 +24,11 @@
     "shiki": "^4.5.0"
   },
   "devDependencies": {
-    "@rebodocs/collab": "^0.12.0",
-    "@rebodocs/core": "^0.12.0",
-    "@rebodocs/editor": "^0.12.0",
-    "@rebodocs/mcp": "^0.12.0",
-    "@rebodocs/viewer": "^0.12.0",
+    "@rebodocs/collab": "^0.13.0",
+    "@rebodocs/core": "^0.13.0",
+    "@rebodocs/editor": "^0.13.0",
+    "@rebodocs/mcp": "^0.13.0",
+    "@rebodocs/viewer": "^0.13.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/markdown-it": "^14.2.0",
     "@types/turndown": "^5.0.6",

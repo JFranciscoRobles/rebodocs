@@ -83,7 +83,7 @@ are on the [status page](https://rebodocs.com/docs/status/).
 
 ## Status
 
-0.12: ready to try in production; the API may change before 1.0. See the
+0.13: ready to try in production; the API may change before 1.0. See the
 [changelog](https://github.com/JFranciscoRobles/rebodocs/blob/main/CHANGELOG.md).
 
 ## License

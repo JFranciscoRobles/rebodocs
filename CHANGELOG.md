@@ -5,7 +5,7 @@ Every package of Rebodocs is released at the same version, but for a patch
 (0.x.0) may change the API; such changes are listed under **Changed** with
 what to do about them.
 
-## Unreleased
+## 0.13.0
 
 ### Added
 

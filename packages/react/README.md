@@ -178,7 +178,7 @@ Worker made from a Blob, so a Content Security Policy must allow
 
 ## Status
 
-0.12: ready to try in production; the API may change before 1.0. See the
+0.13: ready to try in production; the API may change before 1.0. See the
 [changelog](https://github.com/JFranciscoRobles/rebodocs/blob/main/CHANGELOG.md)
 and the [known limits](https://rebodocs.com/docs/status/).
 
