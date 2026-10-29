@@ -102,6 +102,8 @@ export function createBubble(editor: Editor, options: BubbleOptions = {}): Bubbl
   let isOpen = false;
   /** True while one of its own buttons changes the document: the bar stays for the next one. */
   let acting = false;
+  /** Brought up by the other button of the mouse, as the browser's menu would be: it offers copying and pasting too. */
+  let byMenu = false;
   /** What it is asking for in a field of its own: the name of a variable to insert, the text of a note, or the address of a link. */
   let naming: 'variable' | 'note' | 'link' | 'describe' | false = false;
 
@@ -285,9 +287,9 @@ export function createBubble(editor: Editor, options: BubbleOptions = {}): Bubbl
     { label: t('bubble.delTable'), title: t('bubble.delTableTitle'), className: 'dx-bb-danger', closes: true, run: () => editor.deleteTable() },
   ];
 
-  /** What a keyboard has keys for and a finger does not: only offered to a finger. */
+  /** What a keyboard has keys for and a finger does not: offered to a finger, and to the other button, where it is looked for. */
   const clipboard = (): Item[] => {
-    if (!editor.byTouch) return [];
+    if (!editor.byTouch && !byMenu) return [];
     const paste: Item[] = editor.canPaste
       ? [
           { label: t('bubble.paste'), title: t('bubble.paste'), closes: true, run: () => void editor.paste() },
@@ -514,7 +516,8 @@ export function createBubble(editor: Editor, options: BubbleOptions = {}): Bubbl
     place();
   };
 
-  const open = () => {
+  const open = (fromMenu = false) => {
+    byMenu = fromMenu;
     naming = false;
     isOpen = true;
     applyTheme(bar, editor.theme);
@@ -594,6 +597,7 @@ export function createBubble(editor: Editor, options: BubbleOptions = {}): Bubbl
   document.addEventListener('touchstart', onTouchStart, true);
   editor.onTouchSelect = () => open();
   editor.onSpellingMenu = () => open();
+  editor.onMenu = () => open(true);
   document.addEventListener('keydown', onKeyDown, true);
   document.addEventListener('keyup', onKeyUp, true);
   document.addEventListener('mousedown', onMouseDown, true);
@@ -614,7 +618,7 @@ export function createBubble(editor: Editor, options: BubbleOptions = {}): Bubbl
   document.addEventListener('fullscreenchange', mount);
 
   return {
-    open,
+    open: () => open(),
     close,
     toggle,
     ask(what) {
@@ -630,6 +634,7 @@ export function createBubble(editor: Editor, options: BubbleOptions = {}): Bubbl
       document.removeEventListener('touchstart', onTouchStart, true);
       editor.onTouchSelect = undefined;
       editor.onSpellingMenu = undefined;
+      editor.onMenu = undefined;
       window.removeEventListener('blur', disarm);
       window.removeEventListener('resize', onMove);
       document.removeEventListener('scroll', onMove, true);

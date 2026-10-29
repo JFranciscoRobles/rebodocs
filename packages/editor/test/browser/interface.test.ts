@@ -6,9 +6,9 @@
 
 import { type Doc, createDoc, createParagraph, paragraphText, setParagraphStyle } from '@rebodocs/core/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { type Editor, createPanel, createStatusBar, createToolbar, setLocale } from '../../src/index';
+import { type Editor, createBubble, createPanel, createStatusBar, createToolbar, setLocale } from '../../src/index';
 import wordHtml from '../fixtures/word-mac-pictures.html?raw';
-import { clipboard, frame, mount, texts } from './helpers';
+import { clipboard, frame, mount, pointAt, texts } from './helpers';
 
 const pieces: { destroy(): void }[] = [];
 const boxes: HTMLElement[] = [];
@@ -250,6 +250,40 @@ describe('the status bar', () => {
     expect(editor.zoom).toBeGreaterThan(zoom);
     await press(bar, 'zoom-reset');
     expect(editor.zoom).toBe(1);
+  });
+});
+
+describe('the other button', () => {
+  /** The pages pressed with the other button at a point, as the browser says it: true when it kept its own menu. */
+  const otherButton = ({ x, y }: { x: number; y: number }) =>
+    (document.elementFromPoint(x, y) ?? document.body).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 2 }));
+  const labels = () => [...document.querySelectorAll<HTMLElement>('.dx-bb.dx-bb-open > button')].map((node) => node.textContent);
+
+  it('offers copying, cutting and pasting the selection in place of the browser menu, and keeps it', async () => {
+    const editor = await mount(['Hello world']);
+    pieces.push(createBubble(editor));
+    editor.setSelection({ para: 0, offset: 0 }, { para: 0, offset: 5 });
+    expect(otherButton(pointAt(editor, { para: 0, offset: 2 }))).toBe(false);
+    await frame();
+    expect(editor.selectedText).toBe('Hello');
+    expect(labels()).toEqual(expect.arrayContaining(['Copy', 'Cut']));
+  });
+
+  it('puts the caret where it was pressed outside the selection', async () => {
+    const editor = await mount(['Hello world']);
+    pieces.push(createBubble(editor));
+    editor.setSelection({ para: 0, offset: 0 }, { para: 0, offset: 5 });
+    otherButton(pointAt(editor, { para: 0, offset: 8 }));
+    await frame();
+    expect(editor.collapsed).toBe(true);
+    expect(editor.selection.focus).toEqual({ para: 0, offset: 8 });
+    expect(labels()).toContain('Select all');
+    expect(labels()).not.toContain('Copy');
+  });
+
+  it('leaves the browser menu alone where nothing offers another', async () => {
+    const editor = await mount(['Hello world']);
+    expect(otherButton(pointAt(editor, { para: 0, offset: 2 }))).toBe(true);
   });
 });
 

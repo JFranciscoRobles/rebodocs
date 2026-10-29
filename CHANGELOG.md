@@ -9,6 +9,12 @@ what to do about them.
 
 ### Fixed
 
+- **The other button of the mouse** on the pages brings up the bubble with
+  Copy, Cut, Paste and Select all, in place of the browser's menu, which
+  could not copy or paste text it did not draw. Pressed inside the selection
+  it keeps it; elsewhere the caret goes there. The editor calls the new
+  `onMenu` for it; without anything set there, the browser's menu stays.
+
 - **The types of `DocsViewer` in `@rebodocs/react`** say it gives a
   `ReactNode`, as the other components do: its declaration had every
   property of `CSSProperties` written out in it, 75 KB; it is 1 KB. (In

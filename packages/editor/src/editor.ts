@@ -576,6 +576,8 @@ export class Editor {
   onTouchSelect: (() => void) | undefined;
   /** Called when a word spelled wrong is pressed with the other button: the caret is in it, for its suggestions to be offered. */
   onSpellingMenu: (() => void) | undefined;
+  /** Called when the pages are pressed with the other button anywhere else: the caret is there, or the selection stays if it was pressed inside it, for what can be done there to be offered in place of the browser's menu. */
+  onMenu: (() => void) | undefined;
   private listeners = new Set<() => void>();
   /** Its own labels over the pages are written again when the language changes. */
   private stopLocale = onLocaleChange(() => {
@@ -633,7 +635,7 @@ export class Editor {
     this.input.addEventListener('blur', () => this.root.classList.remove('dx-focused'));
     this.root.addEventListener('wheel', this.onWheel, { passive: false });
     this.root.addEventListener('scroll', this.painter.onScroll, { passive: true });
-    this.pagesEl.addEventListener('contextmenu', this.onContextMenu);
+    this.pagesEl.addEventListener('contextmenu', this.onOtherButton);
     this.resizeObserver = new ResizeObserver(() => {
       this.fitGap();
       if (this.fit) this.applyZoom(this.fitZoom(this.fit));
@@ -3046,15 +3048,28 @@ export class Editor {
     this.emit();
   }
 
-  /** The other button on a word spelled wrong: the caret goes into it and its suggestions are offered, in place of the browser's menu. */
-  private onContextMenu = (e: MouseEvent): void => {
-    if (!this.spelling.checker || this.area !== 'body') return;
+  /**
+   * The other button: on a word spelled wrong, the caret goes into it and its
+   * suggestions are offered; anywhere else, what can be done there, copying
+   * and pasting among it. Both in place of the browser's menu, which knows
+   * nothing of text it did not draw.
+   */
+  private onOtherButton = (e: MouseEvent): void => {
     const pos = this.pointer.positionFromPoint(e.clientX, e.clientY);
-    if (!this.spelling.wrongAt(pos.para, pos.offset)) return;
+    if (this.onSpellingMenu && this.spelling.checker && this.area === 'body' && this.spelling.wrongAt(pos.para, pos.offset)) {
+      e.preventDefault();
+      this.focus();
+      this.setSelection(pos);
+      this.onSpellingMenu();
+      return;
+    }
+    if (!this.onMenu) return;
     e.preventDefault();
     this.focus();
-    this.setSelection(pos);
-    this.onSpellingMenu?.();
+    // Pressed inside the selection, it is what is to be copied or cut: it stays.
+    const { from, to } = this.range;
+    if (this.collapsed || comparePositions(pos, from) < 0 || comparePositions(pos, to) > 0) this.setSelection(pos);
+    this.onMenu();
   };
 
   // --- Clipboard without a keyboard ---------------------------------------

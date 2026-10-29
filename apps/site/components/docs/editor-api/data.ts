@@ -364,6 +364,10 @@ export const GROUPS: Group[] = [
         sigs: ['onSpellingMenu: (() => void) | undefined'],
         text: 'Called when a word with the wave is pressed with the other button or tapped: the caret is in it, for a bar to offer its suggestions.',
       },
+      {
+        sigs: ['onMenu: (() => void) | undefined'],
+        text: "Called when the pages are pressed with the other button anywhere else, in place of the browser's menu: the caret is there, or the selection stays if pressed inside it. The bubble offers copy, cut and paste there.",
+      },
     ],
   },
   {
