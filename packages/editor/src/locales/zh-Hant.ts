@@ -497,6 +497,7 @@ const zhHant: Texts = {
   'note.addTitle': '將註解加在選取的文字上，或游標所在的詞上',
   'note.empty': '註解是對一段文字的意見：選取文字，在上方輸入註解，然後按<b>新增註解</b>。Word 會將它顯示為註解。',
   'note.delete': '刪除註解',
+  'note.deleteAll': '刪除所有註解',
   'note.goTo': '移至註解的文字',
   'note.textOf': '註解內容',
   'note.author': '你的名字',

@@ -161,7 +161,15 @@ export const GROUPS: Group[] = [
         nothing: 'setLink returns false for what is not an address a link may open.',
       },
       {
-        sigs: ['addNote(text: string) → string | undefined', 'setNoteText(id, text)', 'removeNote(id)', 'notes: NoteView[]', 'activeNote: string | undefined', 'selectNote(id) → boolean'],
+        sigs: [
+          'addNote(text: string) → string | undefined',
+          'setNoteText(id, text)',
+          'removeNote(id)',
+          'removeAllNotes()',
+          'notes: NoteView[]',
+          'activeNote: string | undefined',
+          'selectNote(id) → boolean',
+        ],
         text: 'Comments, as Word has them. addNote puts one on the selected text, or on the word the caret is in, and returns its id.',
         nothing: 'addNote returns undefined outside the text of the document, or with the caret on no word.',
         run: 'note',

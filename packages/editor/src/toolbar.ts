@@ -964,6 +964,8 @@ export function createToolbar(container: HTMLElement, editor: Editor, options: T
         entry('accept-all', t('review.acceptAll'), () => editor.acceptAllRevisions(), !any),
         entry('reject-all', t('review.rejectAll'), () => editor.rejectAllRevisions(), !any),
         el('div', 'dx-tb-rule'),
+        entry('delete-notes', t('note.deleteAll'), () => editor.removeAllNotes(), !editor.notes.length),
+        el('div', 'dx-tb-rule'),
         entry('show-all', t('review.showAll'), () => editor.setChangesView('all'), false, view === 'all'),
         entry('show-accepted', t('review.showAccepted'), () => editor.setChangesView('accepted'), false, view === 'accepted'),
         entry('show-original', t('review.showOriginal'), () => editor.setChangesView('original'), false, view === 'original'),

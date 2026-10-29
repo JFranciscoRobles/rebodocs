@@ -147,6 +147,22 @@ describe('the toolbar', () => {
   });
 });
 
+describe('the toolbar and the notes', () => {
+  it('takes every note away from the review menu, which waits for one', async () => {
+    const { editor, bar } = await withToolbar(['One and two']);
+    await press(bar, 'review');
+    expect((control(bar, 'review-delete-notes') as HTMLButtonElement).disabled).toBe(true);
+    await press(bar, 'review');
+    editor.setSelection({ para: 0, offset: 0 }, { para: 0, offset: 3 });
+    editor.addNote('first');
+    editor.setSelection({ para: 0, offset: 8 }, { para: 0, offset: 11 });
+    editor.addNote('second');
+    await press(bar, 'review');
+    await press(bar, 'review-delete-notes');
+    expect(editor.notes).toHaveLength(0);
+  });
+});
+
 describe('the side panel', () => {
   async function withPanel(doc: Doc) {
     const editor = await mount(doc);

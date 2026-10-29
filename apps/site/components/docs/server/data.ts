@@ -215,7 +215,7 @@ export const CATALOG: { title: L; module: string; calls: string[] }[] = [
   {
     title: { en: 'Review', es: 'Revisión', zh: '审阅' },
     module: 'revisions.ts, notes.ts',
-    calls: ['revisionsOf', 'acceptRevisions', 'rejectRevisions', 'decideAllRevisions', 'addNote', 'removeNote'],
+    calls: ['revisionsOf', 'acceptRevisions', 'rejectRevisions', 'decideAllRevisions', 'addNote', 'removeNote', 'removeAllNotes'],
   },
   { title: { en: 'Versions', es: 'Versiones', zh: '版本' }, module: 'versions.ts', calls: ['compareDocs', 'describeChange', 'restoreVersion'] },
   { title: { en: 'Letterhead', es: 'Membrete', zh: '信头' }, module: 'letterhead.ts', calls: ['setLetterhead', 'removeLetterhead', 'pngLetterheadMargins', 'withLetterheadMargins'] },

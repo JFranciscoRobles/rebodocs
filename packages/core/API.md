@@ -4,7 +4,7 @@ Made by `node tools/api-report.mjs` from `src/index.ts`; do not change it by han
 package promises: a change to it is a change of its API, and goes in the changelog. What the engine keeps
 to itself is in `src/internal.ts`, for the packages of the repository, with no promise.
 
-246 names.
+247 names.
 
 ## model
 
@@ -868,6 +868,7 @@ export function addNote(doc: Doc, range: Range, note: { text: string; author: st
 export function setNoteText(doc: Doc, id: string, text: string): Doc
 export function setNoteColor(doc: Doc, id: string, color: string): Doc
 export function removeNote(doc: Doc, id: string): Doc
+export function removeAllNotes(doc: Doc): Doc
 ```
 
 ## editable

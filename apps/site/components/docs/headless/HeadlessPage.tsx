@@ -36,7 +36,7 @@ const COMMANDS: [L, string][] = [
   ],
   [{ en: 'Pictures', es: 'Imágenes', zh: '图片' }, 'insertImageFile, insertImageGrid, setPictureWrap, fitSelectedPicture'],
   [{ en: 'Templates', es: 'Plantillas', zh: '模板' }, 'insertVariable, fillVariables, insertSignatures'],
-  [{ en: 'Links and notes', es: 'Enlaces y notas', zh: '链接与批注' }, 'setLink, removeLink, addNote, setNoteText, setNoteColor, removeNote, selectNote'],
+  [{ en: 'Links and notes', es: 'Enlaces y notas', zh: '链接与批注' }, 'setLink, removeLink, addNote, setNoteText, setNoteColor, removeNote, removeAllNotes, selectNote'],
   [{ en: 'Structure', es: 'Estructura', zh: '结构' }, 'insertToc, updateToc, goToHeading, moveSection, insertFootnote, insertEndnote, insertTextBox, restoreVersion'],
   [
     { en: 'Review', es: 'Revisión', zh: '审阅' },
@@ -60,7 +60,7 @@ const HOOKS: [string, L][] = [
     'useDocsLink()',
     { en: 'active (address and text), possible, set, remove, open', es: 'active (dirección y texto), possible, set, remove, open', zh: 'active（地址和文字）、possible、set、remove、open' },
   ],
-  ['useDocsNotes()', same('notes, active, add, setText, setColor, remove, select')],
+  ['useDocsNotes()', same('notes, active, add, setText, setColor, remove, removeAll, select')],
   ['useDocsOutline()', same('items, active, goTo, move')],
   [
     'useDocsVariables()',

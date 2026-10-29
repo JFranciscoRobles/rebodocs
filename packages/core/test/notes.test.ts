@@ -13,6 +13,7 @@ import {
   noteRanges,
   notesAt,
   pruneNotes,
+  removeAllNotes,
   removeNote,
   setNoteColor,
   setNoteText,
@@ -74,6 +75,16 @@ describe('notes', () => {
     expect(gone.notes).toBeUndefined();
     expect(docText(gone)).toBe(docText(base()));
     expect(removeNote(gone, '0')).toBe(gone);
+  });
+
+  it('takes every note away at once, with their marks', () => {
+    const one = addNote(base(), { from: { para: 0, offset: 3 }, to: { para: 0, offset: 9 } }, { text: 'Uno', author: 'Ana' }).doc;
+    const two = addNote(one, { from: { para: 1, offset: 0 }, to: { para: 1, offset: 7 } }, { text: 'Dos', author: 'Luis' }).doc;
+    const gone = removeAllNotes(two);
+    expect(gone.notes).toBeUndefined();
+    expect(noteRanges(gone)).toEqual([]);
+    expect(docText(gone)).toBe(docText(base()));
+    expect(removeAllNotes(gone)).toBe(gone);
   });
 
   it('writes them as comments of Word, and reads them back', () => {

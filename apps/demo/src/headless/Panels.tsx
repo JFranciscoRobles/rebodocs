@@ -669,6 +669,11 @@ function Notes() {
       <Check on={shown} onChange={(on) => commands.setShowNotes(on)}>
         {tr('Mostrar notas junto a la página')}
       </Check>
+      {notes.notes.length > 0 && (
+        <button className="hd-outline" onClick={() => notes.removeAll()}>
+          {tr('Eliminar todas las notas')}
+        </button>
+      )}
       {notes.notes.length === 0 && <p className="hd-empty">{tr('El documento no tiene notas.')}</p>}
       {notes.notes.map((note) => (
         <article key={note.id} className={`hd-note ${note.id === notes.active ? 'on' : ''}`} style={{ borderLeftColor: `#${note.color}` }}>

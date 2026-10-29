@@ -103,6 +103,7 @@ import {
   noteRanges,
   notesAt,
   removeNote,
+  removeAllNotes,
   setNoteText,
   type EditableRange,
   addEditableRange,
@@ -2180,6 +2181,12 @@ export class Editor {
   /** Takes a note away; the text it was about stays. */
   removeNote(id: string): void {
     const doc = removeNote(this.doc, id);
+    if (doc !== this.doc) this.commitDoc(doc, this.selection);
+  }
+
+  /** Takes every note away, in one step to undo; the text they were about stays. */
+  removeAllNotes(): void {
+    const doc = removeAllNotes(this.doc);
     if (doc !== this.doc) this.commitDoc(doc, this.selection);
   }
 

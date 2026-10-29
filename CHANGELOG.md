@@ -7,6 +7,15 @@ what to do about them.
 
 ## Unreleased
 
+### Added
+
+- **Taking every note away at once**: `removeAllNotes(doc)` in
+  `@rebodocs/core`, `editor.removeAllNotes()` (and the command of the same
+  name in `@rebodocs/react`), and `removeAll()` in `useDocsNotes`. The text
+  the notes were about stays; in the editor it is one step to undo. The
+  Review menu of `createToolbar` has **Delete all notes**, off while there
+  are none.
+
 ### Fixed
 
 - **The other button of the mouse** on the pages brings up the bubble with

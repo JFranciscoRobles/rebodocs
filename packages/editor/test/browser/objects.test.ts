@@ -64,6 +64,19 @@ describe('what else is on the pages', () => {
     await frame();
     expect(editor.element.querySelectorAll('.dx-note').length).toBeGreaterThan(0);
   });
+
+  it('takes every note away in one step to undo', async () => {
+    const editor = await mount(['revisar esto', 'y esto']);
+    editor.setSelection({ para: 0, offset: 0 }, { para: 0, offset: 7 });
+    editor.addNote('uno');
+    editor.setSelection({ para: 1, offset: 2 }, { para: 1, offset: 6 });
+    editor.addNote('dos');
+    editor.removeAllNotes();
+    expect(editor.notes).toEqual([]);
+    expect(editor.doc.paragraphs.map((p) => p.runs.map((r) => r.text).join(''))).toEqual(['revisar esto', 'y esto']);
+    editor.undo();
+    expect(editor.notes.map((note) => note.text)).toEqual(['uno', 'dos']);
+  });
 });
 
 describe('the shortcuts, the zoom and the screen reader', () => {

@@ -193,6 +193,7 @@ const EN = {
   'Nota de {author}': 'Note by {author}',
   'Color de la nota': 'Note colour',
   Eliminar: 'Delete',
+  'Eliminar todas las notas': 'Delete all notes',
   Página: 'Page',
   Contenido: 'Content',
 } as const;

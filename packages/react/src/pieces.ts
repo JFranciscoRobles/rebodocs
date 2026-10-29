@@ -126,6 +126,8 @@ export interface DocsNotes {
   setText(id: string, text: string): void;
   setColor(id: string, color: string): void;
   remove(id: string): void;
+  /** Takes every note away, in one step to undo. */
+  removeAll(): void;
   /** Selects the text a note is about, and brings it into view. */
   select(id: string): void;
 }
@@ -143,6 +145,7 @@ export function useDocsNotes(): DocsNotes {
       setText: (id, text) => editor?.setNoteText(id, text),
       setColor: (id, color) => editor?.setNoteColor(id, color),
       remove: (id) => editor?.removeNote(id),
+      removeAll: () => editor?.removeAllNotes(),
       select: (id) => void editor?.selectNote(id),
     }),
     [editor, notes, active],

@@ -143,6 +143,13 @@ export function removeNote(doc: Doc, id: string): Doc {
   return defined<Doc>({ ...doc, paragraphs, notes: notes?.length ? notes : undefined });
 }
 
+/** Takes every note away, with their marks; the text they were about stays. */
+export function removeAllNotes(doc: Doc): Doc {
+  const paragraphs = withoutMarks(doc.paragraphs, (id) => id !== '\0');
+  if (paragraphs === doc.paragraphs && !doc.notes) return doc;
+  return defined<Doc>({ ...doc, paragraphs, notes: undefined });
+}
+
 /**
  * The document without what editing left of notes whose end was deleted with
  * the text around it: the mark of where they started, and the notes

@@ -141,7 +141,7 @@ export { type DocxOptions, exportDocx } from './docx/export';
 export { type DocxSource, type EmbeddedFont, type StorySource, type SourceSlot, type StyleSheet, type Style, type BorderSet, type CellPadding, type TablePart, documentLanguage } from './docx/source';
 export type { BasePart, EndnotePart, FootnotePart, StoryPart, TextBoxPart } from './stories';
 export type { XmlNode } from './docx/xml';
-export { NOTE_COLORS, addNote, setNoteText, setNoteColor, removeNote } from './notes';
+export { NOTE_COLORS, addNote, setNoteText, setNoteColor, removeNote, removeAllNotes } from './notes';
 export { type EditableRange, addEditableRange, editableAt, editableRanges, keepsOutside, removeEditableRange, setRestricted } from './editable';
 export { type TocOptions, updateToc, insertToc } from './toc';
 export { setLink, removeLink, insertLink } from './links';

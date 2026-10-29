@@ -496,6 +496,7 @@ const zhHans: Texts = {
   'note.addTitle': '将批注添加到所选文字，或光标处的词语',
   'note.empty': '批注是对一段文字的评论：选中文字，在上方输入批注，然后按<b>添加批注</b>。Word 会将其显示为批注。',
   'note.delete': '删除批注',
+  'note.deleteAll': '删除所有批注',
   'note.goTo': '转到批注的文字',
   'note.textOf': '批注内容',
   'note.author': '你的姓名',

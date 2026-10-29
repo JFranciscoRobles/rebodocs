@@ -180,6 +180,7 @@ const cell = useDocsValue((editor) => editor.activeCellProps() ?? null, null);`,
       { key: 'active', description: { en: 'The id of the note the caret is in', es: 'El id de la nota donde está el cursor', zh: '光标所在批注的 id' } },
       { key: 'add(text)', description: { en: 'Puts one on the selection; gives its id', es: 'Pone una en la selección; da su id', zh: '在选区上添加批注；返回其 id' } },
       { key: 'setText(id, text) · setColor(id, color) · remove(id)', description: { en: 'Change one', es: 'Cambiar una', zh: '修改某条批注' } },
+      { key: 'removeAll()', description: { en: 'Takes every note away, in one step to undo', es: 'Quita todas las notas, en un solo paso para deshacer', zh: '删除所有批注，一步即可撤销' } },
       { key: 'select(id)', description: { en: 'Selects its text and brings it into view', es: 'Selecciona su texto y lo trae a la vista', zh: '选中批注对应的文字并滚动到可见位置' } },
     ],
     note: {

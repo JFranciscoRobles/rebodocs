@@ -245,6 +245,7 @@ const COMMANDS = [
   'setNoteText',
   'setNoteColor',
   'removeNote',
+  'removeAllNotes',
   'selectNote',
   'insertToc',
   'updateToc',
